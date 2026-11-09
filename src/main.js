@@ -14,7 +14,6 @@ import testRange from './maps/testRange.js';
 import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager } from './bots.js';
-import { Trailer } from './trailer.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -869,82 +868,19 @@ function worldBeams(w) {
   return out;
 }
 
-// ---------- one step of gameplay with any input source (keyboard, or the trailer's script) ----------
-function stepGame(dt, I) {
-  const w = weapon();
-  elevator.update(dt, player, sounds);
-  player.update(dt, I, { ads: w.ads, firing: I.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act: I.act || {} });
-  updateCombat(dt);
-  handlePlayerEvents();
-  updateCamera();
-  w.update(dt, I, player, weaponCtx);
-  handleWeaponEvents(w);
-  I.endFrame?.();
-}
-
-// ---------- intro trailer ----------
-const trailer = new Trailer({
-  map, player, botMgr, dummies, sounds, studioRefs: map.studioRefs,
-  reset: () => { resetRange(); effects.clear(); slowmo = 0; },
-  give: (id, lo = {}) => { slots[0] = new Weapon(buildDef(WEAPONS[id], lo)); current = 0; slots[0].equipT = 1; },
-  setSlowmo: (v) => { slowmo = v; },
-  step: (secs, tick) => {
-    // fast-forward a clip without drawing it
-    const n = Math.round(secs * 60);
-    for (let i = 0; i < n; i++) {
-      tick(i / 60, 1 / 60);
-      stepGame(1 / 60, trailer.input);
-      dummies.forEach((d) => d.update(1 / 60, time));
-      effects.update(1 / 60);
-    }
-  },
-});
-function startTrailer() {
-  sounds.unlock();
-  $('splash').classList.add('hidden');
-  menu.classList.add('hidden');
-  trailer.start(() => {
-    // into the game: back to the range with your own loadout
-    resetRange();
-    effects.clear();
-    slots[0] = new Weapon(defFor('ar')); slots[1] = new Weapon(defFor('pistol')); current = 0;
-    updateSlotHud();
-    try { localStorage.setItem('semifinals.seenTrailer', '1'); } catch { /* ignore */ }
-    setPlaying(false);
-    menu.classList.add('fromtrailer');
-  });
-}
-$('splash-start').addEventListener('click', startTrailer);
-$('splash-skip').addEventListener('click', () => { sounds.unlock(); $('splash').classList.add('hidden'); });
-$('watch-trailer').addEventListener('click', (e) => { e.stopPropagation(); startTrailer(); });
-addEventListener('keydown', (e) => {
-  if (trailer.active && ['Space', 'Escape', 'Enter', 'KeyE'].includes(e.code)) { e.preventDefault(); trailer.skip(); }
-}, true);
-$('trailer').addEventListener('click', () => trailer.skip());
-
 // ---------- main loop ----------
 const proj = mat4(), view = mat4(), vmProj = mat4(), identity = mat4();
-const projS = mat4(), viewS = mat4(), vpS = mat4(), projT = mat4();
 let last = performance.now(), time = 0, fovKick = 0, timeScale = 1;
 const weaponCtx = { fire, sounds };
 
-let manualMode = false;   // when true, frames are advanced by game.advance(dt) (used to record the trailer)
 function frame(now) {
-  const rdt0 = Math.min((now - last) / 1000, 0.05);
-  last = now;
-  if (!manualMode) run(rdt0);
-  requestAnimationFrame(frame);
-}
-function run(rdt) {
+  const rdt = Math.min((now - last) / 1000, 0.05);
   if (slowmo > 0) slowmo -= rdt;
   const dt = rdt * timeScale * (slowmo > 0 ? 0.3 : 1);
+  last = now;
   time += dt;
 
-  if (trailer.active) {
-    trailer.update(rdt);
-    if (trailer.active && trailer.simulating) { trailer.tickClip(dt); stepGame(dt, trailer.input); }
-    $('scope').style.opacity = trailer.view === 'game' && weapon().scoped ? 1 : 0;
-  } else if (playing && !bench.open && (cutscene || pressSeq || player.dead)) {
+  if (playing && !bench.open && (cutscene || pressSeq || player.dead)) {
     // the player isn't in control right now
     if (input.hit('KeyT')) resetRange();
     if (cutscene) updateCutscene(dt);
@@ -992,10 +928,7 @@ function run(rdt) {
   const vfov = 2 * Math.atan(Math.tan(Math.min(hfov, 2.9) / 2) / aspect);
   perspective(proj, vfov, aspect, 0.05, 500);
   updateCamera();
-  const tView = trailer.active ? trailer.view : null;
-  const tc = tView === 'cine' ? trailer.cineCam() : null;
-  if (tc) { camEye = tc.eye; camFwd = tc.fwd; perspective(proj, tc.fov * Math.PI / 180, aspect, 0.05, 500); }
-  lookDir(view, camEye, camFwd, [0, 1, 0], tc ? 0 : player.roll);
+  lookDir(view, camEye, camFwd, [0, 1, 0], player.roll);
   mul(vp, proj, view);
 
   const caseParts = cases.flatMap((c) => c.parts(time));
@@ -1003,7 +936,7 @@ function run(rdt) {
   perspective(vmProjM, 58 * Math.PI / 180, aspect, 0.01, 10);
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   worldVfov = vfov; worldAspect = aspect;
-  const vmParts = bench.open || cutscene || player.dead || tView === 'cine' || tView === 'card' || tView === 'stage' ? [] : w.viewmodel(player, time);
+  const vmParts = bench.open || cutscene || player.dead ? [] : w.viewmodel(player, time);
   const botParts = botMgr.drawParts();
   const beams = worldBeams(w);
 
@@ -1017,76 +950,39 @@ function run(rdt) {
   for (const p of botParts) renderer.shadowDraw(p.model);
   renderer.endShadow();
 
-  // the game as seen through the player's eyes (full screen, or inside the TV during the trailer)
-  const drawGame = (gProj, gView, eye, vmAspect, withVm) => {
-    renderer.setCamera(gProj, gView, 0.0095, eye, true);
-    renderer.drawSky(eye);
-    renderer.setBlend(false);
-    for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden) renderer.drawBox(b);
-    for (const p of caseParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
-    effects.drawOpaque(renderer);
-    for (const p of botParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
-    renderer.setBlend(true);
-    for (const b of world.boxes) if (b.alpha < 1 && !b.hidden) renderer.drawBox(b);
-    effects.drawTransparent(renderer);
-    for (const b of beams) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
-    for (const b of botMgr.beams()) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
-    renderer.setBlend(false);
-    // viewmodel
-    renderer.clearDepth();
-    perspective(vmProjM, 58 * Math.PI / 180, vmAspect, 0.01, 10);
-    renderer.setCamera(vmProjM, vmViewM, 0, [0, 0, 0], false);
-    renderer.setUnder(eye[1] < -1.2);
-    if (bench.open) {
-      // gun preview on the right of the workbench menu
-      compose(previewM, [0.5, -0.02, -1.25], [0.12, bench.rotY + time * 0.25, 0], [1, 1, 1]);
-      for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
-    } else if (withVm) {
-      for (const p of vmParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
-    }
-  };
-
+  // world
   renderer.begin();
-  if (tView === 'card') {
-    // title cards are HTML on black
-  } else if (tView === 'studio' || tView === 'stage') {
-    const sc = trailer.studioCam();
-    perspective(projS, sc.fov * Math.PI / 180, aspect, 0.03, 300);
-    lookDir(viewS, sc.eye, sc.fwd, [0, 1, 0], 0);
-    renderer.setCamera(projS, viewS, 0.0095, sc.eye, false);
-    renderer.setBlend(false);
-    for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden) renderer.drawBox(b);
-    for (const p of trailer.parts()) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
-    if (tView === 'studio') {
-      // the TV: draw the live gameplay into the screen's rectangle
-      mul(vpS, projS, viewS);
-      const tv = map.studio.tv, W = renderer.size[0], H = renderer.size[1];
-      let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, behind = false;
-      for (const [x, y] of [[tv.x0, tv.y0], [tv.x1, tv.y0], [tv.x0, tv.y1], [tv.x1, tv.y1]]) {
-        const cw = vpS[3] * x + vpS[7] * y + vpS[11] * tv.z + vpS[15];
-        if (cw <= 0.01) { behind = true; break; }
-        const nx = (vpS[0] * x + vpS[4] * y + vpS[8] * tv.z + vpS[12]) / cw, ny = (vpS[1] * x + vpS[5] * y + vpS[9] * tv.z + vpS[13]) / cw;
-        x0 = Math.min(x0, (nx * 0.5 + 0.5) * W); x1 = Math.max(x1, (nx * 0.5 + 0.5) * W);
-        y0 = Math.min(y0, (ny * 0.5 + 0.5) * H); y1 = Math.max(y1, (ny * 0.5 + 0.5) * H);
-      }
-      const rx = Math.max(0, Math.floor(x0)), ry = Math.max(0, Math.floor(y0));
-      const rw = Math.min(W, Math.ceil(x1)) - rx, rh = Math.min(H, Math.ceil(y1)) - ry;
-      if (!behind && rw > 4 && rh > 4) {
-        const ta = (x1 - x0) / (y1 - y0);
-        perspective(projT, vfov, ta, 0.05, 500);
-        renderer.beginRect(Math.floor(x0), Math.floor(y0), Math.ceil(x1 - x0), Math.ceil(y1 - y0));
-        drawGame(projT, view, camEye, ta, true);
-        renderer.endRect();
-      }
-    }
+  renderer.setCamera(proj, view, 0.0095, camEye, true);
+  renderer.drawSky(camEye);
+  renderer.setBlend(false);
+  for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden) renderer.drawBox(b);
+  for (const p of caseParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  effects.drawOpaque(renderer);
+  for (const p of botParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  renderer.setBlend(true);
+  for (const b of world.boxes) if (b.alpha < 1 && !b.hidden) renderer.drawBox(b);
+  effects.drawTransparent(renderer);
+  for (const b of beams) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
+  for (const b of botMgr.beams()) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
+  renderer.setBlend(false);
+
+  // viewmodel
+  renderer.clearDepth();
+  renderer.setCamera(vmProjM, vmViewM, 0, [0, 0, 0], false);
+  renderer.setUnder(camEye[1] < -1.2);
+  if (bench.open) {
+    // gun preview on the right of the workbench menu
+    compose(previewM, [0.5, -0.02, -1.25], [0.12, bench.rotY + time * 0.25, 0], [1, 1, 1]);
+    for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
   } else {
-    drawGame(proj, view, camEye, aspect, !tc);
+    for (const p of vmParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
   }
 
   updateHud(dt, vfov);
   input.endFrame();
+  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
-window.game = { setManual: (v) => { manualMode = v; }, advance: (dt) => run(dt), trailer, startTrailer, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+window.game = { cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

@@ -155,49 +155,7 @@
   .bar-top { top: 0; } .bar-bot { bottom: 0; }
   body.cine .bar-top, body.cine .bar-bot { height: 11vh; }
   body.cine #banner { top: 74%; }
-  body.cine #hud > :not(#banner):not(#vignette):not(#scope) { opacity: 0 !important; transition: opacity .3s; }
-  body:not(.trailer).cine #scope { opacity: 0 !important; }
-
-  /* ---------- intro trailer ---------- */
-  body.trailer #hud > :not(#scope):not(#vignette), body.trailer #menu { display: none !important; }
-  #splash { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; text-align: center; background: #050506; color: #fff; }
-  #splash .logo { color: #fff; }
-  #splash-start { all: unset; cursor: pointer; display: inline-block; margin-top: 28px; padding: 14px 44px; background: var(--red); color: #fff;
-    font: 800 italic 28px var(--font); letter-spacing: .1em; clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
-  #splash-start:hover { background: #fff; color: var(--ink); }
-  #splash-skip { all: unset; cursor: pointer; display: block; margin-top: 16px; font: 700 13px var(--font); letter-spacing: .2em; opacity: .5; }
-  #splash-skip:hover { opacity: 1; }
-  #trailer { position: fixed; inset: 0; z-index: 4; pointer-events: auto; cursor: pointer; }
-  #trailer .skiphint { position: absolute; right: 22px; bottom: calc(11vh + 12px); font: 700 12px var(--font); letter-spacing: .2em; color: #fff; opacity: .45; z-index: 7; }
-  .tcard { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; background: #050506; text-align: center; z-index: 3; }
-  .tcard small { display: block; font: 700 16px var(--font); letter-spacing: .5em; color: #fff; opacity: .85; margin-bottom: 10px; }
-  .tcard b { position: relative; display: inline-block; font: 800 italic clamp(64px, 11vw, 150px) var(--font); line-height: .9; color: #fff; letter-spacing: -.01em; }
-  .tcard b::before, .tcard b::after { content: attr(data-text); position: absolute; inset: 0; mix-blend-mode: screen; animation: tjit .22s steps(2) infinite; }
-  .tcard b::before { color: #ff2a1f; transform: translate(-4px, 0); clip-path: inset(0 0 55% 0); }
-  .tcard b::after { color: #2ae0ff; transform: translate(4px, 0); clip-path: inset(50% 0 0 0); animation-delay: .07s; }
-  .tcard.red b, .tcard.redbig b { color: var(--red); }
-  .tcard.redbig b { font-size: clamp(80px, 14vw, 200px); }
-  .tcard.studio small { font-size: 20px; letter-spacing: .6em; }
-  .tcard.studio b { display: none; }
-  @keyframes tjit { 0% { transform: translate(-5px, 1px); } 50% { transform: translate(3px, -2px); } 100% { transform: translate(-2px, 2px); } }
-  @keyframes tfade { 0% { opacity: 0; } 30%, 75% { opacity: .9; } 100% { opacity: 0; } }
-  .tglitch { position: absolute; inset: 0; z-index: 6; opacity: 0; pointer-events: none;
-    background: repeating-linear-gradient(0deg, rgba(255,40,30,.0) 0 14px, rgba(255,40,30,.55) 14px 18px, rgba(40,220,255,.4) 18px 21px, rgba(255,255,255,0) 21px 47px); }
-  .cap { position: absolute; left: 50%; bottom: calc(11vh + 26px); transform: translate(-50%, 0); opacity: 0; text-align: center; z-index: 5; white-space: nowrap; }
-  .cap b { display: block; font: 800 italic 18px var(--font); letter-spacing: .14em; color: #ff4a40; margin-bottom: 2px; }
-  .cap span { display: inline-block; background: rgba(5,5,6,.82); color: #fff; font: 800 clamp(20px, 2.6vw, 34px) var(--font); letter-spacing: .04em; padding: 4px 16px; }
-  .season, .keyart { display: none; position: absolute; z-index: 4; pointer-events: none; }
-  #trailer.show-season .season { display: block; left: 6vw; top: 50%; transform: translateY(-50%) skewX(-8deg); }
-  .season b { display: block; animation: none; font: 800 italic clamp(90px, 15vw, 220px) var(--font); line-height: .82; color: #fff; text-shadow: 0 0 40px rgba(255,255,255,.45), 0 6px 0 rgba(0,0,0,.4); opacity: .92; }
-  #trailer.show-keyart .keyart { display: block; left: 6vw; top: 50%; transform: translateY(-50%); }
-  .keyart .logo { color: #fff; font-size: clamp(60px, 9vw, 130px); text-shadow: 0 6px 0 rgba(0,0,0,.35); }
-  .keyart { max-width: 52vw; }
-  .keyart .logo .semi { color: #fff; }
-  .keyart .play { margin-top: 18px; font: 800 italic clamp(26px, 3vw, 44px) var(--font); color: #fff; letter-spacing: .06em; }
-  .keyart .play small { display: block; font: 700 15px var(--font); letter-spacing: .3em; opacity: .8; margin-bottom: 4px; }
-  #watch-trailer { all: unset; cursor: pointer; display: block; width: 100%; text-align: center; margin-top: 8px; padding: 8px 0;
-    font: 800 italic 17px var(--font); letter-spacing: .14em; background: rgba(17,18,22,.08); clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
-  #watch-trailer:hover { background: var(--ink); color: #fff; }
+  body.cine #hud > :not(#banner):not(#vignette) { opacity: 0 !important; transition: opacity .3s; }
 
   /* vignette for a slightly more filmic look */
   #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(10,12,18,.32) 100%); }
@@ -323,9 +281,8 @@
 <div id="menu">
   <div class="card">
     <h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <div class="sub">TEST RANGE · BUILD 0.8</div>
+    <div class="sub">TEST RANGE · BUILD 0.7</div>
     <button id="play">CLICK TO PLAY</button>
-    <button id="watch-trailer" type="button">▶ WATCH TRAILER</button>
     <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     <div class="grid2">
       <div>
@@ -363,22 +320,6 @@
         <div id="bindnote"></div>
       </div>
     </div>
-  </div>
-</div>
-<div id="trailer" class="hidden">
-  <div class="tcard hidden"><div><small></small><b></b></div></div>
-  <div class="season"><b>SEASON</b><b>1</b></div>
-  <div class="keyart"><h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <div class="play"><small>SEASON 1 · OUT NOW</small>PLAY NOW!</div></div>
-  <div class="cap"></div>
-  <div class="tglitch"></div>
-  <div class="skiphint">SPACE / CLICK TO SKIP</div>
-</div>
-<div id="splash">
-  <div>
-    <h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <button id="splash-start" type="button">▶ CLICK TO START</button>
-    <button id="splash-skip" type="button">SKIP INTRO</button>
   </div>
 </div>
 <div id="death" class="hidden"><div><b>ELIMINATED</b><span id="deathsub"></span></div></div>
