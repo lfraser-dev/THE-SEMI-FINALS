@@ -14,6 +14,7 @@ const HAZ = [0.95, 0.2, 0.14];
 const GZ0 = -29.9, GZ1 = -5;             // doorway (z range) in the east wall
 const AX1 = 73, AZ0 = -30, AZ1 = -5;      // annex extents (x from the arena wall at 32)
 const HALF_PI = Math.PI / 2;
+const DECK_Y = 12;                        // floor height of the combat deck
 
 export default {
   name: 'TEST RANGE',
@@ -147,6 +148,7 @@ export default {
     deco([-1.5, 0, 24.5], [1.5, 0.02, 27.5], { color: LANE, edges: true });
 
     buildParkour(add, deco, H);
+    this.deckRefs = buildDeck(add, deco);
   },
 
   // weapon cases along the south wall (the slot number is shown above each)
@@ -165,6 +167,23 @@ export default {
     { pos: [-22, 6, 3] },
     { pos: [24, 0, -17] },
   ],
+
+  // combat deck up the elevator (geometry in buildDeck below)
+  elevator: { x: -28.5, z: -3, w: 3, d: 3, top: DECK_Y },
+  deck: {
+    y: DECK_Y,
+    area: { min: [-82, DECK_Y - 2, -28], max: [-36, DECK_Y + 30, 22] },
+    respawn: { pos: [-39, DECK_Y, -3], yaw: HALF_PI },
+    console: [-39.5, DECK_Y, -7.2],          // button pedestal (centre, floor)
+    bounds: { min: [-81.3, -27.3], max: [-38.5, 21.3] },
+    pods: [-17, -3, 11],                      // z of each spawn pod / gate
+    podX: -78,
+    gateX: -74,
+    cam: {                                    // cutscene camera shots
+      wide: { from: [-38, 23, 15], to: [-50, 20, 10], look: [-76, 13, -3] },
+      pods: { from: [-68.5, 27.5, 5], to: [-70.5, 26, -2], look: [-78.2, 12.2, -3.2] },     // high, looking down into the open pods
+    },
+  },
 
   // parkour time trial (geometry is in buildParkour below)
   course: {
@@ -255,4 +274,97 @@ function buildParkour(add, deco, H) {
   // 6) final wall run over the last hazard, then through the finish gate
   deco([37.5, 0, -17], [46, 0.025, -5], { color: HAZ, emissive: 0.55, edges: false, solid: false });
   box([37, 0, -11.2], [46.5, 4.2, -10.8], { color: ACCENT });
+}
+
+// ---------------------------------------------------------------- combat deck
+// An arena 12 m up, west of the main range, reached by the elevator + bridge.
+// East end: player base + console. Middle: wall-run walls, platform, grapple tower, cover.
+// West end: the bot bay — three open-top spawn pods with doors, laid out like a firing range.
+function buildDeck(add, deco) {
+  const Y = DECK_Y;
+  const box = (min, max, o = {}) => add(makeBox(min, max, o));
+  const STEEL = [0.34, 0.35, 0.38];
+  // floor slab + supports reaching down into the fog
+  box([-82, Y - 1, -28], [-36, Y, 22]);
+  box([-82, Y - 1.6, -28], [-36, Y - 1, 22], { color: CHAR, grid: false });
+  for (const x of [-78, -59, -40]) for (const z of [-24, -3, 18]) add(boxAt(x, -18, z, 2.2, 29.4, 2.2, { color: CHAR, grid: false }));
+  // perimeter walls (good for wall running), with a gap in the east wall for the bridge
+  const wallH = 6;
+  box([-83, Y, -29], [-35, Y + wallH, -28], { color: WALL });
+  box([-83, Y, 22], [-35, Y + wallH, 23], { color: WALL });
+  box([-83, Y, -28], [-82, Y + wallH, 22], { color: WALL });
+  box([-37, Y, -28], [-36, Y + wallH, -4.5], { color: WALL });
+  box([-37, Y, -1.5], [-36, Y + wallH, 22], { color: WALL });
+  box([-37, Y + 3.2, -4.5], [-36, Y + wallH, -1.5], { color: WALL });   // header over the entrance
+  for (const [y0, y1, o] of [[0, 0.4, { color: CHAR, solid: true }], [3.4, 3.5, { color: RED, emissive: 0.9, noShadow: true }], [wallH - 0.3, wallH, { color: CHAR }]]) {
+    deco([-82, Y + y0, -28], [-37, Y + y1, -27.88], o);
+    deco([-82, Y + y0, 21.88], [-37, Y + y1, 22], o);
+    deco([-82, Y + y0, -28], [-81.88, Y + y1, 22], o);
+  }
+  // bridge from the elevator over the main wall onto the deck
+  box([-36.5, Y - 0.4, -4.5], [-30, Y, -1.5], { color: STEEL, grid: false });
+  box([-36.5, Y, -4.62], [-30, Y + 1.1, -4.5], { color: STEEL, grid: false });
+  box([-36.5, Y, -1.5], [-30, Y + 1.1, -1.38], { color: STEEL, grid: false });
+  deco([-36.5, Y + 1.1, -4.62], [-30, Y + 1.14, -4.5], { color: RED, emissive: 0.8, noShadow: true });
+  deco([-36.5, Y + 1.1, -1.5], [-30, Y + 1.14, -1.38], { color: RED, emissive: 0.8, noShadow: true });
+
+  // ---- player base: entry pad, console, low cover
+  deco([-44, Y, -10], [-37, Y + 0.02, 4], { color: [0.3, 0.31, 0.34], edges: false });
+  deco([-44.2, Y, -10], [-44, Y + 0.03, 4], { color: RED, emissive: 0.7, edges: false });
+  const cx = -39.5, cz = -7.2;
+  add(boxAt(cx, Y, cz, 0.9, 1.0, 0.7, { color: CHAR, grid: false }));                // pedestal
+  add(boxAt(cx, Y + 1.0, cz, 1.1, 0.06, 0.85, { color: STEEL, grid: false }));         // top plate
+  const buttonRing = add(boxAt(cx, Y + 1.06, cz, 0.42, 0.04, 0.42, { color: [0.12, 0.12, 0.13], grid: false, solid: false }));
+  const button = add(boxAt(cx, Y + 1.1, cz, 0.3, 0.08, 0.3, { color: RED, emissive: 0.8, grid: false, solid: false }));
+  // screen above the console
+  add(boxAt(cx, Y + 1.5, cz - 0.9, 2.4, 1.5, 0.12, { color: [0.08, 0.09, 0.11], grid: false }));
+  const screen = add(boxAt(cx, Y + 1.6, cz - 0.83, 2.1, 1.25, 0.02, { color: [0.15, 0.4, 0.9], grid: false, emissive: 0.35, solid: false, noShadow: true }));
+  add(boxAt(cx - 1.05, Y, cz - 0.9, 0.12, 1.5, 0.12, { color: CHAR, grid: false }));
+  add(boxAt(cx + 1.05, Y, cz - 0.9, 0.12, 1.5, 0.12, { color: CHAR, grid: false }));
+  add(boxAt(-46, Y, -12, 0.5, 1.1, 6, { color: ACCENT }));
+  add(boxAt(-46, Y, 6, 0.5, 1.1, 6, { color: ACCENT }));
+
+  // ---- the field
+  add(boxAt(-57, Y, -16, 18, 5, 0.5, { color: WALL }));     // wall-run walls
+  add(boxAt(-57, Y, 10, 18, 5, 0.5, { color: WALL }));
+  for (const z of [-16, 10]) deco([-66, Y + 2.4, z - 0.3], [-48, Y + 2.5, z + 0.3], { color: RED, emissive: 0.8, noShadow: true });
+  add(boxAt(-58, Y, -3, 6, 3, 6));                          // central platform
+  add(boxAt(-54.25, Y, -3, 1.5, 1.5, 2.5, { color: ACCENT }));   // step up to it
+  add(boxAt(-61.75, Y, -3, 1.5, 1.5, 2.5, { color: ACCENT }));
+  add(boxAt(-66, Y, -3, 2.4, 9, 2.4, { color: CHAR, grid: false }));    // grapple tower
+  add(boxAt(-66, Y + 9, -3, 4, 0.4, 4, { color: STEEL, grid: false }));
+  deco([-68, Y + 9.4, -5], [-64, Y + 9.43, -4.85], { color: RED, emissive: 0.8, noShadow: true });
+  // cover: vaultable, mantle height, ledge-grab height, pillars
+  add(boxAt(-50, Y, -22, 3, 1.2, 1, { color: ACCENT }));
+  add(boxAt(-52, Y, 17, 1, 1.9, 3));
+  add(boxAt(-62, Y, -22, 2, 2.6, 2, { color: WALL }));
+  add(boxAt(-63, Y, 16, 4, 1.0, 1, { color: ACCENT }));
+  add(boxAt(-70, Y, -10, 1, 2, 4));
+  add(boxAt(-70, Y, 5, 1, 2, 4));
+  add(boxAt(-49, Y, -8, 1.2, 2.2, 1.2, { color: CHAR, grid: false }));
+  add(boxAt(-49, Y, 3, 1.2, 2.2, 1.2, { color: CHAR, grid: false }));
+  add(boxAt(-56, Y, -24.5, 1.2, 1.4, 4, { color: ACCENT }));
+  add(boxAt(-56, Y, 18.5, 1.2, 1.4, 4, { color: ACCENT }));
+
+  // ---- bot bay: lane floor + firing-line strip, pods with doors
+  deco([-82, Y, -28], [-72, Y + 0.02, 22], { color: LANE, grid: true, edges: false });
+  deco([-72.2, Y, -28], [-72, Y + 0.03, 22], { color: RED, emissive: 0.75, edges: false });
+  const doors = [], alarms = [], beams = [];
+  for (const z of [-17, -3, 11]) {
+    box([-81.5, Y, z - 2.6], [-74, Y + 4.2, z - 2.2], { color: CHAR, grid: false });   // pod side walls
+    box([-81.5, Y, z + 2.2], [-74, Y + 4.2, z + 2.6], { color: CHAR, grid: false });
+    deco([-81.5, Y + 4.2, z - 2.6], [-74, Y + 4.3, z - 2.2], { color: RED, emissive: 0.8, noShadow: true });
+    deco([-81.5, Y + 4.2, z + 2.2], [-74, Y + 4.3, z + 2.6], { color: RED, emissive: 0.8, noShadow: true });
+    deco([-81.5, Y, z - 2.2], [-74, Y + 0.025, z + 2.2], { color: [0.25, 0.26, 0.3], edges: false });  // pod floor
+    add(boxAt(-73.8, Y + 4.2, z, 0.5, 0.5, 5.2, { color: CHAR, grid: false }));         // gate beam
+    const door = box([-74, Y, z - 2.2], [-73.6, Y + 4.2, z + 2.2], { color: [0.55, 0.57, 0.6], grid: false });
+    door.closedY = Y;
+    doors.push(door);
+    const alarm = add(boxAt(-73.8, Y + 4.7, z, 0.4, 0.25, 0.8, { color: [0.4, 0.06, 0.05], emissive: 0.3, grid: false, solid: false, noShadow: true }));
+    alarms.push(alarm);
+    beams.push(z);
+  }
+  // bay back wall lights
+  for (let z = -26; z <= 20; z += 4) deco([-81.88, Y + 1, z], [-81.8, Y + 4.5, z + 0.25], { color: [1, 0.96, 0.9], emissive: 1, noShadow: true });
+  return { doors, alarms, button, buttonRing, screen };
 }

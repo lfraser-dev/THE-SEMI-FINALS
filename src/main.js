@@ -1,5 +1,5 @@
 import { Renderer } from './renderer.js';
-import { World } from './world.js';
+import { World, moveBoxTo } from './world.js';
 import { Input } from './input.js';
 import { Player } from './player.js';
 import { Weapon } from './weapon.js';
@@ -12,6 +12,8 @@ import { buildDef } from './attachments.js';
 import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
 import { Course, fmtTime } from './course.js';
+import { Elevator } from './elevator.js';
+import { BotManager } from './bots.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -52,6 +54,10 @@ const cases = CASE_ORDER.map((id, i) => new WeaponCase(world, defFor(id), [map.c
 const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
+const elevator = new Elevator(world, map.elevator);
+const botMgr = new BotManager(world, map.deck, map.deckRefs);
+// player health (the player object only knows movement)
+Object.assign(player, { hp: 150, maxHp: 150, dead: false, hurtT: 9, invuln: 0, press: null });
 
 // two weapon slots: primary + sidearm
 const slots = [new Weapon(defFor('ar')), new Weapon(defFor('pistol'))];
@@ -95,6 +101,10 @@ const damageNumbers = [];
 
 function resetRange() {
   course.reset();
+  botMgr.stop();
+  map.deckRefs.screen.color = [0.15, 0.4, 0.9];
+  Object.assign(player, { hp: player.maxHp, dead: false, press: null });
+  cutscene = null; pressSeq = null;
   dummies.forEach((d) => d.reset());
   walls.forEach((w) => w.reset());
   effects.clear();
@@ -109,10 +119,17 @@ function updateCamera() {
   const w = weapon();
   camEye = player.eye();
   camFwd = player.forward(w.kick, w.kickYaw);
+  if (player.dead) {
+    // slump to the floor and tip over
+    const k = Math.min(1, (3 - deathT) / 0.6);
+    camEye = [camEye[0], camEye[1] - k * (player.eyeH - 0.35), camEye[2]];
+  }
+  if (cutscene) { const c = cutsceneCam(); camEye = c.eye; camFwd = c.fwd; }
   camRight = norm(cross(camFwd, [0, 1, 0]));
   camUp = cross(camRight, camFwd);
   // apply roll to the basis so tracers/casings line up with what you see
-  const c = Math.cos(player.roll), s = Math.sin(player.roll);
+  const roll = cutscene ? 0 : player.dead ? player.roll + Math.min(1, (3 - deathT) / 0.6) * 0.9 : player.roll;
+  const c = Math.cos(roll), s = Math.sin(roll);
   const r2 = [0, 1, 2].map((k) => camRight[k] * c + camUp[k] * s);
   camUp = [0, 1, 2].map((k) => camUp[k] * c - camRight[k] * s);
   camRight = r2;
@@ -155,7 +172,7 @@ function fire(w) {
     if (i < 4) effects.tracer(muzzle, end);
     if (!hit) continue;
     const b = hit.box;
-    if (b.tag === 'dummy') {
+    if (b.tag === 'dummy' || b.tag === 'bot') {
       // damage falls off past the weapon's range (down to 55% at 2.2x range)
       const fall = 1 - 0.45 * clamp((hit.t - d.range) / (d.range * 1.2), 0, 1);
       const dmg = Math.round(d.dmg * (b.head ? d.headMult : 1) * fall);
@@ -177,6 +194,7 @@ function fire(w) {
     if (!dummy.alive) continue;
     const dead = dummy.damage(e.dmg, e.dir);
     if (dead) stats.kills++;
+    if (dead && dummy.name) killFeed('YOU', d.name, dummy.name, e.head);
     showHitmarker(dead, e.head);
     damageNumbers.push({ pos: [...e.point], amount: e.dmg, head: e.head, t: 0, el: null, drift: Math.random() - 0.5 });
     dead ? sounds.kill() : sounds.hit();
@@ -249,7 +267,7 @@ function slamShockwave(h) {
     }
   }
   let hitAny = false, killed = false;
-  for (const d of dummies) {
+  for (const d of [...dummies, ...botMgr.bots.filter((b) => b.visible)]) {
     if (!d.alive) continue;
     const dx = d.pos[0] - p[0], dy = d.pos[1] - p[1], dz = d.pos[2] - p[2];
     const dist = Math.hypot(dx, dz);
@@ -258,7 +276,7 @@ function slamShockwave(h) {
     const dir = norm([dx || 0.01, 0.6, dz || 0.01]);
     const dead = d.damage(dmg, dir);
     hitAny = true;
-    if (dead) { stats.kills++; killed = true; }
+    if (dead) { stats.kills++; killed = true; if (d.name) killFeed('YOU', 'SLAM', d.name, false); }
     damageNumbers.push({ pos: [d.pos[0], d.pos[1] + 1.6, d.pos[2]], amount: dmg, head: false, t: 0, el: null, drift: Math.random() - 0.5 });
   }
   if (hitAny) { showHitmarker(killed, false); killed ? sounds.kill() : sounds.hit(); }
@@ -272,6 +290,183 @@ function slamShockwave(h) {
   }
 }
 
+// ---------- combat deck: health, bots, console, cutscene ----------
+let deathT = 0, killer = '', slowmo = 0, cutscene = null, pressSeq = null;
+const dmgDirs = [];
+const kills = [];
+
+function killFeed(a, weaponName, b, head) {
+  kills.unshift({ a, w: weaponName, b, head, t: 0 });
+  if (kills.length > 5) kills.pop();
+  renderKillFeed();
+}
+
+function damagePlayer(amount, from, name) {
+  if (player.dead || player.invuln > 0 || cutscene) return;
+  player.hp -= amount;
+  player.hurtT = 0;
+  sounds.hurt();
+  player.camPitchV += (Math.random() - 0.3) * 0.5;
+  player.shake = Math.max(player.shake, 0.22);
+  const dx = from[0] - player.pos[0], dz = from[2] - player.pos[2];
+  dmgDirs.push({ ang: Math.atan2(-dx, -dz), t: 0 });
+  if (dmgDirs.length > 6) dmgDirs.shift();
+  if (player.hp <= 0) die(name);
+}
+
+function die(name) {
+  player.hp = 0;
+  player.dead = true;
+  deathT = 3;
+  killer = name;
+  sounds.death();
+  killFeed(name, 'RIFLE', 'YOU', false);
+  player.cancelAbilities();
+  player.vel = [0, 0, 0];
+}
+
+function respawnPlayer() {
+  const onDeck = botMgr.running || player.pos[1] > map.deck.y - 3;
+  const r = onDeck ? map.deck.respawn : { pos: map.spawn.pos, yaw: map.spawn.yaw };
+  player.teleport(r.pos, r.yaw);
+  Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5 });
+  slots.forEach((w) => { w.ammo = w.def.mag; w.reload = null; });
+  weapon().equip();
+}
+
+const botHooks = {
+  player,
+  hitPlayer: (dmg, bot, from) => damagePlayer(dmg, from, bot.name),
+  shot: (bot, from, end, dist) => { effects.tracer(from, end); sounds.botShot(dist); },
+  impact: (hit) => { effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal); },
+  whiz: (from, end) => {
+    // did the round pass close to your head?
+    const e = player.eye(), d = [end[0] - from[0], end[1] - from[1], end[2] - from[2]];
+    const L = Math.hypot(...d), u = d.map((v) => v / L);
+    const t = clamp((e[0] - from[0]) * u[0] + (e[1] - from[1]) * u[1] + (e[2] - from[2]) * u[2], 0, L);
+    const q = from.map((c, i) => c + u[i] * t);
+    if (Math.hypot(e[0] - q[0], e[1] - q[1], e[2] - q[2]) < 1.6) sounds.whiz();
+  },
+  onLand: (bot) => { effects.dust(bot.pos, 6); sounds.botLand(); },
+  onKill: (bot) => {
+    sounds.botDie();
+    const s = bot.sc;
+    for (const [c, sz, col] of [[[0, 0.45, 0], [0.4, 0.9, 0.3], [0.16, 0.17, 0.19]], [[0, 1.25, 0], [0.5, 0.55, 0.3], bot.t.body], [[0, 1.64, 0], [0.28, 0.28, 0.28], bot.t.body]]) {
+      const w = bot.toWorld(c), sc = sz.map((v) => v * s);
+      effects.shatter({ min: w.map((v, i) => v - sc[i] / 2), max: w.map((v, i) => v + sc[i] / 2), scale: sc, center: w, color: col }, bot.killDir || [0, 0, 0], 3, 4, 0.1);
+    }
+    if (botMgr.state === 'fight' && botMgr.alive === 0) { slowmo = 0.9; }
+  },
+  onCleared: (n) => { banner('WAVE CLEARED', `WAVE ${n} DONE · NEXT WAVE IN 5`, 'good', 3); sounds.waveClear(); },
+  onNextWave: (n) => { banner(`WAVE ${n}`, `${botMgr.bots.length} HOSTILES INBOUND`, 'bad', 2.2); sounds.alarm(); sounds.botDrop(); },
+};
+
+// big centre banner (wave titles, countdown)
+let bannerT = 0;
+function banner(text, sub = '', kind = '', dur = 1.6) {
+  hud.banner.className = kind;
+  hud.banner.firstChild.textContent = text;
+  hud.banner.lastChild.textContent = sub;
+  bannerT = dur;
+}
+
+// --- console button
+function nearConsole() {
+  const c = map.deck.console;
+  return Math.abs(player.pos[1] - c[1]) < 0.5 && Math.hypot(player.pos[0] - c[0], player.pos[2] - c[2]) < 2.3;
+}
+function pressConsole() {
+  if (botMgr.running) {
+    botMgr.stop();
+    map.deckRefs.screen.color = [0.15, 0.4, 0.9];
+    banner('SESSION ENDED', `BEST WAVE ${botMgr.best}`, '', 2);
+    sounds.button();
+    return;
+  }
+  const c = map.deck.console, e = player.eye();
+  const to = [c[0] - e[0], c[1] + 1.1 - e[1], c[2] - e[2]];
+  pressSeq = { t: 0, yaw0: player.yaw, pitch0: player.pitch, yaw1: Math.atan2(-to[0], -to[2]), pitch1: Math.atan2(to[1], Math.hypot(to[0], to[2])) };
+  let dy = pressSeq.yaw1 - pressSeq.yaw0;
+  while (dy > Math.PI) dy -= Math.PI * 2;
+  while (dy < -Math.PI) dy += Math.PI * 2;
+  pressSeq.yaw1 = pressSeq.yaw0 + dy;
+  player.vel = [0, 0, 0];
+  player.cancelAbilities();
+}
+const idleInput = { aiming: false, fireDown: false, fireHit: false, hit: () => false, down: () => false, mouse: () => false, mouseHit: () => false, dx: 0, dy: 0 };
+function updatePress(dt) {
+  const ps = pressSeq;
+  ps.t += dt;
+  const k = Math.min(ps.t / 0.35, 1), e = k * k * (3 - 2 * k);
+  player.yaw = ps.yaw0 + (ps.yaw1 - ps.yaw0) * e;
+  player.pitch = ps.pitch0 + (ps.pitch1 - ps.pitch0) * e;
+  player.press = Math.min(ps.t / 0.9, 1);
+  const btn = map.deckRefs.button;
+  const down = ps.t > 0.38 && ps.t < 0.62;
+  if (ps.t > 0.38 && !ps.clicked) { ps.clicked = true; sounds.button(); btn.color = [1, 0.85, 0.7]; btn.emissive = 1; map.deckRefs.screen.color = [0.9, 0.15, 0.1]; }
+  const c = [...btn.center]; c[1] = map.deck.y + 1.14 - (down ? 0.05 : 0); moveBoxTo(btn, c);
+  if (ps.t > 0.5 && !ps.alarmed) { ps.alarmed = true; sounds.alarm(); }
+  if (ps.t >= 0.9) {
+    pressSeq = null;
+    player.press = null;
+    btn.color = [0.95, 0.15, 0.1]; btn.emissive = 0.8;
+    startCutscene();
+  }
+}
+
+// --- cutscene: sweep over the deck, watch the bots drop in, swoop back to you
+const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const sm = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+function startCutscene() {
+  botMgr.start(true);
+  cutscene = { t: 0, eye0: player.eye(), fwd0: player.forward(), shown: false, doors: false };
+  document.body.classList.add('cine');
+  sounds.whoosh();
+}
+function cutsceneCam() {
+  const c = cutscene, cam = map.deck.cam;
+  const look = (eye, at) => norm(at.map((v, i) => v - eye[i]));
+  if (c.t < 1.9) {
+    const k = sm(c.t / 1.9), eye = lerp3(cam.wide.from, cam.wide.to, k);
+    return { eye, fwd: look(eye, cam.wide.look) };
+  }
+  if (c.t < 3.9) {
+    const k = sm((c.t - 1.9) / 2), eye = lerp3(cam.pods.from, cam.pods.to, k);
+    return { eye, fwd: look(eye, cam.pods.look) };
+  }
+  const k = sm((c.t - 3.9) / 0.9);
+  const eye = lerp3(cam.pods.to, player.eye(), k);
+  const f0 = look(cam.pods.to, cam.pods.look), f1 = player.forward();
+  return { eye, fwd: norm(lerp3(f0, f1, k)) };
+}
+function updateCutscene(dt) {
+  const c = cutscene;
+  c.t += dt;
+  if (c.t > 1.9 && !c.cut) { c.cut = true; sounds.botDrop(); }
+  if (c.t > 2.2 && !c.shown) { c.shown = true; banner(`WAVE ${botMgr.wave}`, `${botMgr.bots.length} HOSTILES INBOUND`, 'bad', 2.4); }
+  if (c.t > 3.2 && !c.doors) { c.doors = true; botMgr.doorTarget = 1; sounds.doors(); }
+  if (c.t > 3.9 && !c.back) { c.back = true; sounds.whoosh(); }
+  if (c.t >= 4.8) {
+    cutscene = null;
+    document.body.classList.remove('cine');
+    botMgr.state = 'countdown';
+    botMgr.timer = 3;
+  }
+}
+
+let lastCount = 0;
+function updateCombat(dt) {
+  botMgr.update(dt, botHooks);
+  if (botMgr.state === 'countdown') {
+    const n = Math.ceil(botMgr.timer);
+    if (n !== lastCount && n > 0) { lastCount = n; banner(String(n), 'GET READY', '', 0.9); sounds.beep(false); }
+  } else if (lastCount && botMgr.state === 'fight') { lastCount = 0; banner('FIGHT', '', 'bad', 1); sounds.beep(true); }
+  // regen after 4s without damage
+  player.hurtT += dt;
+  player.invuln = Math.max(0, player.invuln - dt);
+  if (!player.dead && player.hurtT > 4 && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 40 * dt);
+}
+
 // ---------- HUD ----------
 const hud = {
   ammo: $('ammo'), reserve: $('reserve'), reload: $('reload'), speed: $('speed'), fps: $('fps'),
@@ -279,6 +474,8 @@ const hud = {
   dmgLayer: $('damage'), state: $('state'), wname: $('weaponname'), wtype: $('weapontype'), prompt: $('prompt'),
   scope: $('scope'), slots: [$('slot1'), $('slot2')],
   ab: { dash: $('ab-dash'), grapple: $('ab-grapple'), slam: $('ab-slam') },
+  hp: $('health'), hpBar: $('hpbar'), hpNum: $('hpnum'), dmg: $('dmgdirs'), lowhp: $('lowhp'), killfeed: $('killfeed'),
+  wave: $('wavepanel'), waveTitle: $('wavetitle'), waveInfo: $('waveinfo'), banner: $('banner'), death: $('death'), deathSub: $('deathsub'),
   speedo: $('speedo'), speedBar: $('speedbar'), speedNum: $('speednum'), chain: $('chain'),
   course: $('course'), courseTime: $('coursetime'), courseInfo: $('courseinfo'), flash: $('flash'), fade: $('fade'),
 };
@@ -289,6 +486,17 @@ function showHitmarker(kill, head) {
   hitTimer = kill ? 0.28 : 0.14;
 }
 
+function renderKillFeed() {
+  hud.killfeed.replaceChildren(...kills.map((k) => {
+    const row = document.createElement('div');
+    row.className = k.a === 'YOU' ? 'mine' : k.b === 'YOU' ? 'me' : '';
+    const a = document.createElement('b'); a.textContent = k.a;
+    const w = document.createElement('span'); w.textContent = ` ${k.w}${k.head ? ' ◎' : ''} `;
+    const b = document.createElement('b'); b.textContent = k.b;
+    row.append(a, w, b);
+    return row;
+  }));
+}
 function keyLabel(code) { return code.replace(/^Key/, '').replace(/^Digit/, '').toUpperCase(); }
 let grappleOk = false;
 function updateAbilityHud() {
@@ -399,13 +607,50 @@ function updateHud(dt, fovRad) {
   } else hud.flash.style.opacity = 0;
   hud.fade.style.opacity = course.failT > 0 ? course.failT / 0.35 : 0;
 
+  // health
+  const hpk = player.hp / player.maxHp;
+  hud.hpBar.style.setProperty('--p', hpk.toFixed(3));
+  hud.hpNum.textContent = Math.ceil(player.hp);
+  hud.hp.classList.toggle('low', hpk < 0.35);
+  hud.lowhp.style.opacity = player.dead ? 0 : Math.max(0, (0.5 - hpk) * 1.6) + Math.max(0, 0.35 - player.hurtT) * 1.2;
+  // damage direction arrows around the crosshair
+  for (let i = dmgDirs.length - 1; i >= 0; i--) { dmgDirs[i].t += dt; if (dmgDirs[i].t > 1.2) dmgDirs.splice(i, 1); }
+  while (hud.dmg.children.length < dmgDirs.length) hud.dmg.appendChild(document.createElement('i'));
+  [...hud.dmg.children].forEach((el, i) => {
+    const d = dmgDirs[i];
+    if (!d) { el.style.opacity = 0; return; }
+    const rel = d.ang - player.yaw;
+    el.style.transform = `rotate(${(-rel * 180 / Math.PI).toFixed(1)}deg)`;
+    el.style.opacity = d.t < 0.6 ? 1 : 1 - (d.t - 0.6) / 0.6;
+  });
+  // kill feed ageing
+  let feedChanged = false;
+  for (let i = kills.length - 1; i >= 0; i--) { kills[i].t += dt; if (kills[i].t > 6) { kills.splice(i, 1); feedChanged = true; } }
+  if (feedChanged) renderKillFeed();
+  // wave panel
+  hud.wave.classList.toggle('hidden', !botMgr.running);
+  if (botMgr.running) {
+    hud.waveTitle.textContent = `WAVE ${botMgr.wave}`;
+    hud.waveInfo.textContent = botMgr.state === 'cleared' ? `NEXT WAVE ${Math.ceil(botMgr.timer)}` : `${botMgr.alive} HOSTILES · BEST ${botMgr.best}`;
+  }
+  // banner
+  bannerT -= dt;
+  hud.banner.style.opacity = bannerT > 0 ? Math.min(1, bannerT * 3) : 0;
+  hud.banner.style.transform = `translate(-50%, -50%) scale(${1 + Math.max(0, bannerT - (bannerT > 1.5 ? 1.5 : 99)) * 0.3})`;
+  // death screen
+  hud.death.classList.toggle('hidden', !player.dead);
+  if (player.dead) hud.deathSub.textContent = `BY ${killer} · RESPAWN IN ${Math.ceil(deathT)}`;
+
   const spreadPx = Math.tan(w.spread(player)) / Math.tan(fovRad / 2) * (innerHeight / 2);
   hud.cross.style.setProperty('--gap', `${Math.max(4, spreadPx).toFixed(1)}px`);
   hud.cross.style.opacity = w.scoped ? 0 : 1 - w.adsT * 0.85;
   hud.cross.classList.toggle('shotgun', w.def.pellets > 1);
   hud.scope.style.opacity = w.scoped ? 1 : 0;
 
-  if (nearBench && !nearCase) {
+  if (nearConsole() && !pressSeq && !cutscene && !player.dead) {
+    hud.prompt.innerHTML = botMgr.running ? '<kbd>E</kbd> END SESSION' : `<kbd>E</kbd> START <b>COMBAT</b> <span>BEST WAVE ${botMgr.best}</span>`;
+    hud.prompt.style.opacity = 1;
+  } else if (nearBench && !nearCase) {
     hud.prompt.innerHTML = '<kbd>E</kbd> WORKBENCH <span>ATTACHMENTS</span>';
     hud.prompt.style.opacity = 1;
   } else if (nearCase) {
@@ -626,11 +871,26 @@ let last = performance.now(), time = 0, fovKick = 0, timeScale = 1;
 const weaponCtx = { fire, sounds };
 
 function frame(now) {
-  const dt = Math.min((now - last) / 1000, 0.05) * timeScale;
+  const rdt = Math.min((now - last) / 1000, 0.05);
+  if (slowmo > 0) slowmo -= rdt;
+  const dt = rdt * timeScale * (slowmo > 0 ? 0.3 : 1);
   last = now;
   time += dt;
 
-  if (playing && !bench.open) {
+  if (playing && !bench.open && (cutscene || pressSeq || player.dead)) {
+    // the player isn't in control right now
+    if (input.hit('KeyT')) resetRange();
+    if (cutscene) updateCutscene(dt);
+    else if (pressSeq) {
+      updatePress(dt);
+      weapon().update(dt, idleInput, player, weaponCtx);
+    } else {
+      deathT -= dt;
+      if (deathT <= 0) respawnPlayer();
+    }
+    updateCombat(dt);
+    updateCamera();
+  } else if (playing && !bench.open) {
     let w = weapon();
     const sens = settings.sens * 0.0022 * (1 - w.adsT * (1 - w.def.adsZoom) * 0.9);
     player.look(input.dx, input.dy, sens);
@@ -639,11 +899,14 @@ function frame(now) {
     if (input.hit('Digit2')) switchTo(1);
     nearCase = findCase();
     nearBench = findBench();
-    if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
+    if (nearConsole() && input.hit('KeyE')) pressConsole();
+    else if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
     else if (nearBench && input.hit('KeyE')) openBench();
     w = weapon();
     const act = { dash: input.hit(settings.dashKey), grapple: input.hit(settings.grappleKey), slam: input.hit(settings.slamKey) };
+    elevator.update(dt, player, sounds);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
+    updateCombat(dt);
     course.update(dt, player, input);
     handlePlayerEvents();
     updateCamera();
@@ -670,16 +933,18 @@ function frame(now) {
   perspective(vmProjM, 58 * Math.PI / 180, aspect, 0.01, 10);
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   worldVfov = vfov; worldAspect = aspect;
-  const vmParts = bench.open ? [] : w.viewmodel(player, time);
+  const vmParts = bench.open || cutscene || player.dead ? [] : w.viewmodel(player, time);
+  const botParts = botMgr.drawParts();
   const beams = worldBeams(w);
 
   // shadow pass
   // keep the sun's shadow map centred on the player so the annex gets shadows too
   renderer.setShadowArea([Math.round(player.pos[0] / 8) * 8, 0, Math.round(player.pos[2] / 8) * 8], 50);
   renderer.beginShadow();
-  for (const b of world.boxes) if (!b.noShadow) renderer.shadowDraw(b.model);
+  for (const b of world.boxes) if (!b.noShadow && !b.hidden) renderer.shadowDraw(b.model);
   for (const p of caseParts) renderer.shadowDraw(p.model);
   effects.drawShadows(renderer);
+  for (const p of botParts) renderer.shadowDraw(p.model);
   renderer.endShadow();
 
   // world
@@ -687,13 +952,15 @@ function frame(now) {
   renderer.setCamera(proj, view, 0.0095, camEye, true);
   renderer.drawSky(camEye);
   renderer.setBlend(false);
-  for (const b of world.boxes) if (b.alpha >= 1) renderer.drawBox(b);
+  for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden) renderer.drawBox(b);
   for (const p of caseParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
   effects.drawOpaque(renderer);
+  for (const p of botParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
   renderer.setBlend(true);
-  for (const b of world.boxes) if (b.alpha < 1) renderer.drawBox(b);
+  for (const b of world.boxes) if (b.alpha < 1 && !b.hidden) renderer.drawBox(b);
   effects.drawTransparent(renderer);
   for (const b of beams) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
+  for (const b of botMgr.beams()) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
   renderer.setBlend(false);
 
   // viewmodel
@@ -714,4 +981,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
-window.game = { setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+window.game = { cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

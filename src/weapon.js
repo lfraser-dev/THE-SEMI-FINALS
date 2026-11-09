@@ -114,7 +114,7 @@ export class Weapon {
 
     const tr = player.trav;
     const wantAds = input.aiming && !player.sprinting && !this.reload && this.equipT > 0.6 && !tr;
-    const climb = tr?.kind === 'mantle' || tr?.kind === 'hang';
+    const climb = tr?.kind === 'mantle' || tr?.kind === 'hang' || player.press != null;
     this.mantleT += ((climb ? 1 : 0) - this.mantleT) * damp(tr ? 18 : 9, dt);
     const wr = player.wallRun;
     this.wallT += ((wr ? 1 : 0) - this.wallT) * damp(12, dt);
@@ -581,6 +581,12 @@ export class Weapon {
   // Where the free hand goes (view space) while mantling or vaulting, and how much (t).
   plantTarget(player) {
     const tr = player.trav;
+    if (player.press != null) {
+      // console button: reach out, punch it, pull back
+      const p = player.press;
+      const reach = seg(p, 0, 0.35), push = seg(p, 0.38, 0.5) * (1 - seg(p, 0.55, 0.7)), back = seg(p, 0.7, 1);
+      return { t: reach * (1 - back), pos: [-0.08, -0.12 - push * 0.03, -0.46 - push * 0.1], rot: [-0.6, 0.1, 1.3] };
+    }
     if (!tr && player.grapple && player.grapple.phase !== 'miss') {
       // grapple: free hand thrust out toward the hook
       const g = player.grapple;

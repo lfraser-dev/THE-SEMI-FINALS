@@ -95,6 +95,26 @@ export class Sounds {
     this.tone(90, 32, 0.6, 0.6 * Math.min(power, 1.2));
     setTimeout(() => this.burst(0.5, 700, 0.25), 60);
   }
+  botShot(dist = 10) {
+    const g = Math.max(0.06, 0.4 / (1 + dist * 0.08));
+    this.burst(0.09, 2200, g); this.tone(220, 60, 0.08, g * 0.7);
+  }
+  whiz() { this.burst(0.12, 4200, 0.12, 'bandpass', 6); this.tone(2400, 900, 0.1, 0.03, 'sine'); }
+  hurt() { this.burst(0.18, 260, 0.45); this.tone(180, 90, 0.15, 0.18, 'sine'); }
+  death() { this.tone(400, 60, 1.0, 0.25, 'sawtooth'); this.burst(0.6, 400, 0.4); }
+  alarm() {
+    for (let i = 0; i < 4; i++) setTimeout(() => { this.tone(620, 620, 0.22, 0.09, 'square'); setTimeout(() => this.tone(460, 460, 0.22, 0.09, 'square'), 240); }, i * 520);
+  }
+  button() { this.click(1800, 0.5, 3); this.tone(880, 1760, 0.12, 0.08, 'square'); }
+  botDrop() { this.tone(1600, 200, 0.5, 0.05, 'sawtooth'); }
+  botLand() { this.burst(0.2, 260, 0.35); }
+  botDie() { this.burst(0.4, 1400, 0.3, 'bandpass', 1); this.tone(700, 120, 0.35, 0.1, 'square'); }
+  doors() { this.burst(0.9, 500, 0.2); this.burst(0.5, 3000, 0.05, 'highpass'); }
+  beep(hi = false) { this.tone(hi ? 1320 : 880, hi ? 1320 : 880, hi ? 0.4 : 0.12, 0.12, 'triangle'); }
+  waveClear() { [0, 110, 220].forEach((d, i) => setTimeout(() => this.tone(523 * [1, 1.25, 1.5][i], 523 * [1, 1.25, 1.5][i], 0.25, 0.1, 'triangle'), d)); }
+  whoosh() { this.burst(0.9, 900, 0.12, 'bandpass', 0.6); }
+  elevatorStart() { this.tone(140, 180, 0.6, 0.08, 'sawtooth'); this.click(1200, 0.2, 2); }
+  elevatorDing() { this.tone(1320, 1320, 0.3, 0.08, 'sine'); setTimeout(() => this.tone(990, 990, 0.4, 0.08, 'sine'), 160); }
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
   crumble() { this.burst(0.3, 700, 0.35); }

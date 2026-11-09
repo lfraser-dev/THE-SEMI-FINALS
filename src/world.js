@@ -17,6 +17,7 @@ export function makeBox(min, max, o = {}) {
     alpha: o.alpha ?? 1,          // < 1 = drawn in the transparent pass (glass)
     noBullet: !!o.noBullet,       // bullets pass through
     noShadow: !!o.noShadow,       // doesn't cast shadows
+    hidden: !!o.hidden,           // collision / hitbox only, never drawn
     tag: o.tag || null,
     ref: o.ref || null,
     model: new Float32Array(16),

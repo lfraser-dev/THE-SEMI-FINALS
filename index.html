@@ -119,6 +119,44 @@
   .ab .pip.on { background: #fff; }
   #crosshair.grapple .dot { width: 7px; height: 7px; left: -3.5px; top: -3.5px; background: none; border: 1.5px solid var(--red); border-radius: 50%; }
 
+  /* combat */
+  #health { position: absolute; left: 26px; bottom: 154px; width: 248px; display: flex; align-items: center; gap: 10px; padding: 6px 16px 7px; }
+  #hpnum { font-size: 28px; font-weight: 800; font-style: italic; line-height: 1; min-width: 2.2ch; }
+  #hpbar { --p: 1; flex: 1; position: relative; height: 10px; background: rgba(255,255,255,.15); transform: skewX(-12deg); }
+  #hpbar::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: #fff; transition: width .12s; }
+  #health.low #hpbar::after { background: var(--red); }
+  #health.low #hpnum { color: #ff4a40; }
+  #lowhp { position: absolute; inset: 0; opacity: 0; background: radial-gradient(ellipse at center, transparent 45%, rgba(200,10,0,.55) 100%); }
+  #dmgdirs { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  #dmgdirs i { position: absolute; left: -46px; top: -150px; width: 92px; height: 34px; transform-origin: 46px 150px; opacity: 0;
+    background: radial-gradient(ellipse at 50% 100%, rgba(255,40,20,.95), rgba(255,40,20,0) 70%); clip-path: polygon(0 100%, 50% 0, 100% 100%, 50% 72%); }
+  #killfeed { position: absolute; right: 26px; top: 44px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  #killfeed div { background: rgba(17,18,22,.78); color: #fff; padding: 3px 10px; font-size: 14px; font-weight: 700; letter-spacing: .05em;
+    clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+  #killfeed span { opacity: .6; font-weight: 600; font-size: 12px; }
+  #killfeed .mine b:first-child { color: #ff4a40; }
+  #killfeed .me { background: rgba(200,20,10,.85); }
+  #wavepanel { position: absolute; left: 50%; top: 46px; transform: translateX(-50%); text-align: center; padding: 6px 26px 7px; }
+  #wavetitle { font-size: 30px; font-weight: 800; font-style: italic; line-height: 1; color: #ff4a40; }
+  #waveinfo { font-size: 12px; font-weight: 700; letter-spacing: .14em; opacity: .75; margin-top: 2px; }
+  #banner { position: absolute; left: 50%; top: 38%; transform: translate(-50%, -50%); text-align: center; opacity: 0; white-space: nowrap; }
+  #banner b { display: block; font-size: 84px; font-weight: 800; font-style: italic; line-height: .95; color: #fff;
+    text-shadow: 0 3px 0 rgba(0,0,0,.35), 0 0 30px rgba(0,0,0,.25); -webkit-text-stroke: 1.5px var(--ink); }
+  #banner span { display: inline-block; margin-top: 8px; font-size: 18px; font-weight: 800; letter-spacing: .2em; color: #fff; background: var(--ink); padding: 3px 14px; }
+  #banner span:empty { display: none; }
+  #banner.bad b { color: var(--red); }
+  #banner.good b { color: #3ddc84; }
+  #death { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(20,0,0,.25), rgba(60,0,0,.65)); backdrop-filter: grayscale(.9); }
+  #death b { display: block; font-size: 72px; font-weight: 800; font-style: italic; color: var(--red); -webkit-text-stroke: 1.5px #111; }
+  #death span { font-size: 18px; font-weight: 800; letter-spacing: .2em; color: #fff; }
+  /* cinematic letterbox */
+  .bar-top, .bar-bot { position: fixed; left: 0; right: 0; height: 0; background: #050506; transition: height .45s ease; z-index: 5; pointer-events: none; }
+  .bar-top { top: 0; } .bar-bot { bottom: 0; }
+  body.cine .bar-top, body.cine .bar-bot { height: 11vh; }
+  body.cine #banner { top: 74%; }
+  body.cine #hud > :not(#banner):not(#vignette) { opacity: 0 !important; transition: opacity .3s; }
+
   /* vignette for a slightly more filmic look */
   #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(10,12,18,.32) 100%); }
 
@@ -202,6 +240,7 @@
 <canvas id="game"></canvas>
 
 <div id="vignette"></div>
+<div class="bar-top"></div><div class="bar-bot"></div>
 <div id="hud">
   <div id="scope"><i></i></div>
   <div id="damage"></div>
@@ -221,6 +260,12 @@
   <div class="panel hidden" id="course"><div id="coursetime">0:00.00</div><div id="courseinfo"></div></div>
   <div id="flash"></div>
   <div id="fade"></div>
+  <div id="lowhp"></div>
+  <div id="dmgdirs"></div>
+  <div class="panel" id="health"><span id="hpnum">150</span><div id="hpbar"></div></div>
+  <div id="killfeed"></div>
+  <div class="panel hidden" id="wavepanel"><div id="wavetitle">WAVE 1</div><div id="waveinfo"></div></div>
+  <div id="banner"><b></b><span></span></div>
   <div id="abilities">
     <div class="ab" id="ab-dash"><kbd>Q</kbd><b>DASH</b><span class="cd"></span><div class="pips"><i class="pip"></i><i class="pip"></i></div></div>
     <div class="ab" id="ab-grapple"><kbd>G</kbd><b>GRAPPLE</b><span class="cd"></span></div>
@@ -236,7 +281,7 @@
 <div id="menu">
   <div class="card">
     <h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <div class="sub">TEST RANGE · BUILD 0.5</div>
+    <div class="sub">TEST RANGE · BUILD 0.6</div>
     <button id="play">CLICK TO PLAY</button>
     <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     <div class="grid2">
@@ -254,6 +299,7 @@
           <kbd>R</kbd>reload · <kbd>E</kbd>take gun from case<br>
           <kbd class="keyhint-dash">Q</kbd>dash · <kbd class="keyhint-grapple">G</kbd>grapple · <kbd class="keyhint-slam">Z</kbd>ground slam<br>
           <kbd>E</kbd>at the workbench for attachments<br>
+          ride the elevator (west wall) up to the <b>combat deck</b> · <kbd>E</kbd> at the console to fight bots<br>
           <kbd>1</kbd><kbd>2</kbd>/scroll swap · <kbd>T</kbd>reset range<br>
           parkour course through the east door · <kbd>X</kbd> restart run
         </div>
@@ -276,6 +322,7 @@
     </div>
   </div>
 </div>
+<div id="death" class="hidden"><div><b>ELIMINATED</b><span id="deathsub"></span></div></div>
 <div id="bench" class="hidden">
   <div class="bench-panel">
     <div class="bench-head"><h2>WORKBENCH</h2><span class="bench-hint">DRAG RIGHT SIDE TO SPIN</span></div>
