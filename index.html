@@ -62,7 +62,7 @@
   #mapname .small { font-size: 13px; letter-spacing: .16em; opacity: .55; font-weight: 700; }
   #state { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: 800; font-style: italic; letter-spacing: .2em; font-size: 15px; opacity: .55; }
   #debug { position: absolute; right: 26px; top: 20px; font-size: 13px; font-weight: 700; letter-spacing: .1em; opacity: .55; text-align: right; }
-  #hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 13px; font-weight: 700; letter-spacing: .12em; opacity: .45; }
+  #hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); white-space: nowrap; font-size: 13px; font-weight: 700; letter-spacing: .12em; opacity: .45; }
   #weapontype { position: absolute; right: 30px; bottom: 116px; font-weight: 700; letter-spacing: .18em; font-size: 12px; opacity: .55; }
   #slots { position: absolute; right: 30px; bottom: 140px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
   #slots div { font-weight: 800; font-style: italic; font-size: 14px; letter-spacing: .08em; opacity: .4; white-space: pre; }
@@ -83,8 +83,36 @@
   #scope::after { height: 1.5px; width: min(72vh, 72vw); transform: translate(-50%, -50%); }
   #scope i { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: var(--red); border-radius: 50%; z-index: 1; }
 
+  /* speed meter + chain */
+  #speedo { position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); width: 180px; text-align: center; }
+  #speedo .bar { --p: 0; position: relative; height: 4px; background: rgba(17,18,22,.15); }
+  #speedo .bar::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: var(--ink); transition: background .2s; }
+  #speedo.hot .bar::after { background: var(--red); }
+  #speedo .row { display: flex; justify-content: space-between; font-weight: 800; font-style: italic; font-size: 13px; letter-spacing: .1em; margin-bottom: 3px; opacity: .7; }
+  #chain { color: var(--red); }
+
+  /* parkour course */
+  #course { position: absolute; left: 50%; top: 46px; transform: translateX(-50%); text-align: center; padding: 6px 26px 7px; }
+  #coursetime { font-size: 34px; font-weight: 800; font-style: italic; line-height: 1; font-variant-numeric: tabular-nums; }
+  #courseinfo { font-size: 12px; font-weight: 700; letter-spacing: .14em; opacity: .7; margin-top: 2px; }
+  #flash { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); text-align: center; opacity: 0; white-space: nowrap; }
+  #flash b { display: block; font-size: 52px; font-weight: 800; font-style: italic; letter-spacing: .04em; line-height: 1;
+    color: var(--ink); text-shadow: 0 2px 0 rgba(255,255,255,.7); }
+  #flash span { display: block; font-size: 20px; font-weight: 800; font-style: italic; letter-spacing: .1em; margin-top: 4px; }
+  #flash.good b, #flash.good span { color: #11924a; }
+  #flash.bad b { color: var(--red); }
+  #fade { position: absolute; inset: 0; background: #fff; opacity: 0; }
+
+  /* key binds */
+  .binds { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; font-weight: 700; font-size: 14px; letter-spacing: .08em; margin-top: 4px; }
+  .binds button { all: unset; cursor: pointer; min-width: 72px; text-align: center; background: #fff; border: 1px solid #c9cbd1; border-bottom-width: 2px;
+    font: 800 14px var(--font); letter-spacing: .08em; padding: 3px 10px; }
+  .binds button:hover { border-color: var(--ink); }
+  .binds button.waiting { background: var(--red); color: #fff; border-color: var(--red); }
+  #bindnote { font-size: 13px; font-weight: 600; color: var(--red); min-height: 1.2em; margin-top: 4px; }
+
   /* ---------- menu ---------- */
-  #menu { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
+  #menu { position: fixed; inset: 0; display: grid; place-items: safe center; padding: 16px; overflow-y: auto;
     background: radial-gradient(ellipse at center, rgba(238,239,242,.55), rgba(238,239,242,.92)); }
   #menu.hidden, .hidden { display: none !important; }
   .card { width: min(560px, 100%); }
@@ -99,7 +127,7 @@
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 26px; }
   @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
   h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .2em; opacity: .6; }
-  .keys { font-size: 16px; font-weight: 500; line-height: 1.55; }
+  .keys { font-size: 15px; font-weight: 500; line-height: 1.5; }
   .keys kbd { display: inline-block; min-width: 1.6em; text-align: center; font: 700 13px var(--font); background: #fff; border: 1px solid #c9cbd1;
     border-bottom-width: 2px; padding: 0 5px; margin-right: 6px; }
   label { display: block; font-weight: 700; font-size: 14px; letter-spacing: .08em; margin-bottom: 10px; }
@@ -123,10 +151,14 @@
     <div><b id="acc">--</b><span>ACCURACY</span></div>
     <div><b id="chunks">0</b><span>DESTRUCTION</span></div>
   </div>
-  <div id="hint">E — TAKE WEAPON · 1/2/Q — SWAP · T — RESET · ESC — MENU</div>
+  <div id="hint">E — TAKE GUN · 1/2/Q — SWAP · T — RESET · ESC — MENU</div>
   <div id="prompt"></div>
   <div id="debug"><span id="fps">--</span> FPS · <span id="speed">0.0</span> M/S</div>
   <div id="state"></div>
+  <div id="speedo"><div class="row"><span><span id="speednum">0.0</span> M/S</span><span id="chain"></span></div><div class="bar" id="speedbar"></div></div>
+  <div class="panel hidden" id="course"><div id="coursetime">0:00.00</div><div id="courseinfo"></div></div>
+  <div id="flash"></div>
+  <div id="fade"></div>
   <div id="mapname"><div class="small">THE SEMI-FINALS</div><div class="big">TEST RANGE</div></div>
   <div id="slots"><div id="slot1"></div><div id="slot2"></div></div>
   <div id="weapontype"></div>
@@ -137,7 +169,7 @@
 <div id="menu">
   <div class="card">
     <h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <div class="sub">TEST RANGE · BUILD 0.3</div>
+    <div class="sub">TEST RANGE · BUILD 0.4</div>
     <button id="play">CLICK TO PLAY</button>
     <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     <div class="grid2">
@@ -146,12 +178,15 @@
         <div class="keys">
           <kbd>WASD</kbd>move<br>
           <kbd>SHIFT</kbd>sprint<br>
-          <kbd>SPACE</kbd>jump<br>
+          <kbd>SPACE</kbd>jump · vault low walls<br>
           <kbd>CTRL</kbd>/<kbd>C</kbd>crouch · slide when running<br>
-          <kbd>SPACE</kbd> at low walls to vault · jump into ledges to mantle<br>
-          <kbd>LMB</kbd>shoot · <kbd>RMB</kbd>aim<br>
+          slide → jump → slide again to chain speed<br>
+          jump into ledges to mantle or grab &amp; hang<br>
+          sprint-jump along a wall to wall run · <kbd>SPACE</kbd> wall jump<br>
+          <kbd>LMB</kbd>/<kbd class="keyhint-fire">F</kbd>shoot · <kbd>RMB</kbd>/<kbd class="keyhint-aim">V</kbd>aim<br>
           <kbd>R</kbd>reload · <kbd>E</kbd>take gun from case<br>
-          <kbd>1</kbd><kbd>2</kbd><kbd>Q</kbd>swap · <kbd>T</kbd>reset range
+          <kbd>1</kbd><kbd>2</kbd><kbd>Q</kbd>swap · <kbd>T</kbd>reset range<br>
+          parkour course through the east door · <kbd>X</kbd> restart run
         </div>
       </div>
       <div>
@@ -159,6 +194,12 @@
         <label>SENSITIVITY <output id="sens-val"></output><input type="range" id="sens" min="0.1" max="3" step="0.05"></label>
         <label>FIELD OF VIEW <output id="fov-val"></output><input type="range" id="fov" min="80" max="120" step="1"></label>
         <label>VOLUME <output id="vol-val"></output><input type="range" id="vol" min="0" max="1" step="0.05"></label>
+        <div class="binds">
+          <span>AIM KEY</span><button id="bind-aim" type="button">V</button>
+          <span>SHOOT KEY</span><button id="bind-fire" type="button">F</button>
+          <span>AIM MODE</span><button id="aim-mode" type="button">HOLD</button>
+        </div>
+        <div id="bindnote"></div>
       </div>
     </div>
   </div>

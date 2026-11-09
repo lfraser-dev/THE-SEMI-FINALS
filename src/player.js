@@ -1,5 +1,5 @@
-// First-person movement: walk, sprint, crouch, slide, slide-jump, mantle, vault, air strafe,
-// step-up, AABB collision, plus camera feel (bob, lean, spring-driven landing / traversal motion).
+// First-person movement: walk, sprint, crouch, slide, slide-hop chains, mantle, vault, ledge grab,
+// wall run + wall jump, air strafe, step-up, AABB collision, footsteps, plus camera feel.
 import { clamp, damp, forwardFrom, spring, easeOut, easeIn, smoothstep } from './math.js';
 
 const HW = 0.3;          // half width of the player box
@@ -14,6 +14,11 @@ const VAULT_DEPTH = 1.7; // thickest obstacle you can vault over
 const SLIDE_MIN = 5.0;   // speed needed to start a slide
 const SLIDE_BOOST = 3.6;
 const SLIDE_MAX = 13;
+const GRAB_MAX = 2.95;   // highest ledge (above feet) you can catch and hang from
+const WALLRUN_TIME = 1.45;
+const WALLRUN_MIN = 6.0; // horizontal speed needed to start a wall run
+const CHAIN_MAX = 5;
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 export const SPEED = { walk: 5.4, sprint: 8.4, crouch: 2.9, ads: 3.6 };
 
@@ -46,10 +51,34 @@ export class Player {
     this.events = [];        // 'jump' | 'land' | 'slide' | 'mantle' | 'vault' | 'vaultland'
     this.spawnPoint = [0, 0, 0];
     this.spawnYaw = 0;
+    this.wallRun = null;     // { a: along-wall dir, n: wall normal, side, t, speed }
+    this.wallCooldown = 0;
+    this.lastWall = null;
+    this.chain = 0;          // slide-hop combo
+    this.chainWindow = 0;    // time left to slide after a slide-jump lands
+    this.slideJumped = false;
+    this.sinceSlide = 9;
+    this.wallStepT = 0;
   }
 
   get mantle() { return this.trav?.kind === 'mantle'; }
   get vaulting() { return this.trav?.kind === 'vault'; }
+  get hanging() { return this.trav?.kind === 'hang'; }
+  get wallRunning() { return !!this.wallRun; }
+
+  teleport(p, yaw) {
+    this.pos = [...p];
+    this.vel = [0, 0, 0];
+    this.yaw = yaw;
+    this.pitch = 0;
+    this.sliding = false;
+    this.crouching = false;
+    this.height = STAND;
+    this.trav = null;
+    this.wallRun = null;
+    this.chain = 0;
+    this.camPitch = this.camPitchV = this.landOff = this.landV = 0;
+  }
 
   spawn(p, yaw = 0) {
     this.spawnPoint = [...p];
@@ -64,6 +93,8 @@ export class Player {
     this.pitch = 0;
     this.sliding = false;
     this.trav = null;
+    this.wallRun = null;
+    this.chain = 0;
     this.camPitch = this.camPitchV = this.landOff = this.landV = 0;
   }
 
@@ -91,9 +122,15 @@ export class Player {
     if (input.hit('Space')) this.jumpBuffer = 0.14;
     this.jumpBuffer -= dt;
     this.slideCooldown -= dt;
+    this.wallCooldown -= dt;
+    this.chainWindow -= dt;
+    this.sinceSlide += dt;
 
     if (this.trav) {
-      if (this.trav.kind === 'mantle') this.updateMantle(dt); else this.updateVault(dt);
+      const k = this.trav.kind;
+      if (k === 'mantle') this.updateMantle(dt);
+      else if (k === 'vault') this.updateVault(dt);
+      else this.updateHang(dt, fwdIn, crouchHit);
       this.cameraFeel(dt, strafe);
       return;
     }
@@ -104,12 +141,19 @@ export class Player {
     // --- slide: crouch while moving fast (also queues if pressed mid-air) ---
     if (crouchHit && !wasGrounded) this.slideQueued = 0.3;
     this.slideQueued = (this.slideQueued || 0) - dt;
+    if (crouchHeld && !wasGrounded) this.slideQueued = Math.max(this.slideQueued, 0.1); // hold crouch to slide on landing
     if ((crouchHit || (this.slideQueued > 0 && crouchHeld)) && wasGrounded && hs > SLIDE_MIN && !this.sliding && this.slideCooldown <= 0) {
       this.sliding = true;
       this.slideQueued = 0;
       this.slideTime = 0;
-      this.slideCooldown = 0.6;
-      const target = Math.min(hs + SLIDE_BOOST, SLIDE_MAX) / hs;
+      this.slideCooldown = 0.45;
+      this.sinceSlide = 0;
+      // slide-hop chain: slide again right after a slide-jump lands for extra speed
+      if (this.chainWindow > 0) { this.chain = Math.min(this.chain + 1, CHAIN_MAX); this.events.push('chain'); }
+      else this.chain = 0;
+      this.chainWindow = 0;
+      const boost = SLIDE_BOOST + this.chain * 0.55, cap = SLIDE_MAX + this.chain * 0.75;
+      const target = Math.max(1, Math.min(hs + boost, cap) / hs);
       this.vel[0] *= target;
       this.vel[2] *= target;
       this.events.push('slide');
@@ -127,16 +171,21 @@ export class Player {
     let speed = this.crouching ? SPEED.crouch : this.sprinting ? SPEED.sprint : SPEED.walk;
     if (ads) speed = Math.min(speed, SPEED.ads);
 
+    // --- wall run: overrides normal air movement while you're on a wall ---
+    if (this.wallRun) this.updateWallRun(dt, fwdIn, crouchHit, strafe);
+    const onWall = !!this.wallRun;
+
     // --- jump / vault (before friction so bunny-hops / slide-jumps keep their speed) ---
     this.coyote = wasGrounded ? 0.1 : this.coyote - dt;
-    if (this.jumpBuffer > 0 && this.coyote > 0 && fwdIn > 0 && this.tryVault()) {
+    if (!onWall && this.jumpBuffer > 0 && this.coyote > 0 && fwdIn > 0 && this.tryVault()) {
       this.jumpBuffer = 0;
       this.coyote = 0;
       this.cameraFeel(dt, strafe);
       return;
     }
     let jumped = false;
-    if (this.jumpBuffer > 0 && this.coyote > 0) {
+    if (!onWall && this.jumpBuffer > 0 && this.coyote > 0) {
+      this.slideJumped = this.sliding || this.sinceSlide < 0.3;
       if (this.crouching && !this.overlap(STAND)) { this.crouching = false; this.height = STAND; }
       this.vel[1] = JUMP_V;
       this.jumpBuffer = 0;
@@ -147,7 +196,9 @@ export class Player {
     }
 
     // --- horizontal velocity ---
-    if (this.sliding && wasGrounded) {
+    if (onWall) {
+      // handled by updateWallRun
+    } else if (this.sliding && wasGrounded) {
       // slides keep most of their speed for ~0.5s, then bleed off
       const fr = this.slideTime < 0.45 ? 0.35 : 1.8;
       const f = Math.exp(-fr * dt);
@@ -168,7 +219,7 @@ export class Player {
       if (now > cap) { this.vel[0] *= cap / now; this.vel[2] *= cap / now; }
     }
 
-    this.vel[1] -= GRAVITY * dt;
+    this.vel[1] -= (onWall ? this.wallRun.grav : GRAVITY) * dt;
     const fallSpeed = this.vel[1];
 
     // --- integrate with collision, sub-stepped so fast movement can't tunnel ---
@@ -183,7 +234,13 @@ export class Player {
     }
 
     this.airTime = this.grounded ? 0 : this.airTime + dt;
+    if (this.grounded) {
+      if (this.wallRun) this.wallRun = null;
+      this.lastWall = null;
+    }
     if (this.grounded && !wasGrounded) {
+      if (this.slideJumped) this.chainWindow = 0.32;
+      this.slideJumped = false;
       if (fallSpeed < -5) this.events.push('land');
       if (fallSpeed < -4) {
         // springy landing: the camera dips and nods, then settles with a tiny overshoot
@@ -193,9 +250,14 @@ export class Player {
       }
     }
 
-    // --- in the air, holding forward: vault low walls, mantle onto higher ledges ---
-    if (!this.grounded && fwdIn > 0 && this.vel[1] < 4.5 && this.airTime > 0.05) {
-      if (!this.tryVault()) this.tryMantle();
+    // combo drops if you stay on the ground without sliding
+    if (this.grounded && !this.sliding && this.chainWindow <= 0 && this.sinceSlide > 0.5) this.chain = 0;
+
+    // --- in the air, holding forward: vault low walls, mantle / grab higher ledges, run on walls ---
+    if (!this.grounded && !this.wallRun && fwdIn > 0 && this.airTime > 0.05) {
+      let done = false;
+      if (this.vel[1] < 4.5) done = this.tryVault() || this.tryMantle() || this.tryLedgeGrab();
+      if (!done) this.tryWallRun(strafe);
     }
 
     if (this.pos[1] < -30) this.respawn();
@@ -313,13 +375,13 @@ export class Player {
     const b = this.world.firstOverlap(
       [probe[0] - 0.1, this.pos[1] + 0.3, probe[1] - 0.1],
       [probe[0] + 0.1, this.pos[1] + 1.4, probe[1] + 0.1]);
-    if (!b) return;
+    if (!b) return false;
     const ledge = b.max[1];
     const rise = ledge - this.pos[1];
-    if (rise < 0.4 || rise > MANTLE_MAX) return;
+    if (rise < 0.4 || rise > MANTLE_MAX) return false;
     const target = [this.pos[0] + fx * 0.75, ledge + 0.01, this.pos[2] + fz * 0.75];
-    if (this.overlap(CROUCH, target)) return;                                  // no room on top
-    if (this.overlap(CROUCH, [this.pos[0], ledge + 0.01, this.pos[2]])) return; // no room to climb up
+    if (this.overlap(CROUCH, target)) return false;                                  // no room on top
+    if (this.overlap(CROUCH, [this.pos[0], ledge + 0.01, this.pos[2]])) return false; // no room to climb up
     const keep = Math.min(this.hSpeed, 6);
     this.trav = {
       kind: 'mantle', t: 0, p: 0, len: 0.3 + rise * 0.11, from: [...this.pos], to: target, keep, dir: [fx, fz], rise,
@@ -327,7 +389,138 @@ export class Player {
     };
     this.vel = [0, 0, 0];
     this.sliding = false;
+    this.wallRun = null;
     this.events.push('mantle');
+    return true;
+  }
+
+  // ------------------------------------------------------------------ ledge grab
+  // Short of a mantle? Catch the edge with both hands and hang. Space / W climbs, S / crouch drops.
+  tryLedgeGrab() {
+    if (this.vel[1] > 3) return false;
+    const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+    const [x, y0, z] = this.pos;
+    let d0 = -1, b = null;
+    for (let d = HW + 0.02; d <= HW + 0.5; d += 0.04) {
+      const px = x + fx * d, pz = z + fz * d;
+      b = this.world.firstOverlap([px - 0.08, y0 + 1.6, pz - 0.08], [px + 0.08, y0 + GRAB_MAX, pz + 0.08]);
+      if (b) { d0 = d; break; }
+    }
+    if (!b) return false;
+    const ledge = b.max[1];
+    const rise = ledge - y0;
+    if (rise <= MANTLE_MAX || rise > GRAB_MAX) return false;
+    const hang = [x + fx * (d0 - HW - 0.03), ledge - 2.05, z + fz * (d0 - HW - 0.03)];
+    if (this.overlap(STAND, hang)) return false;
+    const top = [hang[0] + fx * 0.75, ledge + 0.01, hang[2] + fz * 0.75];
+    if (this.overlap(CROUCH, top) || this.overlap(CROUCH, [hang[0], ledge + 0.01, hang[2]])) return false;
+    this.trav = { kind: 'hang', t: 0, p: 0, from: [...this.pos], hang, top, ledge, dir: [fx, fz], held: 0 };
+    this.vel = [0, 0, 0];
+    this.sliding = false;
+    this.wallRun = null;
+    this.crouching = false;
+    this.height = STAND;
+    this.landV -= 0.6;           // the catch jolts the camera
+    this.camPitchV -= 0.5;
+    this.events.push('grab');
+    return true;
+  }
+
+  updateHang(dt, fwdIn, crouchHit) {
+    const m = this.trav;
+    m.t += dt;
+    const e = smoothstep(m.t / 0.14);  // snap onto the ledge
+    this.pos = m.from.map((c, k) => c + (m.hang[k] - c) * e);
+    this.vel = [0, 0, 0];
+    this.grounded = false;
+    m.p = Math.min(m.t / 0.14, 1);
+    if (m.t < 0.14) return;
+    m.held = fwdIn > 0 ? m.held + dt : 0;
+    if (this.jumpBuffer > 0 || m.held > 0.3) {
+      // pull up: a slower, heavier mantle
+      this.jumpBuffer = 0;
+      this.trav = {
+        kind: 'mantle', pull: true, t: 0, p: 0, len: 0.62, from: [...m.hang], to: m.top, keep: 3,
+        dir: m.dir, rise: m.ledge - m.hang[1],
+      };
+      this.events.push('mantle');
+    } else if (crouchHit || fwdIn < 0) {
+      this.trav = null;
+      this.vel = [-m.dir[0] * 1.5, 0, -m.dir[1] * 1.5];
+      this.airTime = 0.3;          // no instant re-grab
+      this.wallCooldown = 0.3;
+    }
+  }
+
+  // ------------------------------------------------------------------ wall run
+  wallAt(dir, y) {
+    // reaches up to ~0.6 m past your shoulder so you don't have to be scraping the wall
+    const px = this.pos[0] + dir[0] * (HW + 0.35), pz = this.pos[2] + dir[1] * (HW + 0.35);
+    const ex = dir[0] ? 0.4 : 0.22, ez = dir[1] ? 0.4 : 0.22;
+    return this.world.firstOverlap([px - ex, y + 0.5, pz - ez], [px + ex, y + 1.6, pz + ez]);
+  }
+
+  tryWallRun(strafe) {
+    const hs = this.hSpeed;
+    if (this.wallCooldown > 0 || hs < WALLRUN_MIN || this.vel[1] < -7 || this.airTime < 0.08) return false;
+    const vx = this.vel[0] / hs, vz = this.vel[2] / hs;
+    for (const d of DIRS) {
+      const along = d[0] * vx + d[1] * vz;            // how much we're running INTO the wall
+      if (along < -0.1 || along > 0.75) continue;      // must be running roughly parallel to it
+      const b = this.wallAt(d, this.pos[1]);
+      if (!b || b.max[1] < this.pos[1] + 1.7) continue; // too short to run on
+      const key = `${d[0]},${d[1]},${(d[0] ? b.min[0] : b.min[2]).toFixed(1)}`;
+      if (key === this.lastWall) continue;              // one run per wall until you touch the ground
+      // direction along the wall = velocity with the into-wall part removed
+      let ax = vx - d[0] * along, az = vz - d[1] * along;
+      const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+      const r = [Math.cos(this.yaw), -Math.sin(this.yaw)];
+      const side = Math.sign(d[0] * r[0] + d[1] * r[1]) || 1;   // +1 = wall on your right
+      this.wallRun = {
+        dir: d, a: [ax, az], n: [-d[0], -d[1]], side, t: 0, grav: 4.5,
+        speed: clamp(hs * Math.sqrt(1 - along * along) + 0.6, 7.6, 11.5),
+      };
+      this.lastWall = key;
+      this.vel[1] = Math.max(this.vel[1] * 0.35, 3.2);
+      this.sliding = false;
+      this.wallStepT = 0;
+      this.events.push('wallrun');
+      return true;
+    }
+    return false;
+  }
+
+  updateWallRun(dt, fwdIn, crouchHit) {
+    const w = this.wallRun;
+    w.t += dt;
+    const still = this.wallAt(w.dir, this.pos[1]);
+    if (this.jumpBuffer > 0 && w.t > 0.04) {
+      // wall jump: kick off away from the wall, keep most of the run speed
+      this.jumpBuffer = 0;
+      const sp = w.speed * 0.92;
+      this.vel = [w.a[0] * sp + w.n[0] * 6.2, JUMP_V * 1.02, w.a[1] * sp + w.n[1] * 6.2];
+      this.wallRun = null;
+      this.wallCooldown = 0.22;
+      this.slideJumped = true;     // a wall jump into a slide counts for the chain
+      this.events.push('walljump');
+      return;
+    }
+    if (!still || w.t > WALLRUN_TIME || fwdIn <= 0 || crouchHit) {
+      this.wallRun = null;
+      this.wallCooldown = 0.25;
+      this.vel[0] += w.n[0] * 1.2;  // peel off the wall
+      this.vel[2] += w.n[1] * 1.2;
+      return;
+    }
+    // stick to the wall and keep pace; gravity ramps up toward the end of the run
+    w.grav = w.t < WALLRUN_TIME * 0.65 ? 4.5 : 14;
+    w.speed = Math.max(w.speed - dt * 0.6, 7);
+    this.vel[0] = w.a[0] * w.speed - w.n[0] * 2.5;   // pulled in against the wall
+    this.vel[2] = w.a[1] * w.speed - w.n[1] * 2.5;
+    this.crouching = false;
+    this.height = STAND;
+    this.wallStepT -= dt;
+    if (this.wallStepT <= 0) { this.wallStepT = 0.17; this.events.push('wallstep'); }
   }
 
   updateMantle(dt) {
@@ -362,6 +555,7 @@ export class Player {
     const tr = this.trav;
     let eyeTarget = this.crouching ? (this.sliding ? 0.85 : 0.98) : 1.62;
     if (tr?.kind === 'vault') eyeTarget = 1.3;            // tucked, but not crouched
+    if (tr?.kind === 'hang') eyeTarget = 1.62;
     if (tr?.kind === 'mantle') {
       eyeTarget = 1.62 - 0.35 * Math.sin(Math.PI * tr.p); // hunch over the lip
       if (this.crouching) eyeTarget = Math.min(eyeTarget, 0.98);
@@ -371,7 +565,11 @@ export class Player {
 
     const bobbing = this.grounded && !this.sliding && !tr && hs > 1;
     this.bobAmt += ((bobbing ? Math.min(hs / 8, 1) : 0) - this.bobAmt) * damp(8, dt);
-    if (bobbing) this.bobT += dt * hs * 1.25;
+    if (bobbing) {
+      const before = Math.floor(this.bobT / Math.PI);
+      this.bobT += dt * hs * 1.25;
+      if (Math.floor(this.bobT / Math.PI) !== before) this.events.push('step');
+    }
 
     // lean into strafes, tilt during slides, roll with mantles and vaults
     let rollTarget = -strafe * 0.012 * Math.min(hs / 5, 1);
@@ -384,6 +582,14 @@ export class Player {
       const s = Math.sin(Math.PI * tr.p);
       rollTarget = 0.1 * s;
       pitchTarget = -0.08 * s;
+    } else if (tr?.kind === 'hang') {
+      rollTarget = 0;
+      pitchTarget = 0.42 * smoothstep(tr.t / 0.2);      // look up at the lip you're holding
+    }
+    if (this.wallRun) {
+      const w = this.wallRun;
+      const inT = smoothstep(w.t / 0.15);
+      rollTarget = w.side * 0.14 * inT;                 // tilt away from the wall
     }
     this.roll += (rollTarget - this.roll) * damp(9, dt);
     [this.camPitch, this.camPitchV] = spring(this.camPitch, this.camPitchV, pitchTarget, 150, 19, dt);

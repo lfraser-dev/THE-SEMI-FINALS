@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.3: Test Range.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.4: Test Range + Parkour Course.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -25,12 +25,16 @@ Then open http://localhost:8000.
 | Ctrl / C | Crouch, or slide if you're running |
 | Space at a low wall | Vault over it (walls about 0.3–1.35 m high, up to 1.7 m thick) |
 | Jump into a ledge | Mantle up (ledges up to about 2 m) |
-| Left mouse | Shoot |
-| Right mouse | Aim down sights (the sniper scopes in) |
+| Jump into a higher ledge | Grab the edge and hang. Space or keep holding W to pull up, S or Ctrl to drop |
+| Sprint-jump alongside a wall | Wall run. Space to wall jump off it |
+| Slide → jump → slide on landing | Slide-hop chain: each link adds speed (up to ×5). Holding crouch in the air slides as you land |
+| Left mouse / F | Shoot |
+| Right mouse / V | Aim down sights (the sniper scopes in) |
 | R | Reload |
 | E | Take a gun from a case |
 | 1 / 2 / Q / scroll | Switch weapon |
 | T | Reset the range |
+| X | Restart the parkour course |
 | Esc | Menu / settings |
 
 ## Weapons
@@ -48,12 +52,29 @@ Six guns sit in glass cases on the wall behind the spawn. You carry two at a tim
 
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.
 
+Aim and shoot keys can be changed in the menu (Settings → Aim key / Shoot key), and aim can be set to hold or toggle. This helps on trackpads.
+
+## Parkour course
+
+Go through the doorway in the east wall. Run through the red start gate to start the timer.
+
+1. Vault three hurdles.
+2. Slide under the beam.
+3. Wall run along the divider (or the outer wall) over the red floor.
+4. Mantle onto the block, then jump and catch the higher ledge.
+5. Cross the stepping stones over the red floor on the way back.
+6. Wall run the last wall and go through the white finish gate.
+
+Touching red floor sends you back to your last checkpoint. There are four checkpoints, each showing your split against your best. Your best time is saved in the browser.
+
 ## Movement feel
 
 - Vaults and mantles are animated: your free hand plants on the ledge or wall top, the gun tucks out of the way, and the camera rolls and dips with the move. You can't shoot mid-vault or mid-mantle.
 - A vault keeps your speed. Jumping into a low wall mid-air vaults it instead of climbing on top.
 - Landings, mantles and vaults use spring-based camera motion that dips and settles instead of snapping.
 - The gun has inertia: it trails your movement and mouse look, swings harder when sprinting and dips on landing.
+- The camera tilts away from the wall on wall runs, your free hand braces against walls on your left, and both the hang and pull-up are animated.
+- Footsteps get louder when sprinting and very quiet when crouch-walking. A speed meter sits above the movement state, with the current chain.
 
 ## What's in the test range
 
@@ -69,13 +90,14 @@ index.html            HUD, menu, styles
 src/main.js           game loop, shooting, HUD updates
 src/renderer.js       WebGL2 renderer + grid/edge shader (everything is a box)
 src/world.js          box list, collision queries, raycasts
-src/player.js         movement, vault/mantle, collision, camera springs
+src/player.js         movement, vault/mantle/ledge grab/wall run, collision, camera springs
+src/course.js         parkour time trial: gates, checkpoints, hazards, best times
 src/weapon.js         gun logic, reload animations, first-person viewmodel + hands
 src/weapons.js        weapon stats + box models (add new guns here)
 src/effects.js        debris, tracers, decals
 src/props.js          dummies, destructible walls, weapon cases, 7-seg signs
 src/audio.js          procedural sound effects
-src/maps/testRange.js the map (data + build function)
+src/maps/testRange.js the map (data + build function), incl. the parkour annex
 ```
 
 To add a map, copy `src/maps/testRange.js` and change the boxes. Each map defines `spawn`, `build(world)`, `dummies` and `walls`.

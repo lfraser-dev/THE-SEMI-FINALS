@@ -1,4 +1,5 @@
 // Keyboard + mouse state with "pressed this frame" edges.
+// Aim and shoot also work from the keyboard (rebindable), for trackpads and one-button mice.
 export class Input {
   constructor(target) {
     this.keys = new Set();
@@ -8,11 +9,17 @@ export class Input {
     this.dx = 0;
     this.dy = 0;
     this.enabled = false;
+    this.binds = { aim: 'KeyV', fire: 'KeyF' };
+    this.aimMode = 'hold';   // 'hold' | 'toggle'
+    this.aimToggled = false;
 
     addEventListener('keydown', (e) => {
       if (!this.enabled) return;
-      if (['Space', 'Tab', 'ControlLeft', 'KeyC'].includes(e.code)) e.preventDefault();
-      if (!this.keys.has(e.code)) this.pressed.add(e.code);
+      if (['Space', 'Tab', 'ControlLeft', 'KeyC', this.binds.aim, this.binds.fire].includes(e.code)) e.preventDefault();
+      if (!this.keys.has(e.code)) {
+        this.pressed.add(e.code);
+        if (e.code === this.binds.aim) this.aimToggled = !this.aimToggled;
+      }
       this.keys.add(e.code);
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -21,6 +28,7 @@ export class Input {
       if (!this.enabled) return;
       this.buttons.add(e.button);
       this.clicked.add(e.button);
+      if (e.button === 2) this.aimToggled = !this.aimToggled;
     });
     addEventListener('mouseup', (e) => this.buttons.delete(e.button));
     addEventListener('mousemove', (e) => {
@@ -38,6 +46,13 @@ export class Input {
   mouse(b) { return this.buttons.has(b); }
   mouseHit(b) { return this.clicked.has(b); }
 
+  get aiming() {
+    if (this.aimMode === 'toggle') return this.aimToggled;
+    return this.buttons.has(2) || this.keys.has(this.binds.aim);
+  }
+  get fireDown() { return this.buttons.has(0) || this.keys.has(this.binds.fire); }
+  get fireHit() { return this.clicked.has(0) || this.pressed.has(this.binds.fire); }
+
   endFrame() {
     this.pressed.clear();
     this.clicked.clear();
@@ -45,5 +60,5 @@ export class Input {
     this.dy = 0;
   }
 
-  reset() { this.keys.clear(); this.buttons.clear(); this.endFrame(); }
+  reset() { this.keys.clear(); this.buttons.clear(); this.aimToggled = false; this.endFrame(); }
 }

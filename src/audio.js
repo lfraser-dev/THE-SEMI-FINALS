@@ -71,6 +71,16 @@ export class Sounds {
   slide() { this.burst(0.55, 900, 0.22); this.burst(0.3, 3000, 0.06, 'highpass'); }
   vault() { this.burst(0.14, 800, 0.2); this.click(1100, 0.14, 2); setTimeout(() => this.burst(0.2, 1600, 0.08), 90); }
   mantle() { this.burst(0.18, 600, 0.22); this.click(1400, 0.12, 2); }
+  step(vol = 0.6) { this.burst(0.06, 320 + Math.random() * 260, 0.16 * vol); this.click(900 + Math.random() * 500, 0.05 * vol, 1.5); }
+  wallStep() { this.burst(0.05, 700 + Math.random() * 300, 0.11); this.click(1600, 0.05, 2); }
+  wallRun() { this.burst(0.25, 1100, 0.1, 'bandpass', 1.2); }
+  wallJump() { this.burst(0.12, 500, 0.2); this.burst(0.3, 2400, 0.06, 'highpass'); this.tone(300, 600, 0.12, 0.06, 'triangle'); }
+  grab() { this.burst(0.08, 450, 0.3); this.click(1200, 0.2, 2); }
+  chain(n) { this.tone(500 + n * 110, 900 + n * 160, 0.1, 0.08, 'triangle'); }
+  checkpoint() { this.tone(880, 880, 0.08, 0.12, 'triangle'); setTimeout(() => this.tone(1320, 1320, 0.14, 0.12, 'triangle'), 80); }
+  startRun() { this.tone(660, 1320, 0.18, 0.12, 'square'); }
+  finish() { [0, 90, 180, 300].forEach((d, i) => setTimeout(() => this.tone(660 * [1, 1.25, 1.5, 2][i], 660 * [1, 1.25, 1.5, 2][i], 0.18, 0.12, 'triangle'), d)); }
+  fail() { this.tone(400, 140, 0.3, 0.16, 'sawtooth'); }
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
   crumble() { this.burst(0.3, 700, 0.35); }

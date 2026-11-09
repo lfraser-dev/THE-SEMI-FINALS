@@ -274,6 +274,7 @@ export class Renderer {
     gl.uniform1f(this.u.uFogDensity, fogDensity);
     gl.uniform3fv(this.u.uCamPos, camPos);
     gl.uniform1f(this.u.uShadowOn, shadows ? 1 : 0);
+    gl.uniformMatrix4fv(this.u.uLightVP, false, this.lightVP);
   }
 
   drawSky(camPos) {

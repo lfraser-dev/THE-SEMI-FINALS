@@ -45,6 +45,8 @@ export class Weapon {
     this.lagV = [0, 0, 0];
     this.mantleT = 0;          // traversal poses (blend 0..1)
     this.vaultT = 0;
+    this.wallT = 0;
+    this.wallSide = 1;
     this.equipT = 1;
     this.queued = 0;
     this.events = [];
@@ -73,8 +75,12 @@ export class Weapon {
     this.equipT = Math.min(1, this.equipT + dt / 0.4);
 
     const tr = player.trav;
-    const wantAds = input.mouse(2) && !player.sprinting && !this.reload && this.equipT > 0.6 && !tr;
-    this.mantleT += ((tr?.kind === 'mantle' ? 1 : 0) - this.mantleT) * damp(tr ? 18 : 9, dt);
+    const wantAds = input.aiming && !player.sprinting && !this.reload && this.equipT > 0.6 && !tr;
+    const climb = tr?.kind === 'mantle' || tr?.kind === 'hang';
+    this.mantleT += ((climb ? 1 : 0) - this.mantleT) * damp(tr ? 18 : 9, dt);
+    const wr = player.wallRun;
+    this.wallT += ((wr ? 1 : 0) - this.wallT) * damp(12, dt);
+    if (wr) this.wallSide = wr.side;
     this.vaultT += ((tr?.kind === 'vault' ? 1 : 0) - this.vaultT) * damp(tr ? 20 : 9, dt);
     this.adsT += ((wantAds ? 1 : 0) - this.adsT) * damp(d.adsSpeed, dt);
     this.sprintT += ((player.sprinting && !this.reload ? 1 : 0) - this.sprintT) * damp(10, dt);
@@ -86,15 +92,15 @@ export class Weapon {
 
     this.cool -= dt;
     this.sinceShot += dt;
-    if (input.mouseHit(0)) this.queued = 0.18; // click buffer for semi-autos
+    if (input.fireHit) this.queued = 0.18; // click buffer for semi-autos
     this.queued -= dt;
-    const trigger = d.auto ? input.mouse(0) : this.queued > 0;
+    const trigger = d.auto ? input.fireDown : this.queued > 0;
 
     if (trigger && this.reload?.shell && this.ammo > 0) this.reload.interrupt = true;
     const blocked = this.reload || this.equipT < 0.75 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3;
     if (trigger && !blocked && this.cool <= 0) {
       if (this.ammo > 0) this.shoot(ctx);
-      else if (input.mouseHit(0)) { ctx.sounds?.dry(); this.startReload(ctx); }
+      else if (input.fireHit) { ctx.sounds?.dry(); this.startReload(ctx); }
     }
     // auto-reload shortly after running dry
     if (this.ammo === 0 && !this.reload && this.cycleT === null && this.sinceShot > 0.3 && this.equipT >= 1) this.startReload(ctx);
@@ -306,7 +312,7 @@ export class Weapon {
 
     // --- root transform ---
     const hip = d.hip, adsPos = [0, -d.sightY, d.adsZ];
-    const mt = this.mantleT, vt = this.vaultT, lag = this.lag;
+    const mt = this.mantleT, vt = this.vaultT, lag = this.lag, wt = this.wallT * this.wallSide;
     const land = player.landOff;
     // sprint gets a bigger figure-8 swing so running reads clearly
     const sx = Math.sin(player.bobT) * 0.018 * sp * player.bobAmt;
@@ -320,7 +326,7 @@ export class Weapon {
     const rot = [
       this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2,
       sp * 0.55 + this.sway[0] * 2 + tilt * 0.12 * rollDir + mt * 0.25 - vt * 0.4 + lag[0] * 2.5,
-      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3,
+      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3 + wt * 0.3,
     ];
     compose(this.root, pos, rot, [1, 1, 1]);
 
@@ -403,7 +409,17 @@ export class Weapon {
   // Where the free hand goes (view space) while mantling or vaulting, and how much (t).
   plantTarget(player) {
     const tr = player.trav;
-    if (!tr) return null;
+    if (!tr) {
+      // wall run on your left: free hand braces against the wall
+      if (!player.wallRun || player.wallRun.side > 0) return null;
+      const w = player.wallRun;
+      const t = smooth(clamp(w.t / 0.12, 0, 1));
+      const pat = Math.sin(w.t * 18) * 0.015;          // hand patters along the wall
+      return { t, pos: [-0.3, -0.02 + pat, -0.36 - pat], rot: [-0.5, 0.25, 0.05] };
+    }
+    if (tr.kind === 'hang') {
+      return { t: smooth(clamp(tr.t / 0.1, 0, 1)), pos: [-0.14, 0.17, -0.5], rot: [-0.15, 0.3, 1.3] };
+    }
     const p = tr.p;
     if (tr.kind === 'mantle') {
       // reach up to the lip, then the hand slides down the view as you push yourself over it

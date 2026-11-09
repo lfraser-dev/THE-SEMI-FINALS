@@ -9,6 +9,7 @@ import { Sounds } from './audio.js';
 import { Dummy, DestructibleWall, WeaponCase } from './props.js';
 import { mat4, perspective, lookDir, mul, cross, norm, damp, dot } from './math.js';
 import testRange from './maps/testRange.js';
+import { Course, fmtTime } from './course.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -24,7 +25,7 @@ try {
 }
 
 // ---------- settings ----------
-const settings = { sens: 1.0, fov: 95, volume: 0.5 };
+const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('semifinals.settings') || '{}')); } catch { /* ignore */ }
 const saveSettings = () => { try { localStorage.setItem('semifinals.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 
@@ -33,6 +34,8 @@ const world = new World();
 const effects = new Effects(world);
 const input = new Input(canvas);
 const sounds = new Sounds();
+const applyBinds = () => { input.binds = { aim: settings.aimKey, fire: settings.fireKey }; input.aimMode = settings.aimMode; };
+applyBinds();
 sounds.setVolume(settings.volume);
 const player = new Player(world);
 const map = testRange;
@@ -41,6 +44,7 @@ const dummies = map.dummies.map((d) => new Dummy(world, effects, d.pos, d.move))
 const walls = map.walls.map((w) => new DestructibleWall(world, effects, w.origin, w));
 const cases = CASE_ORDER.map((id, i) => new WeaponCase(world, WEAPONS[id], [map.cases.xs[i], 0, map.cases.z], i + 1));
 player.spawn(map.spawn.pos, map.spawn.yaw);
+const course = new Course(map.course, sounds);
 
 // two weapon slots: primary + sidearm
 const slots = [new Weapon(WEAPONS.ar), new Weapon(WEAPONS.pistol)];
@@ -50,6 +54,7 @@ const weapon = () => slots[current];
 
 function switchTo(i) {
   if (i === current || !slots[i]) return;
+  input.aimToggled = false;
   lastSlot = current;
   current = i;
   weapon().equip();
@@ -71,6 +76,7 @@ const stats = { shots: 0, hits: 0, kills: 0, chunks: 0 };
 const damageNumbers = [];
 
 function resetRange() {
+  course.reset();
   dummies.forEach((d) => d.reset());
   walls.forEach((w) => w.reset());
   effects.clear();
@@ -164,6 +170,12 @@ function handlePlayerEvents() {
     else if (ev === 'mantle') sounds.mantle();
     else if (ev === 'vault') { sounds.vault(); effects.dust(player.pos, 3, player.vel); }
     else if (ev === 'vaultland') { sounds.land(); effects.dust(player.pos, 3, player.vel); }
+    else if (ev === 'step') sounds.step(player.crouching ? 0.22 : player.sprinting ? 1 : 0.6);
+    else if (ev === 'wallstep') sounds.wallStep();
+    else if (ev === 'wallrun') sounds.wallRun();
+    else if (ev === 'walljump') { sounds.wallJump(); effects.dust(player.eye(), 3, player.vel); }
+    else if (ev === 'grab') sounds.grab();
+    else if (ev === 'chain') sounds.chain(player.chain);
   }
   player.events.length = 0;
   if (player.sliding && player.grounded && Math.random() < 0.5) effects.dust(player.pos, 1, player.vel);
@@ -175,6 +187,8 @@ const hud = {
   kills: $('kills'), acc: $('acc'), chunks: $('chunks'), cross: $('crosshair'), hitmarker: $('hitmarker'),
   dmgLayer: $('damage'), state: $('state'), wname: $('weaponname'), wtype: $('weapontype'), prompt: $('prompt'),
   scope: $('scope'), slots: [$('slot1'), $('slot2')],
+  speedo: $('speedo'), speedBar: $('speedbar'), speedNum: $('speednum'), chain: $('chain'),
+  course: $('course'), courseTime: $('coursetime'), courseInfo: $('courseinfo'), flash: $('flash'), fade: $('fade'),
 };
 let hitTimer = 0;
 function showHitmarker(kill, head) {
@@ -231,7 +245,34 @@ function updateHud(dt, fovRad) {
   hud.kills.textContent = stats.kills;
   hud.chunks.textContent = stats.chunks;
   hud.acc.textContent = stats.shots ? `${Math.round((stats.hits / stats.shots) * 100)}%` : '--';
-  hud.state.textContent = player.mantle ? 'MANTLE' : player.vaulting ? 'VAULT' : player.sliding ? 'SLIDE' : player.crouching ? 'CROUCH' : player.sprinting ? 'SPRINT' : !player.grounded ? 'AIR' : '';
+  hud.state.textContent = player.hanging ? 'HANG' : player.wallRunning ? 'WALL RUN' : player.mantle ? 'MANTLE' : player.vaulting ? 'VAULT' : player.sliding ? 'SLIDE' : player.crouching ? 'CROUCH' : player.sprinting ? 'SPRINT' : !player.grounded ? 'AIR' : '';
+
+  // speed meter + slide-hop chain
+  hud.speedBar.style.setProperty('--p', Math.min(player.hSpeed / 16, 1).toFixed(3));
+  hud.speedNum.textContent = player.hSpeed.toFixed(1);
+  hud.chain.textContent = player.chain > 0 ? `CHAIN ×${player.chain}` : '';
+  hud.speedo.classList.toggle('hot', player.chain > 0 || player.hSpeed > 11);
+
+  // parkour course
+  hud.course.classList.toggle('hidden', !course.visible);
+  if (course.visible) {
+    const cps = map.course.checkpoints.length;
+    hud.courseTime.textContent = course.state === 'idle' ? '0:00.00' : fmtTime(course.t);
+    hud.courseInfo.textContent = `CP ${Math.min(course.next, cps)}/${cps} · BEST ${course.best != null ? fmtTime(course.best) : '--'} · X RESTART`;
+  }
+  const f = course.flash;
+  if (f) {
+    hud.flash.style.opacity = f.t < 1.2 ? 1 : 1 - (f.t - 1.2) / 0.4;
+    hud.flash.style.transform = `translate(-50%, -50%) scale(${1 + Math.max(0, 0.15 - f.t) * 1.2})`;
+    if (hud.flash.dataset.text !== f.text + f.sub) {
+      hud.flash.dataset.text = f.text + f.sub;
+      hud.flash.className = f.kind;
+      hud.flash.innerHTML = `<b></b><span></span>`;
+      hud.flash.firstChild.textContent = f.text;
+      hud.flash.lastChild.textContent = f.sub;
+    }
+  } else hud.flash.style.opacity = 0;
+  hud.fade.style.opacity = course.failT > 0 ? course.failT / 0.35 : 0;
 
   const spreadPx = Math.tan(w.spread(player)) / Math.tan(fovRad / 2) * (innerHeight / 2);
   hud.cross.style.setProperty('--gap', `${Math.max(4, spreadPx).toFixed(1)}px`);
@@ -328,6 +369,51 @@ bindSlider('sens', 'sens', (v) => v.toFixed(2));
 bindSlider('fov', 'fov', (v) => `${v}°`);
 bindSlider('vol', 'volume', (v) => `${Math.round(v * 100)}%`, (v) => sounds.setVolume(v));
 
+// ---------- keyboard aim / shoot, rebindable ----------
+const RESERVED = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ControlLeft', 'KeyC', 'KeyR', 'KeyE',
+  'KeyT', 'KeyQ', 'KeyX', 'Digit1', 'Digit2', 'Escape', 'KeyP', 'Enter'];
+const keyName = (code) => code.replace(/^Key/, '').replace(/^Digit/, '').replace(/Left$|Right$/, (m) => ` ${m.toUpperCase()}`).toUpperCase();
+let rebinding = null;
+function refreshBindButtons() {
+  $('bind-aim').textContent = keyName(settings.aimKey);
+  $('bind-fire').textContent = keyName(settings.fireKey);
+  $('aim-mode').textContent = settings.aimMode === 'toggle' ? 'TOGGLE' : 'HOLD';
+  document.querySelectorAll('.keyhint-aim').forEach((el) => { el.textContent = keyName(settings.aimKey); });
+  document.querySelectorAll('.keyhint-fire').forEach((el) => { el.textContent = keyName(settings.fireKey); });
+}
+function startRebind(which, btn) {
+  rebinding = { which, btn };
+  btn.textContent = 'PRESS A KEY…';
+  btn.classList.add('waiting');
+  $('bindnote').textContent = 'Esc to cancel';
+}
+$('bind-aim').addEventListener('click', (e) => startRebind('aimKey', e.currentTarget));
+$('bind-fire').addEventListener('click', (e) => startRebind('fireKey', e.currentTarget));
+$('aim-mode').addEventListener('click', () => {
+  settings.aimMode = settings.aimMode === 'toggle' ? 'hold' : 'toggle';
+  applyBinds(); saveSettings(); refreshBindButtons();
+});
+addEventListener('keydown', (e) => {
+  if (!rebinding) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const { which, btn } = rebinding;
+  btn.classList.remove('waiting');
+  rebinding = null;
+  if (e.code !== 'Escape') {
+    const other = which === 'aimKey' ? settings.fireKey : settings.aimKey;
+    if (RESERVED.includes(e.code) || e.code === other) {
+      $('bindnote').textContent = `${keyName(e.code)} is already used — pick another key`;
+    } else {
+      settings[which] = e.code;
+      $('bindnote').textContent = '';
+      applyBinds(); saveSettings();
+    }
+  } else $('bindnote').textContent = '';
+  refreshBindButtons();
+}, true);
+refreshBindButtons();
+
 // ---------- main loop ----------
 const proj = mat4(), view = mat4(), vmProj = mat4(), identity = mat4();
 let last = performance.now(), time = 0, fovKick = 0;
@@ -349,7 +435,8 @@ function frame(now) {
     nearCase = findCase();
     if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
     w = weapon();
-    player.update(dt, input, { ads: w.ads, firing: input.mouse(0) && w.ammo > 0 && !w.reloading && !player.trav });
+    player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav });
+    course.update(dt, player, input);
     handlePlayerEvents();
     updateCamera();
     w.update(dt, input, player, weaponCtx);
@@ -361,7 +448,7 @@ function frame(now) {
   // ---- render ----
   const w = weapon();
   const aspect = renderer.resize();
-  const targetKick = player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
+  const targetKick = player.wallRunning ? 8 : player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
   fovKick += (targetKick - fovKick) * damp(6, dt);
   const hfov = (settings.fov + fovKick) * (1 - w.adsT * (1 - w.def.adsZoom)) * Math.PI / 180;
   const vfov = 2 * Math.atan(Math.tan(Math.min(hfov, 2.9) / 2) / aspect);
@@ -373,6 +460,8 @@ function frame(now) {
   const caseParts = cases.flatMap((c) => c.parts(time));
 
   // shadow pass
+  // keep the sun's shadow map centred on the player so the annex gets shadows too
+  renderer.setShadowArea([Math.round(player.pos[0] / 8) * 8, 0, Math.round(player.pos[2] / 8) * 8], 50);
   renderer.beginShadow();
   for (const b of world.boxes) if (!b.noShadow) renderer.shadowDraw(b.model);
   for (const p of caseParts) renderer.shadowDraw(p.model);
@@ -407,4 +496,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
-window.game = { player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+window.game = { course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
