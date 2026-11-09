@@ -47,7 +47,7 @@ export const WEAPONS = {
   },
 
   smg: {
-    id: 'smg', name: 'V9-S', type: 'SMG',
+    id: 'smg', name: 'V9-S', type: 'SMG', oneHanded: true,
     auto: true, rpm: 1000, mag: 40, dmg: 13, headMult: 1.75, pellets: 1,
     reload: 1.6, reloadEmpty: 2.0, reloadStyle: 'mag',
     spread: { base: 0.008, move: 0.012, air: 0.02, bloom: 0.0035, bloomMax: 0.03, ads: 0.4 },
@@ -150,7 +150,7 @@ export const WEAPONS = {
   },
 
   pistol: {
-    id: 'pistol', name: 'P-19', type: 'PISTOL',
+    id: 'pistol', name: 'P-19', type: 'PISTOL', oneHanded: true,
     auto: false, rpm: 420, mag: 12, dmg: 24, headMult: 2, pellets: 1,
     reload: 1.3, reloadEmpty: 1.6, reloadStyle: 'mag', slide: true,
     spread: { base: 0.005, move: 0.012, air: 0.02, bloom: 0.008, bloomMax: 0.03, ads: 0.4 },

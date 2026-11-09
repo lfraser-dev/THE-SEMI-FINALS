@@ -117,6 +117,21 @@ function updateCamera() {
   camUp = [0, 1, 2].map((k) => camUp[k] * c - camRight[k] * s);
   camRight = r2;
 }
+// The gun is drawn by its own camera (58° FOV, half the roll), so a gun-space point must go
+// through the screen to land in the world where you actually see it.
+const vmProjM = mat4(), vmViewM = mat4();
+let worldVfov = 1.4, worldAspect = 1.7;
+function vmToWorld(p) {
+  const v = [
+    vmViewM[0] * p[0] + vmViewM[4] * p[1] + vmViewM[8] * p[2] + vmViewM[12],
+    vmViewM[1] * p[0] + vmViewM[5] * p[1] + vmViewM[9] * p[2] + vmViewM[13],
+    vmViewM[2] * p[0] + vmViewM[6] * p[1] + vmViewM[10] * p[2] + vmViewM[14],
+  ];
+  const depth = Math.max(-v[2], 0.02);
+  const nx = (vmProjM[0] * v[0]) / depth, ny = (vmProjM[5] * v[1]) / depth;   // NDC
+  const th = Math.tan(worldVfov / 2);
+  return [0, 1, 2].map((k) => camEye[k] + (camFwd[k] + camRight[k] * nx * th * worldAspect + camUp[k] * ny * th) * depth);
+}
 const viewToWorld = (p) => [0, 1, 2].map((k) => camEye[k] + camRight[k] * p[0] + camUp[k] * p[1] - camFwd[k] * p[2]);
 const viewDirToWorld = (v) => [0, 1, 2].map((k) => camRight[k] * v[0] + camUp[k] * v[1] - camFwd[k] * v[2]);
 
@@ -126,7 +141,7 @@ function fire(w) {
   updateCamera();
   const spread = w.spread(player);
   const hipT = 1 - w.adsT;
-  const muzzle = viewToWorld([d.hip[0] * hipT, (d.hip[1] + 0.03) * hipT - 0.05 * w.adsT, -0.7]);
+  const muzzle = vmToWorld(w.gunPoint(d.muzzle));
   stats.shots++;
 
   const perDummy = new Map();
@@ -173,10 +188,10 @@ function handleWeaponEvents(w) {
     if (ev.type === 'eject') {
       const v = viewDirToWorld(ev.vel);
       const pv = player.vel;
-      effects.casing(viewToWorld(ev.pos), [v[0] + pv[0], v[1] + pv[1] * 0.5, v[2] + pv[2]]);
+      effects.casing(vmToWorld(ev.pos), [v[0] + pv[0], v[1] + pv[1] * 0.5, v[2] + pv[2]]);
     } else if (ev.type === 'magdrop' && ev.part) {
       const pv = player.vel;
-      effects.spawnPiece(viewToWorld(ev.pos), ev.part.s, [pv[0] * 0.8, -1, pv[2] * 0.8], ev.part.col, 6);
+      effects.spawnPiece(vmToWorld(ev.pos), ev.part.s, [pv[0] * 0.8, -1, pv[2] * 0.8], ev.part.col, 6);
     }
   }
   w.events.length = 0;
@@ -564,7 +579,7 @@ function worldBeams(w) {
   const g = player.grapple;
   if (g && !bench.open) {
     const hm = w.handModels[0];
-    const hand = viewToWorld([hm[12], hm[13], hm[14]]);
+    const hand = vmToWorld([hm[12], hm[13], hm[14]]);
     let tip;
     if (g.phase === 'fire') {
       const k = Math.min(g.t / g.travel, 1);
@@ -581,10 +596,10 @@ function worldBeams(w) {
   }
   const lp = !bench.open && !w.scoped ? w.laserPoint() : null;
   if (lp) {
-    const start = viewToWorld(lp);
+    const start = vmToWorld(lp);
     const hit = world.raycast(camEye, camFwd, 120);
     const end = hit ? hit.point : camEye.map((c, i) => c + camFwd[i] * 120);
-    const r = beam(2, start, end, 0.006, [1, 0.12, 0.08], 1, 0.35);
+    const r = w.adsT < 0.6 ? beam(2, start, end, 0.006, [1, 0.12, 0.08], 1, 0.35 * (1 - w.adsT / 0.6)) : null;
     if (r) out.push(r);
     if (hit) {
       const sz = 0.025 + hit.t * 0.0012;
@@ -643,6 +658,9 @@ function frame(now) {
 
   const caseParts = cases.flatMap((c) => c.parts(time));
   // viewmodel first: the grapple rope and laser start from the hands / gun
+  perspective(vmProjM, 58 * Math.PI / 180, aspect, 0.01, 10);
+  lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
+  worldVfov = vfov; worldAspect = aspect;
   const vmParts = bench.open ? [] : w.viewmodel(player, time);
   const beams = worldBeams(w);
 
@@ -671,10 +689,7 @@ function frame(now) {
 
   // viewmodel
   renderer.clearDepth();
-  perspective(vmProj, 58 * Math.PI / 180, aspect, 0.01, 10);
-  const vmView = mat4();
-  lookDir(vmView, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
-  renderer.setCamera(vmProj, vmView, 0, [0, 0, 0], false);
+  renderer.setCamera(vmProjM, vmViewM, 0, [0, 0, 0], false);
   if (bench.open) {
     // gun preview on the right of the workbench menu
     compose(previewM, [0.5, -0.02, -1.25], [0.12, bench.rotY + time * 0.25, 0], [1, 1, 1]);

@@ -67,7 +67,7 @@ Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Set
 
 ## Workbench and attachments
 
-The workbench sits in the south-west corner by the weapon wall. Press E there to open it, pick a gun, and click attachments on or off. The stat bars show the change, with a marker for the factory value, and hovering an option previews it. Loadouts are saved per gun.
+The workbench sits in the middle of the weapon stands, straight ahead from spawn. Press E there to open it, pick a gun, and click attachments on or off. The stat bars show the change, with a marker for the factory value, and hovering an option previews it. Loadouts are saved per gun.
 
 | Slot | Options |
 | --- | --- |
@@ -77,6 +77,8 @@ The workbench sits in the south-west corner by the weapon wall. Press E there to
 | Underbarrel | Vertical grip, angled grip, laser sight (visible beam, tighter hip fire) |
 | Magazine | Extended mag, fast mag, drum mag (AR / SMG) |
 | Stock | Light, heavy, or no stock |
+
+Shooting while sliding has its own animation. Two-handed guns (rifle, shotgun, sniper, LMG) are canted and tucked, and kick much harder mid-slide. The one-handed guns (pistol and SMG) are held out on one arm while the free hand drags on the floor, and keep their normal recoil.
 
 Not every gun takes every slot. For example, the pistol has no barrel or stock options. Damage now falls off past each gun's range.
 

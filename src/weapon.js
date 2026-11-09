@@ -70,6 +70,8 @@ export class Weapon {
 
   // laser emitter position in view space (after viewmodel() ran this frame), or null
   laserPoint() { return this.def.laser ? transformPoint(this.root, this.def.laser) : null; }
+  // any gun-local point in view space (uses the pose from the last viewmodel() call)
+  gunPoint(p) { return transformPoint(this.root, p); }
 
   get ads() { return this.adsT > 0.5; }
   get reloading() { return !!this.reload; }
@@ -104,6 +106,7 @@ export class Weapon {
     this.adsT += ((wantAds ? 1 : 0) - this.adsT) * damp(d.adsSpeed, dt);
     this.sprintT += ((player.sprinting && !this.reload ? 1 : 0) - this.sprintT) * damp(10, dt);
     this.slideT += ((player.sliding ? 1 : 0) - this.slideT) * damp(9, dt);
+    this.player = player;
 
     if (input.hit('KeyR')) this.startReload(ctx);
     this.updateReload(dt, ctx);
@@ -132,6 +135,7 @@ export class Weapon {
     this.bloom -= this.bloom * damp(6, dt);
     this.flash -= dt;
     this.vmKick -= this.vmKick * damp(16, dt);
+    this.vmRollKick = (this.vmRollKick || 0) * Math.exp(-14 * dt);
     this.boltKick -= this.boltKick * damp(28, dt);
     // springy sway from mouse look
     const swayT = [clamp(-input.dx * 0.0005, -0.04, 0.04), clamp(input.dy * 0.0005, -0.04, 0.04)];
@@ -156,11 +160,15 @@ export class Weapon {
     this.sinceShot = 0;
     ctx.fire(this);
     const am = lerp(1, 0.55, this.adsT);
-    this.kick = Math.min(this.kick + d.recoil.up * am, 0.18);
-    this.kickYaw += (Math.random() - 0.45) * d.recoil.side * am;
-    this.bloom = Math.min(this.bloom + d.spread.bloom, d.spread.bloomMax);
+    // shooting mid-slide: no stable stance, so two-handed guns kick a lot harder
+    const sliding = this.player?.sliding;
+    const sm = sliding ? (d.oneHanded ? 1.0 : 1.8) : 1;
+    this.kick = Math.min(this.kick + d.recoil.up * am * sm, 0.22);
+    this.kickYaw += (Math.random() - 0.45) * d.recoil.side * am * (sliding && !d.oneHanded ? 2.2 : 1);
+    this.bloom = Math.min(this.bloom + d.spread.bloom * sm, d.spread.bloomMax * sm);
     this.flash = 0.045;
-    this.vmKick = d.recoil.vm;
+    this.vmKick = d.recoil.vm * (sliding && !d.oneHanded ? 1.7 : 1);
+    this.vmRollKick = sliding && !d.oneHanded ? (Math.random() - 0.3) * 0.12 : 0;
     if (d.action) {
       this.cycleT = -0.12;
       this.cycleLen = Math.min(0.6, (60 / d.rpm) * 0.72);
@@ -246,6 +254,7 @@ export class Weapon {
     let v = s.base + this.bloom;
     v += Math.min(player.hSpeed / 8, 1) * s.move;
     if (!player.grounded) v += s.air;
+    if (player.sliding && !this.def.oneHanded) v += 0.012;  // two-handed guns are shaky mid-slide
     if (player.crouching && !player.sliding) v *= 0.8;
     return v * lerp(this.def.hipSpread ?? 1, s.ads, this.adsT);
   }
@@ -254,7 +263,11 @@ export class Weapon {
   viewmodel(player, time) {
     const d = this.def;
     if (this.scoped) return [];
-    const a = this.adsT, sp = this.sprintT, sl = this.slideT;
+    const a = this.adsT, sp = this.sprintT;
+    const na = 1 - a;                               // pose offsets fade out while aiming so sights line up
+    const sl = this.slideT * na;
+    const one = !!d.oneHanded;
+    const sl2 = one ? 0 : sl, sl1 = one ? sl : 0;   // two-handed: cant + tuck, one-handed: arm out
 
     const bob = player.bobAmt * (1 - a * 0.85);
     const bx = Math.cos(player.bobT) * 0.012 * bob;
@@ -331,25 +344,26 @@ export class Weapon {
 
     // --- root transform ---
     const hip = d.hip, adsPos = [0, -d.sightY, d.adsZ];
-    const mt = this.mantleT, vt = this.vaultT, lag = this.lag, wt = this.wallT * this.wallSide;
-    const dt_ = this.dashT, st = this.slamT, gt = this.grapT;
+    const mt = this.mantleT, vt = this.vaultT, lag = this.lag, wt = this.wallT * this.wallSide * na;
+    const dt_ = this.dashT * na, st = this.slamT, gt = this.grapT * na;
     const land = player.landOff;
     // sprint gets a bigger figure-8 swing so running reads clearly
     const sx = Math.sin(player.bobT) * 0.018 * sp * player.bobAmt;
     const syb = -Math.abs(Math.cos(player.bobT)) * 0.012 * sp * player.bobAmt;
     const pos = [
-      lerp(hip[0], adsPos[0], a) + bx + sx + this.sway[0] + lag[0] - sp * 0.04 - tilt * 0.03 - sl * 0.05 + mt * 0.04 + vt * 0.07,
+      lerp(hip[0], adsPos[0], a) + bx + sx + this.sway[0] + lag[0] - sp * 0.04 - tilt * 0.03 - sl2 * 0.07 + sl1 * 0.02 + mt * 0.04 + vt * 0.07,
       lerp(hip[1], adsPos[1], a) + by + syb + idle - this.sway[1] + lag[1] - tilt * 0.035 - sp * 0.04 + player.stepSmooth * 0.3 + land * 0.35
-        - e * 0.28 + bump * 0.012 - sl * 0.02 - mt * 0.1 - vt * 0.08,
-      lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04 + lag[2] + mt * 0.06 + vt * 0.03 + dt_ * 0.06,
+        - e * 0.28 + bump * 0.012 - sl2 * 0.035 + sl1 * 0.01 - mt * 0.1 - vt * 0.08,
+      lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04 + lag[2] + mt * 0.06 + vt * 0.03 + dt_ * 0.06 + sl2 * 0.05 - sl1 * 0.07,
     ];
     pos[0] += gt * 0.03 + st * 0.02;
     pos[1] += -dt_ * 0.03 - st * 0.06 - gt * 0.02;
     const rot = [
       this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2
-        - dt_ * 0.12 - st * 0.45,
-      sp * 0.55 + this.sway[0] * 2 + tilt * 0.12 * rollDir + mt * 0.25 - vt * 0.4 + lag[0] * 2.5,
-      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3 + wt * 0.3
+        - dt_ * 0.12 - st * 0.45 + sl2 * 0.08 + this.vmKick * 0.05 * sl2,
+      sp * 0.55 + this.sway[0] * 2 + tilt * 0.12 * rollDir + mt * 0.25 - vt * 0.4 + lag[0] * 2.5 + sl2 * 0.12 - sl1 * 0.06,
+      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl2 * 0.55 - sl1 * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3 + wt * 0.3
+        + (this.vmRollKick || 0)
         + dt_ * 0.35 + gt * 0.25,
     ];
     compose(this.root, pos, rot, [1, 1, 1]);
@@ -439,6 +453,11 @@ export class Weapon {
       const g = player.grapple;
       const t = smooth(clamp((g.phase === 'fire' ? g.t : 1) / 0.08, 0, 1));
       return { t, pos: [-0.17, -0.1, -0.62], rot: [-0.1, 0.1, 0.3] };
+    }
+    if (!tr && player.sliding && this.def.oneHanded && this.slideT > 0.05 && !this.reload) {
+      const t = smooth(clamp(this.slideT * (1 - this.adsT), 0, 1));
+      const drag = Math.sin(player.slideTime * 30) * 0.008;
+      return { t, pos: [-0.34, -0.36 + drag, -0.3], rot: [-0.15, 0.4, 1.2] };
     }
     if (!tr) {
       // wall run on your left: free hand braces against the wall

@@ -141,8 +141,8 @@ export default {
     add(boxAt(-14.2, 0, -4, 0.4, 1.3, 6));
 
     // ---------------- weapon wall (south) ----------------
-    deco([-16, 0, 28.6], [16, 0.02, 31.8], { color: [0.3, 0.31, 0.34], edges: false });
-    deco([-16, 0, 28.45], [16, 0.03, 28.6], { color: RED, emissive: 0.7, edges: false });
+    deco([-16.5, 0, 28.6], [16.5, 0.02, 31.8], { color: [0.3, 0.31, 0.34], edges: false });
+    deco([-16.5, 0, 28.45], [16.5, 0.03, 28.6], { color: RED, emissive: 0.7, edges: false });
     // spawn pad
     deco([-1.5, 0, 24.5], [1.5, 0.02, 27.5], { color: LANE, edges: true });
 
@@ -150,8 +150,8 @@ export default {
   },
 
   // weapon cases along the south wall (the slot number is shown above each)
-  cases: { z: 31.15, xs: [-12.5, -7.5, -2.5, 2.5, 7.5, 12.5] },
-  bench: { pos: [-23.5, 0, 30.5] },        // gunsmith workbench (front edge), against the south wall
+  cases: { z: 31.15, xs: [-15, -10, -5, 5, 10, 15] },
+  bench: { pos: [0, 0, 30.6] },            // gunsmith workbench (front edge), in the middle of the weapon stands
 
   dummies: [
     { pos: [-6, 0, -8] },
