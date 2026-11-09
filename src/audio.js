@@ -69,6 +69,7 @@ export class Sounds {
   swap() { this.burst(0.12, 1500, 0.1); setTimeout(() => this.click(3000, 0.18), 120); }
   pickup() { this.tone(600, 1200, 0.12, 0.12, 'triangle'); this.click(2600, 0.25); }
   slide() { this.burst(0.55, 900, 0.22); this.burst(0.3, 3000, 0.06, 'highpass'); }
+  vault() { this.burst(0.14, 800, 0.2); this.click(1100, 0.14, 2); setTimeout(() => this.burst(0.2, 1600, 0.08), 90); }
   mantle() { this.burst(0.18, 600, 0.22); this.click(1400, 0.12, 2); }
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }

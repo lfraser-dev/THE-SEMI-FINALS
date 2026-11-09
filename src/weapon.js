@@ -1,6 +1,6 @@
 // A held weapon: firing, recoil, spread, reloads (mag / shell-by-shell), pump & bolt
 // cycling, equip animation, and the first-person viewmodel with hands.
-import { compose, mul, mat4, damp, clamp, lerp, anglesFor } from './math.js';
+import { compose, mul, mat4, damp, clamp, lerp, anglesFor, spring } from './math.js';
 
 const GLOVE = [0.86, 0.86, 0.88];
 const SLEEVE = [0.16, 0.16, 0.19];
@@ -40,6 +40,11 @@ export class Weapon {
     this.vmKick = 0;
     this.boltKick = 0;
     this.sway = [0, 0];
+    this.swayV = [0, 0];
+    this.lag = [0, 0, 0];      // inertia: the gun trails your movement a little
+    this.lagV = [0, 0, 0];
+    this.mantleT = 0;          // traversal poses (blend 0..1)
+    this.vaultT = 0;
     this.equipT = 1;
     this.queued = 0;
     this.events = [];
@@ -67,7 +72,10 @@ export class Weapon {
     const d = this.def;
     this.equipT = Math.min(1, this.equipT + dt / 0.4);
 
-    const wantAds = input.mouse(2) && !player.sprinting && !this.reload && this.equipT > 0.6;
+    const tr = player.trav;
+    const wantAds = input.mouse(2) && !player.sprinting && !this.reload && this.equipT > 0.6 && !tr;
+    this.mantleT += ((tr?.kind === 'mantle' ? 1 : 0) - this.mantleT) * damp(tr ? 18 : 9, dt);
+    this.vaultT += ((tr?.kind === 'vault' ? 1 : 0) - this.vaultT) * damp(tr ? 20 : 9, dt);
     this.adsT += ((wantAds ? 1 : 0) - this.adsT) * damp(d.adsSpeed, dt);
     this.sprintT += ((player.sprinting && !this.reload ? 1 : 0) - this.sprintT) * damp(10, dt);
     this.slideT += ((player.sliding ? 1 : 0) - this.slideT) * damp(9, dt);
@@ -83,7 +91,7 @@ export class Weapon {
     const trigger = d.auto ? input.mouse(0) : this.queued > 0;
 
     if (trigger && this.reload?.shell && this.ammo > 0) this.reload.interrupt = true;
-    const blocked = this.reload || this.equipT < 0.75 || this.cycleT !== null;
+    const blocked = this.reload || this.equipT < 0.75 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3;
     if (trigger && !blocked && this.cool <= 0) {
       if (this.ammo > 0) this.shoot(ctx);
       else if (input.mouseHit(0)) { ctx.sounds?.dry(); this.startReload(ctx); }
@@ -100,8 +108,19 @@ export class Weapon {
     this.flash -= dt;
     this.vmKick -= this.vmKick * damp(16, dt);
     this.boltKick -= this.boltKick * damp(28, dt);
-    this.sway[0] += (clamp(-input.dx * 0.0005, -0.04, 0.04) - this.sway[0]) * damp(10, dt);
-    this.sway[1] += (clamp(input.dy * 0.0005, -0.04, 0.04) - this.sway[1]) * damp(10, dt);
+    // springy sway from mouse look
+    const swayT = [clamp(-input.dx * 0.0005, -0.04, 0.04), clamp(input.dy * 0.0005, -0.04, 0.04)];
+    for (let k = 0; k < 2; k++) [this.sway[k], this.swayV[k]] = spring(this.sway[k], this.swayV[k], swayT[k], 160, 17, dt);
+    // movement inertia, in view space (right / up / forward)
+    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw), v = player.vel;
+    const vr = v[0] * cy - v[2] * sy, vf = -v[0] * sy - v[2] * cy;
+    const ads = 1 - this.adsT * 0.8;
+    const lagT = [
+      clamp(-vr * 0.0032, -0.025, 0.025) * ads,
+      clamp(-v[1] * 0.0035, -0.03, 0.03) * ads,
+      clamp(vf * 0.0016, -0.012, 0.016) * ads,
+    ];
+    for (let k = 0; k < 3; k++) [this.lag[k], this.lagV[k]] = spring(this.lag[k], this.lagV[k], lagT[k], 90, 13, dt);
   }
 
   shoot(ctx) {
@@ -287,15 +306,21 @@ export class Weapon {
 
     // --- root transform ---
     const hip = d.hip, adsPos = [0, -d.sightY, d.adsZ];
+    const mt = this.mantleT, vt = this.vaultT, lag = this.lag;
+    const land = player.landOff;
+    // sprint gets a bigger figure-8 swing so running reads clearly
+    const sx = Math.sin(player.bobT) * 0.018 * sp * player.bobAmt;
+    const syb = -Math.abs(Math.cos(player.bobT)) * 0.012 * sp * player.bobAmt;
     const pos = [
-      lerp(hip[0], adsPos[0], a) + bx + this.sway[0] - sp * 0.04 - tilt * 0.03 - sl * 0.05,
-      lerp(hip[1], adsPos[1], a) + by + idle - this.sway[1] - tilt * 0.035 - sp * 0.04 + player.stepSmooth * 0.3 - e * 0.28 + bump * 0.012 - sl * 0.02,
-      lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04,
+      lerp(hip[0], adsPos[0], a) + bx + sx + this.sway[0] + lag[0] - sp * 0.04 - tilt * 0.03 - sl * 0.05 + mt * 0.04 + vt * 0.07,
+      lerp(hip[1], adsPos[1], a) + by + syb + idle - this.sway[1] + lag[1] - tilt * 0.035 - sp * 0.04 + player.stepSmooth * 0.3 + land * 0.35
+        - e * 0.28 + bump * 0.012 - sl * 0.02 - mt * 0.1 - vt * 0.08,
+      lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04 + lag[2] + mt * 0.06 + vt * 0.03,
     ];
     const rot = [
-      this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06,
-      sp * 0.55 + this.sway[0] * 2 + tilt * 0.12 * rollDir,
-      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl * 0.3,
+      this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2,
+      sp * 0.55 + this.sway[0] * 2 + tilt * 0.12 * rollDir + mt * 0.25 - vt * 0.4 + lag[0] * 2.5,
+      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3,
     ];
     compose(this.root, pos, rot, [1, 1, 1]);
 
@@ -330,15 +355,28 @@ export class Weapon {
     const glove = [0.05, 0.09, 0.13];
     const palm = [0.085, 0.07, 0.1];
     const hm = this.handModels;
-    compose(this.tmp, add3(left, [-0.042, -0.03, 0]), [0.1, 0, -0.25], glove);
-    mul(hm[0], this.root, this.tmp);
+    // left hand leaves the gun to plant on the ledge / wall top during mantles and vaults
+    const plant = this.plantTarget(player);
+    let lv = transformPoint(this.root, left);
+    if (plant && plant.t > 0.001) {
+      const h = plant.t;
+      const onGun = transformPoint(this.root, add3(left, [-0.042, -0.03, 0]));
+      const hp = lerp3(onGun, plant.pos, h);
+      const gr = [rot[0] + 0.1, rot[1], rot[2] - 0.25];
+      compose(hm[0], hp, lerp3(gr, plant.rot, smooth(h)), glove);
+      lv = lerp3(lv, add3(plant.pos, [0.03, 0.02, 0.02]), h);
+    } else {
+      compose(this.tmp, add3(left, [-0.042, -0.03, 0]), [0.1, 0, -0.25], glove);
+      mul(hm[0], this.root, this.tmp);
+    }
     out.push({ model: hm[0], scale: glove, color: GLOVE, emissive: 0.25 });
     compose(this.tmp, add3(right, [0.004, -0.01, 0.005]), [-0.3, 0, 0], palm);
     mul(hm[1], this.root, this.tmp);
     out.push({ model: hm[1], scale: palm, color: GLOVE, emissive: 0.25 });
 
-    const lv = transformPoint(this.root, left), rv = transformPoint(this.root, right);
-    const lShoulder = lerp3([-0.32, -0.62, 0.0], [-0.24, -0.55, 0.05], a);
+    const rv = transformPoint(this.root, right);
+    let lShoulder = lerp3([-0.32, -0.62, 0.0], [-0.24, -0.55, 0.05], a);
+    if (plant && plant.t > 0.001) lShoulder = lerp3(lShoulder, [-0.36, -0.68, -0.28], plant.t); // reach the arm out, away from the lens
     const rShoulder = lerp3([0.34, -0.5, 0.12], [0.16, -0.46, 0.18], a);
     [[lv, lShoulder, hm[2]], [rv, rShoulder, hm[3]]].forEach(([hand, sh, m]) => {
       const d0 = [sh[0] - hand[0], sh[1] - hand[1], sh[2] - hand[2]];
@@ -347,7 +385,8 @@ export class Weapon {
       const dir = [sh[0] - h[0], sh[1] - h[1], sh[2] - h[2]];
       const len = Math.hypot(...dir);
       const c = [h[0] + dir[0] * 0.5, h[1] + dir[1] * 0.5, h[2] + dir[2] * 0.5];
-      const s = [0.075, 0.075, len];
+      const th = m === hm[2] && plant ? lerp(0.075, 0.062, plant.t) : 0.075;
+      const s = [th, th, len];
       compose(m, c, anglesFor(dir), s);
       out.push({ model: m, scale: s, color: SLEEVE, emissive: 0 });
     });
@@ -359,6 +398,32 @@ export class Weapon {
       out.push({ model: f, scale: s, color: FLASH, emissive: 1 });
     }
     return out;
+  }
+
+  // Where the free hand goes (view space) while mantling or vaulting, and how much (t).
+  plantTarget(player) {
+    const tr = player.trav;
+    if (!tr) return null;
+    const p = tr.p;
+    if (tr.kind === 'mantle') {
+      // reach up to the lip, then the hand slides down the view as you push yourself over it
+      const reach = seg(p, 0, 0.2), release = seg(p, 0.82, 1);
+      const push = seg(p, 0.15, 0.85);
+      return {
+        t: reach * (1 - release),
+        pos: [-0.19 + push * 0.04, -0.01 - push * 0.27, -0.46 - push * 0.03],
+        rot: [-0.2 + push * 0.15, 0.3, 1.3],
+      };
+    }
+    // vault: plant on the top while hopping, body swings past the hand, let go on the drop
+    const ua = tr.ta / tr.T, ub = (tr.ta + tr.tb) / tr.T;
+    const reach = seg(p, 0, Math.max(ua * 0.85, 0.05)), release = seg(p, ub, Math.min(1, ub + 0.16));
+    const pass = seg(p, ua * 0.6, ub);
+    return {
+      t: reach * (1 - release),
+      pos: [-0.11 - pass * 0.08, -0.12 - pass * 0.24, -0.5 + pass * 0.06],
+      rot: [-0.25 + pass * 0.1, 0.45 - pass * 0.25, 1.25 + pass * 0.15],
+    };
   }
 
   // gun parts for display in the world (weapon cases)

@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.2: Test Range.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.3: Test Range.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -23,6 +23,7 @@ Then open http://localhost:8000.
 | Shift | Sprint |
 | Space | Jump |
 | Ctrl / C | Crouch, or slide if you're running |
+| Space at a low wall | Vault over it (walls about 0.3–1.35 m high, up to 1.7 m thick) |
 | Jump into a ledge | Mantle up (ledges up to about 2 m) |
 | Left mouse | Shoot |
 | Right mouse | Aim down sights (the sniper scopes in) |
@@ -47,6 +48,13 @@ Six guns sit in glass cases on the wall behind the spawn. You carry two at a tim
 
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.
 
+## Movement feel
+
+- Vaults and mantles are animated: your free hand plants on the ledge or wall top, the gun tucks out of the way, and the camera rolls and dips with the move. You can't shoot mid-vault or mid-mantle.
+- A vault keeps your speed. Jumping into a low wall mid-air vaults it instead of climbing on top.
+- Landings, mantles and vaults use spring-based camera motion that dips and settles instead of snapping.
+- The gun has inertia: it trails your movement and mouse look, swings harder when sprinting and dips on landing.
+
 ## What's in the test range
 
 - Red training dummies with 100 HP. Body shots do 20 damage and headshots do 40. One dummy moves side to side.
@@ -61,7 +69,7 @@ index.html            HUD, menu, styles
 src/main.js           game loop, shooting, HUD updates
 src/renderer.js       WebGL2 renderer + grid/edge shader (everything is a box)
 src/world.js          box list, collision queries, raycasts
-src/player.js         movement + collision
+src/player.js         movement, vault/mantle, collision, camera springs
 src/weapon.js         gun logic, reload animations, first-person viewmodel + hands
 src/weapons.js        weapon stats + box models (add new guns here)
 src/effects.js        debris, tracers, decals

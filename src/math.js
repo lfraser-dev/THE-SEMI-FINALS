@@ -95,3 +95,18 @@ export function anglesFor(dir) {
   const d = norm(dir);
   return [Math.asin(clamp(d[1], -1, 1)), Math.atan2(-d[0], -d[2]), 0];
 }
+
+// Damped spring step: pulls x toward target. Returns [x, v]. k = stiffness, c = damping.
+// Sub-stepped so big frame gaps can't make it explode.
+export function spring(x, v, target, k, c, dt) {
+  const n = Math.max(1, Math.ceil(dt / 0.008));
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    v += (-k * (x - target) - c * v) * h;
+    x += v * h;
+  }
+  return [x, v];
+}
+export const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+export const easeOut = (t) => { t = clamp(t, 0, 1); return 1 - (1 - t) * (1 - t); };
+export const easeIn = (t) => { t = clamp(t, 0, 1); return t * t; };

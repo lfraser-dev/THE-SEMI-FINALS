@@ -162,6 +162,8 @@ function handlePlayerEvents() {
     else if (ev === 'land') { sounds.land(); effects.dust(player.pos, 4); }
     else if (ev === 'slide') { sounds.slide(); effects.dust(player.pos, 5, player.vel); }
     else if (ev === 'mantle') sounds.mantle();
+    else if (ev === 'vault') { sounds.vault(); effects.dust(player.pos, 3, player.vel); }
+    else if (ev === 'vaultland') { sounds.land(); effects.dust(player.pos, 3, player.vel); }
   }
   player.events.length = 0;
   if (player.sliding && player.grounded && Math.random() < 0.5) effects.dust(player.pos, 1, player.vel);
@@ -229,7 +231,7 @@ function updateHud(dt, fovRad) {
   hud.kills.textContent = stats.kills;
   hud.chunks.textContent = stats.chunks;
   hud.acc.textContent = stats.shots ? `${Math.round((stats.hits / stats.shots) * 100)}%` : '--';
-  hud.state.textContent = player.mantle ? 'MANTLE' : player.sliding ? 'SLIDE' : player.crouching ? 'CROUCH' : player.sprinting ? 'SPRINT' : !player.grounded ? 'AIR' : '';
+  hud.state.textContent = player.mantle ? 'MANTLE' : player.vaulting ? 'VAULT' : player.sliding ? 'SLIDE' : player.crouching ? 'CROUCH' : player.sprinting ? 'SPRINT' : !player.grounded ? 'AIR' : '';
 
   const spreadPx = Math.tan(w.spread(player)) / Math.tan(fovRad / 2) * (innerHeight / 2);
   hud.cross.style.setProperty('--gap', `${Math.max(4, spreadPx).toFixed(1)}px`);
@@ -347,7 +349,7 @@ function frame(now) {
     nearCase = findCase();
     if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
     w = weapon();
-    player.update(dt, input, { ads: w.ads, firing: input.mouse(0) && w.ammo > 0 && !w.reloading });
+    player.update(dt, input, { ads: w.ads, firing: input.mouse(0) && w.ammo > 0 && !w.reloading && !player.trav });
     handlePlayerEvents();
     updateCamera();
     w.update(dt, input, player, weaponCtx);
@@ -359,7 +361,7 @@ function frame(now) {
   // ---- render ----
   const w = weapon();
   const aspect = renderer.resize();
-  const targetKick = player.sliding ? 9 : player.sprinting ? 5 : 0;
+  const targetKick = player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
   fovKick += (targetKick - fovKick) * damp(6, dt);
   const hfov = (settings.fov + fovKick) * (1 - w.adsT * (1 - w.def.adsZoom)) * Math.PI / 180;
   const vfov = 2 * Math.atan(Math.tan(Math.min(hfov, 2.9) / 2) / aspect);
