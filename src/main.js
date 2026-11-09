@@ -190,8 +190,14 @@ function handleWeaponEvents(w) {
       const pv = player.vel;
       effects.casing(vmToWorld(ev.pos), [v[0] + pv[0], v[1] + pv[1] * 0.5, v[2] + pv[2]]);
     } else if (ev.type === 'magdrop' && ev.part) {
-      const pv = player.vel;
-      effects.spawnPiece(vmToWorld(ev.pos), ev.part.s, [pv[0] * 0.8, -1, pv[2] * 0.8], ev.part.col, 6);
+      // the old mag gets flung out with a spin
+      const pv = player.vel, fv = viewDirToWorld([0.9 + Math.random() * 0.6, -0.8, 0.5]);
+      effects.spawnPiece(vmToWorld(ev.pos), ev.part.s, [pv[0] * 0.8 + fv[0] * 2.2, fv[1] * 2 + 0.6, pv[2] * 0.8 + fv[2] * 2.2], ev.part.col, 6);
+      const m = effects.debris[effects.debris.length - 1];
+      if (m) m.spin = m.spin.map(() => (Math.random() - 0.5) * 26);
+    } else if (ev.type === 'jolt') {
+      player.camPitchV += ev.amt * 0.45;
+      player.landV -= ev.amt * 0.12;
     }
   }
   w.events.length = 0;
@@ -596,9 +602,12 @@ function worldBeams(w) {
   }
   const lp = !bench.open && !w.scoped ? w.laserPoint() : null;
   if (lp) {
+    // the laser follows the barrel, not the crosshair
     const start = vmToWorld(lp);
-    const hit = world.raycast(camEye, camFwd, 120);
-    const end = hit ? hit.point : camEye.map((c, i) => c + camFwd[i] * 120);
+    const far = vmToWorld(w.gunPoint([w.def.laser[0], w.def.laser[1], w.def.laser[2] - 30]));
+    const ldir = norm(far.map((c, i) => c - start[i]));
+    const hit = world.raycast(start, ldir, 120);
+    const end = hit ? hit.point : start.map((c, i) => c + ldir[i] * 120);
     const r = w.adsT < 0.6 ? beam(2, start, end, 0.006, [1, 0.12, 0.08], 1, 0.35 * (1 - w.adsT / 0.6)) : null;
     if (r) out.push(r);
     if (hit) {

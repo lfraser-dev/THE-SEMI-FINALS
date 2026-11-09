@@ -53,6 +53,12 @@ Six guns sit in glass cases on the wall behind the spawn. You carry two at a tim
 | M60-X | LMG | 100-round box, long reload |
 | P-19 | Pistol | Semi-auto; the slide locks back when empty |
 
+Reload animations differ by gun, and they have some flair:
+- Mag-fed guns roll in hard, and a wrist flick throws the old mag out spinning. The new mag twirls up from the pouch, then a mag slap jolts the gun and the camera.
+- Empty reloads add a charging-handle rip with a counter-roll and a slam-home kick.
+- The pistol does a full twirl on empty reloads and when you draw it. Long guns roll in and get racked on the draw.
+- The shotgun flips its loading port up, flips each shell in, rocks with every shell, and whips the gun to rack it.
+
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.
 
 Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Settings, and aim can be set to hold or toggle. This helps on trackpads.
@@ -74,7 +80,7 @@ The workbench sits in the middle of the weapon stands, straight ahead from spawn
 | Optic | Mini red dot, holo sight, 2× prism, 4× scope (with overlay) |
 | Muzzle | Suppressor (quiet, no flash), compensator, muzzle brake, full choke (shotgun) |
 | Barrel | Long barrel (more range), CQB barrel (better handling) |
-| Underbarrel | Vertical grip, angled grip, laser sight (visible beam, tighter hip fire) |
+| Underbarrel | Vertical grip, angled grip, laser sight (beam follows the barrel; tighter hip fire) |
 | Magazine | Extended mag, fast mag, drum mag (AR / SMG) |
 | Stock | Light, heavy, or no stock |
 

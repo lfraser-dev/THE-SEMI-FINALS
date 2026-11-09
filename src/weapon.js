@@ -213,7 +213,9 @@ export class Weapon {
         s?.magOut();
         this.events.push({ type: 'magdrop', pos: transformPoint(this.root, add3(d.magPos, [0, -0.08, 0])), part: d.parts.find((q) => q.mag) });
       }
-      if (crossed(p0, p, 0.6)) s?.magIn();
+      if (crossed(p0, p, 0.6)) { s?.magIn(); this.events.push({ type: 'jolt', amt: 0.6 }); }
+      if (r.empty && !d.slide && crossed(p0, p, 0.82)) this.events.push({ type: 'jolt', amt: 0.8 });
+      if (r.empty && d.slide && crossed(p0, p, 0.82)) { s?.bolt(); this.events.push({ type: 'jolt', amt: 0.5 }); }
       if (p >= 0.64 && !r.filled) { r.filled = true; this.ammo = d.mag; }
       if (r.empty && crossed(p0, p, 0.8)) s?.bolt();
       if (p >= 1) this.reload = null;
@@ -229,7 +231,7 @@ export class Weapon {
       }
     } else if (r.stage === 'out') {
       const len = r.needPump ? 0.5 : 0.28;
-      if (r.needPump && crossed(prev, r.t, 0.15)) s?.pump();
+      if (r.needPump && crossed(prev, r.t, 0.15)) { s?.pump(); this.events.push({ type: 'jolt', amt: 0.7 }); }
       if (r.t >= len) this.reload = null;
     }
   }
@@ -282,48 +284,97 @@ export class Weapon {
     let boltBack = 0, pumpBack = 0;
     let shellVisible = false, shellPos = d.magPos;
 
+    // extra flourish offsets on top of everything: pos xyz + rot xyz
+    const fl = [0, 0, 0, 0, 0, 0];
+    let magSpin = 0, shellSpin = 0;
+    const heavy = d.id === 'lmg', pistol = !!d.slide;
+
     const r = this.reload;
     if (r && !r.shell) {
       const p = r.t / r.total;
-      tilt = seg(p, 0, 0.14) * (1 - seg(p, 0.86, 1));
-      bump = seg(p, 0.58, 0.61) * (1 - seg(p, 0.61, 0.7));
-      const hb = seg(p, 0.06, 0.16) * (1 - seg(p, 0.64, 0.74));
+      // roll the gun in hard so the mag well faces you
+      tilt = seg(p, 0, 0.12) * (1 - seg(p, 0.86, 1)) * (heavy ? 0.85 : 1.25);
+      fl[1] += seg(p, 0, 0.12) * (1 - seg(p, 0.86, 1)) * 0.025;
+      // wrist flick that throws the old mag clear
+      const flick = seg(p, 0.15, 0.2) * (1 - seg(p, 0.2, 0.34));
+      fl[5] += flick * 0.4; fl[1] += flick * 0.03; fl[3] -= flick * 0.15;
+      // mag slap: the whole gun jolts up
+      bump = seg(p, 0.565, 0.595) * (1 - seg(p, 0.6, 0.74));
+      fl[3] += bump * 0.16; fl[1] += bump * 0.025; fl[5] -= bump * 0.08;
+      const hb = seg(p, 0.06, 0.14) * (1 - seg(p, 0.64, 0.74));
       if (p < 0.2) {
         magOff = [0, -0.07 * seg(p, 0.13, 0.2), 0.01];
-      } else if (p < 0.36) {
+      } else if (p < 0.34) {
         magVisible = false;
-        magOff = [0, -0.4, 0];
+        magOff = [0, -0.45, 0];
       } else {
-        const ins = seg(p, 0.38, 0.6);
-        magOff = [0, -0.4 * (1 - ins), 0.04 * (1 - ins)];
-        magRot = 0.4 * (1 - ins);
+        // fresh mag comes up from the pouch with a twirl, then gets seated
+        const rise = seg(p, 0.34, 0.47), ins = seg(p, 0.47, 0.58);
+        magOff = [0.05 * (1 - rise), -0.45 + 0.33 * rise + 0.12 * ins, 0.07 * (1 - ins)];
+        magRot = 0.55 * (1 - ins);
+        magSpin = heavy ? 0 : (1 - rise) * Math.PI * 2;
       }
       handT = hb;
       handTarget = add3(add3(d.magPos, magOff), [0, -0.05, 0]);
-      if (r.empty || d.slide) {
-        const bh = seg(p, 0.7, 0.78) * (1 - seg(p, 0.88, 0.95));
-        if (bh > 0 && !d.slide) { handT = bh; handTarget = add3(d.bolt, [0.035, 0, 0.02]); }
-        if (r.empty) boltBack = seg(p, 0.78, 0.82) * (1 - seg(p, 0.83, 0.86));
-        if (d.slide && r.empty && p < 0.82) boltBack = 1;
+      if (r.empty && !pistol) {
+        // charging handle: counter-roll the gun, rip the handle back, let it slam home
+        const bh = seg(p, 0.68, 0.76) * (1 - seg(p, 0.88, 0.95));
+        if (bh > 0) { handT = bh; handTarget = add3(d.bolt, [0.035, 0, 0.02]); }
+        const over = seg(p, 0.66, 0.76) * (1 - seg(p, 0.86, 0.97));
+        fl[5] -= over * 1.0; fl[4] -= over * 0.3; fl[0] -= over * 0.035; fl[1] += over * 0.035;
+        boltBack = seg(p, 0.77, 0.81) * (1 - seg(p, 0.82, 0.85));
+        fl[3] += seg(p, 0.82, 0.84) * (1 - seg(p, 0.84, 0.93)) * 0.14;
       }
+      if (pistol) {
+        if (r.empty && p < 0.82) boltBack = 1;
+        if (r.empty) fl[5] += seg(p, 0.82, 0.99) * Math.PI * 2;       // slide drops, then a full twirl
+        else { const t2 = seg(p, 0.62, 0.7) * (1 - seg(p, 0.72, 0.86)); fl[4] += t2 * 0.55; fl[5] += t2 * 0.3; }
+      }
+      // springy settle at the end
+      const q = p - 0.88;
+      if (q > 0) fl[5] += Math.sin(q * 70) * Math.exp(-q * 25) * 0.09;
     } else if (r && r.shell) {
       rollDir = -1;
-      if (r.stage === 'in') tilt = seg(r.t, 0, 0.28);
-      else if (r.stage === 'load') {
-        tilt = 1;
+      if (r.stage === 'in') {
+        const k = seg(r.t, 0, 0.28);
+        tilt = k * 1.25;
+        fl[4] += k * 0.18; fl[3] += k * 0.06;         // flip the loading port up toward you
+      } else if (r.stage === 'load') {
+        tilt = 1.25;
+        fl[4] += 0.18; fl[3] += 0.06;
         const p = r.t / d.shellTime;
         const up = seg(p, 0, 0.45), push = seg(p, 0.45, 0.62), down = seg(p, 0.66, 1);
-        shellPos = add3(d.magPos, [0.01, -0.3 * (1 - up) - 0.3 * down + 0.02 * push, 0.03 - 0.03 * push]);
+        shellPos = add3(d.magPos, [0.01 + 0.035 * (1 - up), -0.3 * (1 - up) - 0.3 * down + 0.02 * push, 0.03 - 0.03 * push]);
+        shellSpin = (1 - up) * Math.PI * 1.5;           // the shell flips between your fingers
         shellVisible = p < 0.62;
-        bump = push * (1 - seg(p, 0.62, 0.75)) * 0.4;
+        bump = push * (1 - seg(p, 0.62, 0.75)) * 0.55;
+        fl[5] += bump * 0.12 * (this.ammo % 2 ? 1 : -1); // gun rocks with each shell
         handT = 1;
         handTarget = add3(shellPos, [0, -0.035, 0.01]);
       } else {
         const len = r.needPump ? 0.5 : 0.28;
-        tilt = 1 - seg(r.t, 0, Math.min(len, 0.3));
+        const back = 1 - seg(r.t, 0, Math.min(len, 0.3));
+        tilt = 1.25 * back;
+        fl[4] += 0.18 * back; fl[3] += 0.06 * back;
         handT = 1 - seg(r.t, 0, 0.15);
         handTarget = add3(d.magPos, [0, -0.3, 0]);
-        if (r.needPump) pumpBack = seg(r.t, 0.12, 0.25) * (1 - seg(r.t, 0.3, 0.45));
+        if (r.needPump) {
+          pumpBack = seg(r.t, 0.12, 0.25) * (1 - seg(r.t, 0.3, 0.45));
+          const whip = seg(r.t, 0.1, 0.22) * (1 - seg(r.t, 0.3, 0.5));   // whip the gun to rack it
+          fl[3] += whip * 0.4; fl[1] += whip * 0.045; fl[5] -= whip * 0.25;
+        }
+        const q = r.t - (len - 0.12);
+        if (q > 0) fl[5] += Math.sin(q * 60) * Math.exp(-q * 20) * 0.07;
+      }
+    }
+
+    // draw flourish: the pistol twirls into your hand, long guns roll in and get racked
+    if (this.equipT < 1) {
+      const k = 1 - smooth(this.equipT);
+      if (pistol) fl[5] += k * Math.PI * 2;
+      else {
+        fl[5] += k * 0.9; fl[4] -= k * 0.35;
+        if (d.bolt && !d.action) boltBack = Math.max(boltBack, seg(this.equipT, 0.55, 0.66) * (1 - seg(this.equipT, 0.7, 0.85)));
       }
     }
 
@@ -331,12 +382,14 @@ export class Weapon {
       const p = this.cycleT / this.cycleLen;
       if (d.action === 'pump') {
         pumpBack = seg(p, 0, 0.38) * (1 - seg(p, 0.48, 0.9));
+        fl[3] += pumpBack * 0.1; fl[5] -= pumpBack * 0.12;            // rack with a little whip
       } else {
         const hb = seg(p, 0, 0.15) * (1 - seg(p, 0.85, 1));
         handT = hb;
         handTarget = add3(d.bolt, [0.035, 0, 0.02]);
         boltBack = seg(p, 0.25, 0.45) * (1 - seg(p, 0.55, 0.72));
-        tilt = 0.25 * hb;
+        tilt = 0.4 * hb;
+        fl[5] += hb * 0.25; fl[3] += seg(p, 0.55, 0.62) * (1 - seg(p, 0.62, 0.8)) * 0.08;   // roll in, snap the bolt home
       }
     }
     if (d.slide && this.ammo === 0 && !(r && r.t / r.total > 0.82)) boltBack = Math.max(boltBack, 1);
@@ -356,8 +409,9 @@ export class Weapon {
         - e * 0.28 + bump * 0.012 - sl2 * 0.035 + sl1 * 0.01 - mt * 0.1 - vt * 0.08,
       lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04 + lag[2] + mt * 0.06 + vt * 0.03 + dt_ * 0.06 + sl2 * 0.05 - sl1 * 0.07,
     ];
-    pos[0] += gt * 0.03 + st * 0.02;
-    pos[1] += -dt_ * 0.03 - st * 0.06 - gt * 0.02;
+    pos[0] += gt * 0.03 + st * 0.02 + fl[0];
+    pos[1] += -dt_ * 0.03 - st * 0.06 - gt * 0.02 + fl[1];
+    pos[2] += fl[2];
     const rot = [
       this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2
         - dt_ * 0.12 - st * 0.45 + sl2 * 0.08 + this.vmKick * 0.05 * sl2,
@@ -366,26 +420,28 @@ export class Weapon {
         + (this.vmRollKick || 0)
         + dt_ * 0.35 + gt * 0.25,
     ];
+    rot[0] += fl[3]; rot[1] += fl[4]; rot[2] += fl[5];
     compose(this.root, pos, rot, [1, 1, 1]);
 
     const out = [];
     for (const p of this.parts) {
       if (p.hidden) continue;
-      let c = p.c, rx = p.rx || 0;
+      let c = p.c, rx = p.rx || 0, rz = 0;
       if (p.mag) {
         if (!magVisible) continue;
         c = add3(c, magOff);
         rx += magRot;
+        rz = magSpin;
       }
       if (p.bolt) c = add3(c, [0, 0, (d.slide ? 0.04 : 0.05) * boltBack]);
       if (p.pump) c = add3(c, [0, 0, 0.09 * pumpBack]);
-      compose(p.local, c, [rx, 0, 0], p.s);
+      compose(p.local, c, [rx, 0, rz], p.s);
       mul(p.model, this.root, p.local);
       out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0 });
     }
     if (shellVisible) {
       const s = [0.024, 0.024, 0.06];
-      compose(this.tmp, shellPos, [0, 0, 0], s);
+      compose(this.tmp, shellPos, [shellSpin, 0, 0], s);
       const m = mat4();
       mul(m, this.root, this.tmp);
       out.push({ model: m, scale: s, color: RED, emissive: 0.3 });
