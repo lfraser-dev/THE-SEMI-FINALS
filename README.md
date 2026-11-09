@@ -56,7 +56,15 @@ Six guns sit in glass cases on the wall behind the spawn. You carry two at a tim
 Reload animations differ by gun, and they have some flair:
 - Mag-fed guns roll in hard, and a wrist flick throws the old mag out spinning. The new mag twirls up from the pouch, then a mag slap jolts the gun and the camera.
 - Empty reloads add a charging-handle rip with a counter-roll and a slam-home kick.
-- The pistol does a full twirl on empty reloads and when you draw it. Long guns roll in and get racked on the draw.
+- The pistol does a full twirl on empty reloads.
+- Every gun has its own draw animation:
+  - Pistol: tossed up spinning and caught.
+  - SMG: flipped end over end.
+  - Rifle: swung in from the right and racked.
+  - Shotgun: brought up and racked with a whip.
+  - Sniper: shouldered and bolted.
+  - LMG: heaved up and dropped into place with a thud.
+- During reloads the gun is pulled toward the middle of the screen so the mag swap isn't hidden behind the ammo counter, and mags are coloured (tan or grey) so they stand out.
 - The shotgun flips its loading port up, flips each shell in, rocks with every shell, and whips the gun to rack it.
 
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.

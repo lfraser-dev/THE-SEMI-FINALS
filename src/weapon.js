@@ -10,6 +10,17 @@ const RED = [0.95, 0.12, 0.1];
 const smooth = (t) => t * t * (3 - 2 * t);
 const seg = (t, a, b) => smooth(clamp((t - a) / (b - a), 0, 1));
 const crossed = (prev, now, at) => prev < at && now >= at;
+// how long each gun's draw animation takes (s)
+const DRAW_TIME = { pistol: 0.6, smg: 0.62, ar: 0.78, shotgun: 0.8, sniper: 0.9, lmg: 0.95 };
+// moments in each draw animation that get a sound + camera jolt
+const DRAW_BEATS = {
+  pistol: [[0.74, 'click', 0.25], [0.84, 'bolt', 0.2]],
+  smg: [[0.68, 'click', 0.35]],
+  ar: [[0.56, 'bolt', 0], [0.65, 'magIn', 0.5]],
+  shotgun: [[0.5, 'pump', 0.7]],
+  sniper: [[0.54, 'bolt', 0.3]],
+  lmg: [[0.52, 'land', 0.9]],
+};
 
 function transformPoint(m, p) {
   return [
@@ -86,10 +97,20 @@ export class Weapon {
     this.kickYaw = 0;
   }
 
+  drawEvents(q0, q1, ctx) {
+    for (const [at, snd, jolt] of DRAW_BEATS[this.def.id] || []) {
+      if (!crossed(q0, q1, at)) continue;
+      if (snd === 'click') ctx.sounds?.click(2600, 0.3, 4); else ctx.sounds?.[snd]?.();
+      if (jolt) this.events.push({ type: 'jolt', amt: jolt });
+    }
+  }
+
   // ctx = { fire(weapon), sounds }
   update(dt, input, player, ctx) {
     const d = this.def;
-    this.equipT = Math.min(1, this.equipT + dt / 0.4);
+    const eq0 = this.equipT;
+    this.equipT = Math.min(1, this.equipT + dt / (DRAW_TIME[d.id] || 0.5));
+    if (eq0 < 1) this.drawEvents(eq0, this.equipT, ctx);
 
     const tr = player.trav;
     const wantAds = input.aiming && !player.sprinting && !this.reload && this.equipT > 0.6 && !tr;
@@ -119,7 +140,7 @@ export class Weapon {
     const trigger = d.auto ? input.fireDown : this.queued > 0;
 
     if (trigger && this.reload?.shell && this.ammo > 0) this.reload.interrupt = true;
-    const blocked = this.reload || this.equipT < 0.75 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3;
+    const blocked = this.reload || this.equipT < 0.7 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3;
     if (trigger && !blocked && this.cool <= 0) {
       if (this.ammo > 0) this.shoot(ctx);
       else if (input.fireHit) { ctx.sounds?.dry(); this.startReload(ctx); }
@@ -293,11 +314,11 @@ export class Weapon {
     if (r && !r.shell) {
       const p = r.t / r.total;
       // roll the gun in hard so the mag well faces you
-      tilt = seg(p, 0, 0.12) * (1 - seg(p, 0.86, 1)) * (heavy ? 0.85 : 1.25);
+      tilt = seg(p, 0, 0.12) * (1 - seg(p, 0.86, 1)) * (heavy ? 0.85 : 1);
       fl[1] += seg(p, 0, 0.12) * (1 - seg(p, 0.86, 1)) * 0.025;
       // wrist flick that throws the old mag clear
       const flick = seg(p, 0.15, 0.2) * (1 - seg(p, 0.2, 0.34));
-      fl[5] += flick * 0.4; fl[1] += flick * 0.03; fl[3] -= flick * 0.15;
+      fl[5] += flick * 0.22; fl[1] += flick * 0.02; fl[3] -= flick * 0.1;
       // mag slap: the whole gun jolts up
       bump = seg(p, 0.565, 0.595) * (1 - seg(p, 0.6, 0.74));
       fl[3] += bump * 0.16; fl[1] += bump * 0.025; fl[5] -= bump * 0.08;
@@ -321,7 +342,7 @@ export class Weapon {
         const bh = seg(p, 0.68, 0.76) * (1 - seg(p, 0.88, 0.95));
         if (bh > 0) { handT = bh; handTarget = add3(d.bolt, [0.035, 0, 0.02]); }
         const over = seg(p, 0.66, 0.76) * (1 - seg(p, 0.86, 0.97));
-        fl[5] -= over * 1.0; fl[4] -= over * 0.3; fl[0] -= over * 0.035; fl[1] += over * 0.035;
+        fl[5] -= over * 0.75; fl[3] -= over * 0.3; fl[4] -= over * 0.1; fl[0] -= over * 0.02; fl[1] += over * 0.02;
         boltBack = seg(p, 0.77, 0.81) * (1 - seg(p, 0.82, 0.85));
         fl[3] += seg(p, 0.82, 0.84) * (1 - seg(p, 0.84, 0.93)) * 0.14;
       }
@@ -337,10 +358,10 @@ export class Weapon {
       rollDir = -1;
       if (r.stage === 'in') {
         const k = seg(r.t, 0, 0.28);
-        tilt = k * 1.25;
+        tilt = k;
         fl[4] += k * 0.18; fl[3] += k * 0.06;         // flip the loading port up toward you
       } else if (r.stage === 'load') {
-        tilt = 1.25;
+        tilt = 1;
         fl[4] += 0.18; fl[3] += 0.06;
         const p = r.t / d.shellTime;
         const up = seg(p, 0, 0.45), push = seg(p, 0.45, 0.62), down = seg(p, 0.66, 1);
@@ -354,7 +375,7 @@ export class Weapon {
       } else {
         const len = r.needPump ? 0.5 : 0.28;
         const back = 1 - seg(r.t, 0, Math.min(len, 0.3));
-        tilt = 1.25 * back;
+        tilt = back;
         fl[4] += 0.18 * back; fl[3] += 0.06 * back;
         handT = 1 - seg(r.t, 0, 0.15);
         handTarget = add3(d.magPos, [0, -0.3, 0]);
@@ -368,13 +389,69 @@ export class Weapon {
       }
     }
 
-    // draw flourish: the pistol twirls into your hand, long guns roll in and get racked
+    // ---- draw animations: every gun has its own entrance ----
     if (this.equipT < 1) {
-      const k = 1 - smooth(this.equipT);
-      if (pistol) fl[5] += k * Math.PI * 2;
-      else {
-        fl[5] += k * 0.9; fl[4] -= k * 0.35;
-        if (d.bolt && !d.action) boltBack = Math.max(boltBack, seg(this.equipT, 0.55, 0.66) * (1 - seg(this.equipT, 0.7, 0.85)));
+      const q = this.equipT;
+      const settle = (t0, amp, f = 55, k = 18) => { const u = q - t0; return u > 0 ? Math.sin(u * f) * Math.exp(-u * k) * amp : 0; };
+      const style = d.id;
+      if (style === 'pistol') {
+        // tossed up from the hip spinning, caught with a snap
+        const up = seg(q, 0, 0.45), fall = seg(q, 0.45, 0.72);
+        fl[1] += -0.32 * (1 - up) + 0.09 * up * (1 - fall);
+        fl[0] += 0.08 * (1 - up);
+        fl[5] += (1 - seg(q, 0, 0.72)) * Math.PI * 3;           // 1.5 spins around the barrel
+        fl[3] += (1 - seg(q, 0, 0.6)) * -0.6;
+        const catchK = seg(q, 0.72, 0.76) * (1 - seg(q, 0.76, 0.9));
+        fl[1] -= catchK * 0.03; fl[3] += catchK * 0.15 + settle(0.76, 0.06, 45, 14);
+        boltBack = Math.max(boltBack, seg(q, 0.8, 0.85) * (1 - seg(q, 0.86, 0.93)));   // press check
+      } else if (style === 'smg') {
+        // flipped end over end into your hand
+        const up = seg(q, 0, 0.5);
+        fl[1] += -0.3 * (1 - up) + Math.sin(Math.PI * up) * 0.07;
+        fl[3] += (1 - seg(q, 0, 0.68)) * Math.PI * 2;           // full forward flip
+        fl[2] += (1 - up) * 0.1;
+        fl[1] += settle(0.68, 0.02, 50, 15);
+        fl[5] += settle(0.68, 0.12, 40, 12);
+      } else if (style === 'ar') {
+        // swung in from the right, then racked with a counter-roll
+        const swing = seg(q, 0, 0.4);
+        fl[0] += (1 - swing) * 0.3;
+        fl[1] -= (1 - swing) * 0.2;
+        fl[4] += (1 - swing) * 1.1;
+        fl[5] += (1 - swing) * 0.7;
+        const rack = seg(q, 0.42, 0.55) * (1 - seg(q, 0.7, 0.85));
+        fl[5] -= rack * 0.55; fl[3] += rack * 0.12;
+        handT = Math.max(handT, rack);
+        if (rack > 0) handTarget = add3(d.bolt, [0.035, 0, 0.02]);
+        boltBack = Math.max(boltBack, seg(q, 0.56, 0.63) * (1 - seg(q, 0.64, 0.7)));
+        fl[3] += seg(q, 0.64, 0.67) * (1 - seg(q, 0.67, 0.78)) * 0.12;
+        fl[5] += settle(0.8, 0.08);
+      } else if (style === 'shotgun') {
+        // brought up from low and racked with a big whip
+        const up = seg(q, 0, 0.4);
+        fl[1] -= (1 - up) * 0.3; fl[3] -= (1 - up) * 0.7; fl[5] += (1 - up) * 0.4;
+        pumpBack = Math.max(pumpBack, seg(q, 0.48, 0.58) * (1 - seg(q, 0.62, 0.74)));
+        const whip = seg(q, 0.45, 0.56) * (1 - seg(q, 0.62, 0.8));
+        fl[3] += whip * 0.45; fl[1] += whip * 0.05; fl[5] -= whip * 0.3;
+        fl[3] += settle(0.78, 0.07);
+      } else if (style === 'sniper') {
+        // shouldered from low, bolt worked, a quick look down the glass
+        const up = seg(q, 0, 0.4);
+        fl[1] -= (1 - up) * 0.28; fl[3] -= (1 - up) * 0.5; fl[5] -= (1 - up) * 0.5;
+        const work = seg(q, 0.42, 0.52) * (1 - seg(q, 0.78, 0.9));
+        handT = Math.max(handT, work);
+        if (work > 0) handTarget = add3(d.bolt, [0.035, 0, 0.02]);
+        boltBack = Math.max(boltBack, seg(q, 0.52, 0.62) * (1 - seg(q, 0.66, 0.76)));
+        fl[5] += work * 0.35;
+        fl[5] += settle(0.86, 0.06);
+      } else {
+        // LMG: heaved up from the left and dropped into place with a thud
+        const heave = seg(q, 0, 0.5);
+        fl[0] -= (1 - heave) * 0.2; fl[1] -= (1 - heave) * 0.35 - Math.sin(Math.PI * heave) * 0.06;
+        fl[4] -= (1 - heave) * 0.6; fl[5] -= (1 - heave) * 0.5;
+        const thud = seg(q, 0.5, 0.55) * (1 - seg(q, 0.55, 0.75));
+        fl[1] -= thud * 0.04; fl[3] -= thud * 0.1;
+        fl[3] += settle(0.6, 0.06, 35, 10);
       }
     }
 
@@ -404,19 +481,19 @@ export class Weapon {
     const sx = Math.sin(player.bobT) * 0.018 * sp * player.bobAmt;
     const syb = -Math.abs(Math.cos(player.bobT)) * 0.012 * sp * player.bobAmt;
     const pos = [
-      lerp(hip[0], adsPos[0], a) + bx + sx + this.sway[0] + lag[0] - sp * 0.04 - tilt * 0.03 - sl2 * 0.07 + sl1 * 0.02 + mt * 0.04 + vt * 0.07,
-      lerp(hip[1], adsPos[1], a) + by + syb + idle - this.sway[1] + lag[1] - tilt * 0.035 - sp * 0.04 + player.stepSmooth * 0.3 + land * 0.35
-        - e * 0.28 + bump * 0.012 - sl2 * 0.035 + sl1 * 0.01 - mt * 0.1 - vt * 0.08,
+      lerp(hip[0], adsPos[0], a) + bx + sx + this.sway[0] + lag[0] - sp * 0.04 - tilt * 0.12 - sl2 * 0.07 + sl1 * 0.02 + mt * 0.04 + vt * 0.07,
+      lerp(hip[1], adsPos[1], a) + by + syb + idle - this.sway[1] + lag[1] + tilt * 0.075 - sp * 0.04 + player.stepSmooth * 0.3 + land * 0.35
+        + bump * 0.012 - sl2 * 0.035 + sl1 * 0.01 - mt * 0.1 - vt * 0.08,
       lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04 + lag[2] + mt * 0.06 + vt * 0.03 + dt_ * 0.06 + sl2 * 0.05 - sl1 * 0.07,
     ];
     pos[0] += gt * 0.03 + st * 0.02 + fl[0];
     pos[1] += -dt_ * 0.03 - st * 0.06 - gt * 0.02 + fl[1];
     pos[2] += fl[2];
     const rot = [
-      this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2
+      this.vmKick * 0.06 + tilt * 0.12 - sp * 0.25 + this.sway[1] * 2 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2
         - dt_ * 0.12 - st * 0.45 + sl2 * 0.08 + this.vmKick * 0.05 * sl2,
-      sp * 0.55 + this.sway[0] * 2 + tilt * 0.12 * rollDir + mt * 0.25 - vt * 0.4 + lag[0] * 2.5 + sl2 * 0.12 - sl1 * 0.06,
-      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl2 * 0.55 - sl1 * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3 + wt * 0.3
+      sp * 0.55 + this.sway[0] * 2 + tilt * 0.3 * rollDir + mt * 0.25 - vt * 0.4 + lag[0] * 2.5 + sl2 * 0.12 - sl1 * 0.06,
+      tilt * 0.45 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl2 * 0.55 - sl1 * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3 + wt * 0.3
         + (this.vmRollKick || 0)
         + dt_ * 0.35 + gt * 0.25,
     ];
