@@ -231,3 +231,44 @@ export function digitBoxes(text, x, y, z, h, dir, color, emissive = 0) {
   });
   return out;
 }
+
+// ---------------------------------------------------------------- workbench
+// A gunsmith bench against the wall. Walk up and press E to change attachments.
+export class Workbench {
+  constructor(world, center) {
+    this.center = center;   // front-centre of the bench at floor level
+    const [x, y, z] = center;
+    const add = (min, max, o) => world.add(makeBox(min, max, { grid: false, ...o }));
+    const STEEL = [0.32, 0.33, 0.36], TOP = [0.45, 0.36, 0.26], PEG = [0.78, 0.74, 0.66];
+    // legs, frame, wooden top, lower shelf
+    for (const dx of [-1.4, 1.4]) for (const dz of [0.1, 0.85]) add([x + dx - 0.05, y, z + dz - 0.05], [x + dx + 0.05, y + 0.9, z + dz + 0.05], { color: STEEL });
+    add([x - 1.5, y + 0.9, z], [x + 1.5, y + 0.98, z + 0.95], { color: TOP });
+    add([x - 1.45, y + 0.25, z + 0.05], [x + 1.45, y + 0.3, z + 0.9], { color: STEEL });
+    // pegboard + frame
+    add([x - 1.6, y + 1.1, z + 1.0], [x + 1.6, y + 2.8, z + 1.05], { color: PEG });
+    add([x - 1.65, y + 2.8, z + 0.95], [x + 1.65, y + 2.9, z + 1.06], { color: STEEL });
+    // tools and parts on the pegboard
+    const tool = (x0, y0, w, h, col) => add([x + x0, y + y0, z + 0.97], [x + x0 + w, y + y0 + h, z + 1.0], { color: col, solid: false, noShadow: true });
+    tool(-1.4, 1.5, 0.5, 0.08, [0.15, 0.15, 0.17]);   // barrel blanks
+    tool(-1.4, 1.7, 0.4, 0.06, [0.15, 0.15, 0.17]);
+    tool(-0.8, 1.4, 0.06, 0.5, [0.6, 0.15, 0.1]);     // wrench
+    tool(-0.6, 1.4, 0.06, 0.4, [0.2, 0.22, 0.25]);
+    tool(-0.3, 2.0, 0.35, 0.12, [0.12, 0.12, 0.13]);  // scope
+    tool(0.2, 1.3, 0.08, 0.25, [0.12, 0.12, 0.13]);   // mags
+    tool(0.35, 1.3, 0.08, 0.25, [0.12, 0.12, 0.13]);
+    tool(0.5, 1.3, 0.08, 0.25, [0.12, 0.12, 0.13]);
+    tool(0.8, 1.6, 0.5, 0.06, [0.3, 0.3, 0.32]);      // suppressor
+    tool(0.8, 2.2, 0.25, 0.25, [0.95, 0.15, 0.1]);    // red sign
+    // stuff on the bench top
+    add([x - 1.1, y + 0.98, z + 0.4], [x - 0.6, y + 1.08, z + 0.7], { color: [0.12, 0.12, 0.13] });   // ammo can
+    add([x + 0.5, y + 0.98, z + 0.3], [x + 1.2, y + 1.0, z + 0.65], { color: [0.2, 0.42, 0.3] });    // mat
+    add([x + 0.7, y + 1.0, z + 0.42], [x + 1.0, y + 1.04, z + 0.5], { color: [0.1, 0.1, 0.11] });   // part on the mat
+    // hanging work light
+    add([x - 0.03, y + 2.9, z + 0.4], [x + 0.03, y + 3.4, z + 0.46], { color: STEEL, solid: false });
+    add([x - 0.5, y + 2.8, z + 0.25], [x + 0.5, y + 2.9, z + 0.6], { color: STEEL, solid: false });
+    add([x - 0.45, y + 2.78, z + 0.3], [x + 0.45, y + 2.8, z + 0.55], { color: [1, 0.97, 0.88], emissive: 1, solid: false, noShadow: true });
+    // floor mat marking the spot
+    add([x - 1.6, y, z - 1.3], [x + 1.6, y + 0.015, z], { color: [0.3, 0.31, 0.34], solid: false, edges: false });
+    add([x - 1.6, y, z - 1.32], [x + 1.6, y + 0.02, z - 1.25], { color: [0.95, 0.15, 0.1], emissive: 0.7, solid: false, edges: false });
+  }
+}

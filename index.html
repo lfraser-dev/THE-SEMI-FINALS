@@ -103,6 +103,65 @@
   #flash.bad b { color: var(--red); }
   #fade { position: absolute; inset: 0; background: #fff; opacity: 0; }
 
+  /* abilities */
+  #abilities { position: absolute; left: 26px; bottom: 84px; display: flex; gap: 8px; }
+  .ab { --p: 0; position: relative; width: 74px; height: 58px; background: rgba(17,18,22,.82); color: #fff; overflow: hidden;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ab::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--p) * 100%); background: rgba(0,0,0,.55); }
+  .ab b { font-size: 13px; font-weight: 800; font-style: italic; letter-spacing: .1em; opacity: .45; z-index: 1; }
+  .ab kbd { font: 800 13px var(--font); background: rgba(255,255,255,.18); padding: 0 6px; margin-bottom: 3px; z-index: 1; }
+  .ab .cd { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 800; font-style: italic; z-index: 2; }
+  .ab.ready b { opacity: 1; }
+  .ab.ready { box-shadow: inset 0 -3px 0 var(--red); }
+  .ab.active { background: var(--red); }
+  .ab .pips { position: absolute; top: 5px; right: 10px; display: flex; gap: 3px; z-index: 1; }
+  .ab .pip { width: 6px; height: 6px; background: rgba(255,255,255,.25); transform: skewX(-12deg); }
+  .ab .pip.on { background: #fff; }
+  #crosshair.grapple .dot { width: 7px; height: 7px; left: -3.5px; top: -3.5px; background: none; border: 1.5px solid var(--red); border-radius: 50%; }
+
+  /* vignette for a slightly more filmic look */
+  #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(10,12,18,.32) 100%); }
+
+  /* workbench */
+  #bench { position: fixed; inset: 0; display: flex; pointer-events: none; }
+  #bench .bench-panel { pointer-events: auto; width: min(620px, 100%); height: 100%; overflow-y: auto; padding: 22px 26px 26px;
+    background: linear-gradient(90deg, rgba(14,15,19,.94) 70%, rgba(14,15,19,.82)); color: #fff; }
+  #bench .bench-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  #bench h2 { margin: 0; font-size: 15px; letter-spacing: .3em; font-weight: 800; opacity: .6; }
+  .bench-weapon b { display: block; font-size: 44px; font-weight: 800; font-style: italic; line-height: 1; margin-top: 4px; }
+  .bench-weapon span { font-size: 13px; font-weight: 700; letter-spacing: .2em; color: #ff4a40; }
+  .bench-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 14px 0 12px; }
+  .bench-tabs .tab { all: unset; cursor: pointer; position: relative; font: 800 italic 15px var(--font); letter-spacing: .06em; padding: 5px 12px;
+    background: rgba(255,255,255,.08); clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+  .bench-tabs .tab:hover { background: rgba(255,255,255,.18); }
+  .bench-tabs .tab.on { background: #fff; color: var(--ink); }
+  .bench-tabs .tab i { font-style: normal; font-size: 11px; background: var(--red); color: #fff; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
+  .bench-slots .slot { padding: 8px 0; border-top: 1px solid rgba(255,255,255,.08); }
+  .slot-name { font-size: 12px; font-weight: 800; letter-spacing: .22em; opacity: .5; margin-bottom: 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { all: unset; cursor: pointer; font: 700 14px var(--font); letter-spacing: .05em; padding: 5px 11px; border: 1px solid rgba(255,255,255,.18); }
+  .chip:hover { border-color: #fff; }
+  .chip.on { background: var(--red); border-color: var(--red); }
+  .bench-desc { min-height: 2.6em; margin: 10px 0 4px; font-size: 15px; font-weight: 500; opacity: .8; }
+  .bench-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; margin-top: 6px; }
+  .stat { display: grid; grid-template-columns: 1fr auto; font-size: 12px; font-weight: 800; letter-spacing: .12em; }
+  .stat-name { opacity: .6; }
+  .stat-val.up { color: #3ddc84; } .stat-val.down { color: #ff5a4e; }
+  .stat .bar { grid-column: 1 / -1; position: relative; height: 5px; margin-top: 3px; background: rgba(255,255,255,.1); }
+  .stat .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #fff; }
+  .stat .bar b { position: absolute; top: 0; bottom: 0; }
+  .stat .bar b.up { background: #3ddc84; } .stat .bar b.down { background: #ff5a4e; }
+  .stat .bar u { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.55); }
+  .bench-actions { display: flex; gap: 8px; margin-top: 18px; }
+  .bench-actions button { all: unset; cursor: pointer; font: 800 italic 20px var(--font); letter-spacing: .08em; padding: 9px 22px;
+    clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  .bench-done { background: #fff; color: var(--ink); flex: 1; text-align: center; }
+  .bench-done:hover { background: var(--red); color: #fff; }
+  .bench-clear { background: rgba(255,255,255,.1); }
+  .bench-clear:hover { background: rgba(255,255,255,.2); }
+  .bench-hint { font-size: 12px; font-weight: 700; letter-spacing: .14em; opacity: .45; margin-top: 10px; }
+  @media (max-width: 760px) { .bench-stats { grid-template-columns: 1fr; } }
+
   /* key binds */
   .binds { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; font-weight: 700; font-size: 14px; letter-spacing: .08em; margin-top: 4px; }
   .binds button { all: unset; cursor: pointer; min-width: 72px; text-align: center; background: #fff; border: 1px solid #c9cbd1; border-bottom-width: 2px;
@@ -115,6 +174,8 @@
   #menu { position: fixed; inset: 0; display: grid; place-items: safe center; padding: 16px; overflow-y: auto;
     background: radial-gradient(ellipse at center, rgba(238,239,242,.55), rgba(238,239,242,.92)); }
   #menu.hidden, .hidden { display: none !important; }
+  body.benching #hud > :not(#vignette) { display: none; }
+  body.benching #game { filter: saturate(.85); }
   .card { width: min(560px, 100%); }
   .logo { font-weight: 800; font-style: italic; line-height: .82; font-size: clamp(56px, 12vw, 108px); letter-spacing: -.01em; margin: 0; }
   .logo .the { display: block; font-size: .32em; letter-spacing: .3em; font-style: normal; font-weight: 700; margin-bottom: .25em; }
@@ -140,6 +201,7 @@
 <body>
 <canvas id="game"></canvas>
 
+<div id="vignette"></div>
 <div id="hud">
   <div id="scope"><i></i></div>
   <div id="damage"></div>
@@ -151,7 +213,7 @@
     <div><b id="acc">--</b><span>ACCURACY</span></div>
     <div><b id="chunks">0</b><span>DESTRUCTION</span></div>
   </div>
-  <div id="hint">E — TAKE GUN · 1/2/Q — SWAP · T — RESET · ESC — MENU</div>
+  <div id="hint">E — TAKE GUN / WORKBENCH · 1/2 — SWAP · T — RESET · ESC — MENU</div>
   <div id="prompt"></div>
   <div id="debug"><span id="fps">--</span> FPS · <span id="speed">0.0</span> M/S</div>
   <div id="state"></div>
@@ -159,6 +221,11 @@
   <div class="panel hidden" id="course"><div id="coursetime">0:00.00</div><div id="courseinfo"></div></div>
   <div id="flash"></div>
   <div id="fade"></div>
+  <div id="abilities">
+    <div class="ab" id="ab-dash"><kbd>Q</kbd><b>DASH</b><span class="cd"></span><div class="pips"><i class="pip"></i><i class="pip"></i></div></div>
+    <div class="ab" id="ab-grapple"><kbd>G</kbd><b>GRAPPLE</b><span class="cd"></span></div>
+    <div class="ab" id="ab-slam"><kbd>Z</kbd><b>SLAM</b><span class="cd"></span></div>
+  </div>
   <div id="mapname"><div class="small">THE SEMI-FINALS</div><div class="big">TEST RANGE</div></div>
   <div id="slots"><div id="slot1"></div><div id="slot2"></div></div>
   <div id="weapontype"></div>
@@ -169,7 +236,7 @@
 <div id="menu">
   <div class="card">
     <h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <div class="sub">TEST RANGE · BUILD 0.4</div>
+    <div class="sub">TEST RANGE · BUILD 0.5</div>
     <button id="play">CLICK TO PLAY</button>
     <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     <div class="grid2">
@@ -185,7 +252,9 @@
           sprint-jump along a wall to wall run · <kbd>SPACE</kbd> wall jump<br>
           <kbd>LMB</kbd>/<kbd class="keyhint-fire">F</kbd>shoot · <kbd>RMB</kbd>/<kbd class="keyhint-aim">V</kbd>aim<br>
           <kbd>R</kbd>reload · <kbd>E</kbd>take gun from case<br>
-          <kbd>1</kbd><kbd>2</kbd><kbd>Q</kbd>swap · <kbd>T</kbd>reset range<br>
+          <kbd class="keyhint-dash">Q</kbd>dash · <kbd class="keyhint-grapple">G</kbd>grapple · <kbd class="keyhint-slam">Z</kbd>ground slam<br>
+          <kbd>E</kbd>at the workbench for attachments<br>
+          <kbd>1</kbd><kbd>2</kbd>/scroll swap · <kbd>T</kbd>reset range<br>
           parkour course through the east door · <kbd>X</kbd> restart run
         </div>
       </div>
@@ -198,10 +267,24 @@
           <span>AIM KEY</span><button id="bind-aim" type="button">V</button>
           <span>SHOOT KEY</span><button id="bind-fire" type="button">F</button>
           <span>AIM MODE</span><button id="aim-mode" type="button">HOLD</button>
+          <span>DASH</span><button id="bind-dash" type="button">Q</button>
+          <span>GRAPPLE</span><button id="bind-grapple" type="button">G</button>
+          <span>GROUND SLAM</span><button id="bind-slam" type="button">Z</button>
         </div>
         <div id="bindnote"></div>
       </div>
     </div>
+  </div>
+</div>
+<div id="bench" class="hidden">
+  <div class="bench-panel">
+    <div class="bench-head"><h2>WORKBENCH</h2><span class="bench-hint">DRAG RIGHT SIDE TO SPIN</span></div>
+    <div class="bench-weapon"></div>
+    <div class="bench-tabs"></div>
+    <div class="bench-slots"></div>
+    <div class="bench-desc"></div>
+    <div class="bench-stats"></div>
+    <div class="bench-actions"><button class="bench-clear" type="button">STRIP ALL</button><button class="bench-done" type="button">DONE (E)</button></div>
   </div>
 </div>
 <div id="error" class="hidden"></div>

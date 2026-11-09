@@ -1,5 +1,6 @@
 // First-person movement: walk, sprint, crouch, slide, slide-hop chains, mantle, vault, ledge grab,
 // wall run + wall jump, air strafe, step-up, AABB collision, footsteps, plus camera feel.
+// Abilities: dash (2 charges), grapple, ground slam — all usable in the air.
 import { clamp, damp, forwardFrom, spring, easeOut, easeIn, smoothstep } from './math.js';
 
 const HW = 0.3;          // half width of the player box
@@ -19,6 +20,10 @@ const WALLRUN_TIME = 1.45;
 const WALLRUN_MIN = 6.0; // horizontal speed needed to start a wall run
 const CHAIN_MAX = 5;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+// abilities
+const DASH_TIME = 0.16, DASH_CHARGES = 2, DASH_RECHARGE = 2.2;
+const GRAPPLE_RANGE = 45, GRAPPLE_SPEED = 130, GRAPPLE_CD = 4.5, GRAPPLE_MAX = 2.6;
+const SLAM_CD = 7;
 
 export const SPEED = { walk: 5.4, sprint: 8.4, crouch: 2.9, ads: 3.6 };
 
@@ -59,6 +64,23 @@ export class Player {
     this.slideJumped = false;
     this.sinceSlide = 9;
     this.wallStepT = 0;
+    this.dash = null;
+    this.grapple = null;     // { phase: 'fire' | 'pull' | 'miss', point, t, ... }
+    this.slam = null;        // { phase: 'rise' | 'fall', t, fromY }
+    this.slamHit = null;     // set on slam impact for the game to apply damage
+    this.shake = 0;
+    this.abil = {
+      dash: { charges: DASH_CHARGES, max: DASH_CHARGES, t: 0, recharge: DASH_RECHARGE },
+      grapple: { cd: 0, max: GRAPPLE_CD },
+      slam: { cd: 0, max: SLAM_CD },
+    };
+  }
+
+  cancelAbilities() { this.dash = null; this.grapple = null; this.slam = null; }
+  resetAbilities() {
+    this.cancelAbilities();
+    this.abil.dash.charges = DASH_CHARGES; this.abil.dash.t = 0;
+    this.abil.grapple.cd = 0; this.abil.slam.cd = 0;
   }
 
   get mantle() { return this.trav?.kind === 'mantle'; }
@@ -78,6 +100,7 @@ export class Player {
     this.wallRun = null;
     this.chain = 0;
     this.camPitch = this.camPitchV = this.landOff = this.landV = 0;
+    this.cancelAbilities();
   }
 
   spawn(p, yaw = 0) {
@@ -96,6 +119,7 @@ export class Player {
     this.wallRun = null;
     this.chain = 0;
     this.camPitch = this.camPitchV = this.landOff = this.landV = 0;
+    this.resetAbilities();
   }
 
   get hSpeed() { return Math.hypot(this.vel[0], this.vel[2]); }
@@ -109,7 +133,7 @@ export class Player {
     this.pitch = clamp(this.pitch - dy * sens, -1.55, 1.55);
   }
 
-  update(dt, input, { ads = false, firing = false } = {}) {
+  update(dt, input, { ads = false, firing = false, act = {} } = {}) {
     const fwdIn = (input.down('KeyW') ? 1 : 0) - (input.down('KeyS') ? 1 : 0);
     const strafe = (input.down('KeyD') ? 1 : 0) - (input.down('KeyA') ? 1 : 0);
     const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw);
@@ -125,8 +149,10 @@ export class Player {
     this.wallCooldown -= dt;
     this.chainWindow -= dt;
     this.sinceSlide += dt;
+    this.tickAbilities(dt);
 
     if (this.trav) {
+      this.cancelAbilities();
       const k = this.trav.kind;
       if (k === 'mantle') this.updateMantle(dt);
       else if (k === 'vault') this.updateVault(dt);
@@ -171,6 +197,22 @@ export class Player {
     let speed = this.crouching ? SPEED.crouch : this.sprinting ? SPEED.sprint : SPEED.walk;
     if (ads) speed = Math.min(speed, SPEED.ads);
 
+    // --- abilities ---
+    if (act.dash) this.tryDash(wx, wz, wl);
+    if (act.grapple) this.useGrapple();
+    if (act.slam) this.trySlam();
+    if (this.grapple) this.updateGrapple(dt, wx, wz, wl);
+    if (this.slam) {
+      this.slam.t += dt;
+      if (this.slam.phase === 'rise' && (this.slam.t > 0.3 || this.vel[1] < 1)) {
+        this.slam.phase = 'fall';
+        this.slam.fromY = Math.max(this.slam.fromY, this.pos[1]);
+        this.events.push('slamdive');
+      }
+    }
+    const pulling = this.grapple?.phase === 'pull';
+    const diving = this.slam?.phase === 'fall';
+
     // --- wall run: overrides normal air movement while you're on a wall ---
     if (this.wallRun) this.updateWallRun(dt, fwdIn, crouchHit, strafe);
     const onWall = !!this.wallRun;
@@ -186,6 +228,7 @@ export class Player {
     let jumped = false;
     if (!onWall && this.jumpBuffer > 0 && this.coyote > 0) {
       this.slideJumped = this.sliding || this.sinceSlide < 0.3;
+      this.dash = null;
       if (this.crouching && !this.overlap(STAND)) { this.crouching = false; this.height = STAND; }
       this.vel[1] = JUMP_V;
       this.jumpBuffer = 0;
@@ -196,8 +239,14 @@ export class Player {
     }
 
     // --- horizontal velocity ---
-    if (onWall) {
-      // handled by updateWallRun
+    if (onWall || pulling) {
+      // handled by updateWallRun / updateGrapple
+    } else if (this.dash) {
+      this.updateDash(dt);
+    } else if (diving) {
+      const f = Math.exp(-3 * dt);
+      this.vel[0] *= f; this.vel[2] *= f;
+      this.vel[1] = -34;
     } else if (this.sliding && wasGrounded) {
       // slides keep most of their speed for ~0.5s, then bleed off
       const fr = this.slideTime < 0.45 ? 0.35 : 1.8;
@@ -219,7 +268,8 @@ export class Player {
       if (now > cap) { this.vel[0] *= cap / now; this.vel[2] *= cap / now; }
     }
 
-    this.vel[1] -= (onWall ? this.wallRun.grav : GRAVITY) * dt;
+    const g = onWall ? this.wallRun.grav : this.dash ? 0 : pulling ? GRAVITY * 0.3 : diving ? 0 : GRAVITY;
+    this.vel[1] -= g * dt;
     const fallSpeed = this.vel[1];
 
     // --- integrate with collision, sub-stepped so fast movement can't tunnel ---
@@ -234,6 +284,7 @@ export class Player {
     }
 
     this.airTime = this.grounded ? 0 : this.airTime + dt;
+    if (this.grounded && diving) this.slamImpact();
     if (this.grounded) {
       if (this.wallRun) this.wallRun = null;
       this.lastWall = null;
@@ -254,10 +305,10 @@ export class Player {
     if (this.grounded && !this.sliding && this.chainWindow <= 0 && this.sinceSlide > 0.5) this.chain = 0;
 
     // --- in the air, holding forward: vault low walls, mantle / grab higher ledges, run on walls ---
-    if (!this.grounded && !this.wallRun && fwdIn > 0 && this.airTime > 0.05) {
+    if (!this.grounded && !this.wallRun && !this.dash && !diving && fwdIn > 0 && this.airTime > 0.05) {
       let done = false;
       if (this.vel[1] < 4.5) done = this.tryVault() || this.tryMantle() || this.tryLedgeGrab();
-      if (!done) this.tryWallRun(strafe);
+      if (!done && !this.grapple && !this.slam) this.tryWallRun(strafe);
     }
 
     if (this.pos[1] < -30) this.respawn();
@@ -452,6 +503,141 @@ export class Player {
     }
   }
 
+  // ------------------------------------------------------------------ abilities
+  tickAbilities(dt) {
+    const a = this.abil;
+    if (a.dash.charges < a.dash.max) {
+      a.dash.t += dt;
+      if (a.dash.t >= a.dash.recharge) { a.dash.charges++; a.dash.t = 0; this.events.push('dashready'); }
+    } else a.dash.t = 0;
+    if (!this.grapple || this.grapple.phase === 'miss') a.grapple.cd = Math.max(0, a.grapple.cd - dt);
+    if (!this.slam) a.slam.cd = Math.max(0, a.slam.cd - dt);
+    this.shake *= Math.exp(-7 * dt);
+  }
+
+  // DASH: a short burst in the direction you're holding (or facing). Works in the air.
+  tryDash(wx, wz, wl) {
+    const a = this.abil.dash;
+    if (a.charges < 1) return;
+    let dir = wl > 0 ? [wx, wz] : [-Math.sin(this.yaw), -Math.cos(this.yaw)];
+    const hs = this.hSpeed;
+    this.dash = { t: 0, dir, speed: Math.max(hs + 5, 18), exit: Math.max(hs, 10.5) };
+    a.charges--;
+    this.wallRun = null;
+    this.grapple = null;
+    this.slam = null;
+    this.sliding = false;
+    if (!this.grounded) this.vel[1] = Math.max(this.vel[1], 0.6);   // mid-air dash catches you
+    this.events.push('dash');
+  }
+
+  updateDash(dt) {
+    const d = this.dash;
+    d.t += dt;
+    this.vel[0] = d.dir[0] * d.speed;
+    this.vel[2] = d.dir[1] * d.speed;
+    if (!this.grounded) this.vel[1] = Math.max(this.vel[1], 0);
+    if (d.t >= DASH_TIME) {
+      this.dash = null;
+      this.vel[0] = d.dir[0] * d.exit;
+      this.vel[2] = d.dir[1] * d.exit;
+    }
+  }
+
+  // GRAPPLE: fire a hook where you're looking; it reels you in. Press again or jump to let go.
+  grappleTarget() {
+    const hit = this.world.raycast(this.eye(), this.forward(), GRAPPLE_RANGE, false);
+    return hit && hit.t > 2 ? hit : null;
+  }
+
+  useGrapple() {
+    if (this.grapple && this.grapple.phase !== 'miss') { this.releaseGrapple(false); return; }
+    const a = this.abil.grapple;
+    if (a.cd > 0) return;
+    const hit = this.grappleTarget();
+    if (hit) {
+      this.grapple = { phase: 'fire', t: 0, point: hit.point, normal: hit.normal, travel: hit.t / GRAPPLE_SPEED, dist: hit.t };
+      this.events.push('grapplefire');
+    } else {
+      // miss: the hook flies out to max range and comes back
+      this.grapple = { phase: 'miss', t: 0, dir: this.forward(), from: this.eye() };
+      a.cd = 0.8;
+      this.events.push('grapplemiss');
+    }
+  }
+
+  releaseGrapple(boost) {
+    if (boost) this.vel[1] = Math.max(this.vel[1], 0) + 6;
+    this.grapple = null;
+    this.abil.grapple.cd = GRAPPLE_CD;
+    this.events.push('grapplerelease');
+  }
+
+  updateGrapple(dt, wx, wz, wl) {
+    const g = this.grapple;
+    g.t += dt;
+    if (g.phase === 'miss') { if (g.t > 0.32) this.grapple = null; return; }
+    if (g.phase === 'fire') {
+      if (g.t >= g.travel) { g.phase = 'pull'; g.t = 0; this.events.push('grapplehit'); this.vel[1] = Math.max(this.vel[1], 2); }
+      return;
+    }
+    const c = [this.pos[0], this.pos[1] + 1.2, this.pos[2]];
+    const to = [g.point[0] - c[0], g.point[1] - c[1], g.point[2] - c[2]];
+    const d = Math.hypot(...to);
+    if (this.jumpBuffer > 0) { this.jumpBuffer = 0; this.releaseGrapple(true); return; }
+    if (d < 1.7 || g.t > GRAPPLE_MAX) { this.releaseGrapple(to[1] > -0.5); return; }
+    const dir = to.map((v) => v / d);
+    const acc = 46;
+    for (let k = 0; k < 3; k++) this.vel[k] += dir[k] * acc * dt;
+    if (wl > 0) { this.vel[0] += wx * 9 * dt; this.vel[2] += wz * 9 * dt; }
+    // bleed off sideways motion so you don't orbit the hook point
+    const along = this.vel[0] * dir[0] + this.vel[1] * dir[1] + this.vel[2] * dir[2];
+    const f = Math.exp(-2.2 * dt);
+    for (let k = 0; k < 3; k++) {
+      const perp = this.vel[k] - dir[k] * along;
+      this.vel[k] = dir[k] * along + perp * f;
+    }
+    const sp = Math.hypot(...this.vel);
+    if (sp > 25) for (let k = 0; k < 3; k++) this.vel[k] *= 25 / sp;
+    this.grounded = false;
+    this.wallRun = null;
+    this.sliding = false;
+  }
+
+  // SLAM: dive into the ground and send out a shockwave. On the ground it leaps first.
+  trySlam() {
+    const a = this.abil.slam;
+    if (a.cd > 0) return;
+    this.wallRun = null;
+    this.grapple = null;
+    this.dash = null;
+    this.sliding = false;
+    if (this.grounded) {
+      const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+      this.vel[1] = 8.8;
+      this.vel[0] += fx * 3; this.vel[2] += fz * 3;
+      this.grounded = false;
+      this.slam = { phase: 'rise', t: 0, fromY: this.pos[1] };
+      this.events.push('slamleap');
+    } else {
+      this.slam = { phase: 'fall', t: 0, fromY: this.pos[1] };
+      this.events.push('slamdive');
+    }
+    a.cd = SLAM_CD;
+  }
+
+  slamImpact() {
+    const drop = this.slam.fromY - this.pos[1];
+    const power = clamp(0.7 + drop / 6, 0.7, 1.6);
+    this.slamHit = { pos: [...this.pos], power };
+    this.slam = null;
+    this.vel[0] *= 0.3; this.vel[2] *= 0.3;
+    this.landV -= 1.6 * power;
+    this.camPitchV -= 1.2;
+    this.shake = Math.min(1.5, 0.8 * power);
+    this.events.push('slam');
+  }
+
   // ------------------------------------------------------------------ wall run
   wallAt(dir, y) {
     // reaches up to ~0.6 m past your shoulder so you don't have to be scraping the wall
@@ -630,7 +816,9 @@ export class Player {
 
   eye() {
     const bob = Math.sin(this.bobT * 2) * 0.04 * this.bobAmt;
-    return [this.pos[0], this.pos[1] + this.eyeH + this.stepSmooth + this.landOff + bob, this.pos[2]];
+    const sh = this.shake > 0.01 ? this.shake * 0.05 : 0;
+    return [this.pos[0] + (Math.random() - 0.5) * sh, this.pos[1] + this.eyeH + this.stepSmooth + this.landOff + bob + (Math.random() - 0.5) * sh,
+      this.pos[2] + (Math.random() - 0.5) * sh];
   }
 
   forward(extraPitch = 0, extraYaw = 0) {

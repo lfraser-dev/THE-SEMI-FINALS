@@ -34,6 +34,19 @@ uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky;
 uniform sampler2DShadow uShadowMap;
 out vec4 outColor;
 
+// ---- lighting is done in linear space, then ACES tone-mapped back to sRGB ----
+vec3 toLin(vec3 c) { return pow(c, vec3(2.2)); }
+vec3 toSrgb(vec3 c) { return pow(c, vec3(1.0 / 2.2)); }
+vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+
+float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float noise(vec3 x) {
+  vec3 i = floor(x), f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
+}
+
 float grid(vec2 p, float spacing, float px) {
   vec2 c = p / spacing;
   vec2 fw = max(fwidth(c), vec2(1e-4));
@@ -43,63 +56,110 @@ float grid(vec2 p, float spacing, float px) {
   return line * fade;
 }
 
+// soft shadow: 12-tap rotated disc
+const vec2 DISC[12] = vec2[](vec2(-0.326,-0.406), vec2(-0.840,-0.074), vec2(-0.696,0.457), vec2(-0.203,0.621),
+  vec2(0.962,-0.195), vec2(0.473,-0.480), vec2(0.519,0.767), vec2(0.185,-0.893), vec2(0.507,0.064),
+  vec2(0.896,0.412), vec2(-0.322,-0.933), vec2(-0.792,-0.598));
 float shadow() {
   vec3 p = vLightPos.xyz / vLightPos.w * 0.5 + 0.5;
   if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
   vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
+  float a = hash(floor(vWorld * 40.0)) * 6.2832;
+  mat2 r = mat2(cos(a), sin(a), -sin(a), cos(a));
   float s = 0.0;
-  for (int x = -1; x <= 1; x++)
-    for (int y = -1; y <= 1; y++)
-      s += texture(uShadowMap, vec3(p.xy + vec2(x, y) * texel * 1.25, p.z - 0.0008));
-  return s / 9.0;
+  for (int i = 0; i < 12; i++) s += texture(uShadowMap, vec3(p.xy + r * DISC[i] * texel * 2.2, p.z - 0.0008));
+  return s / 12.0;
+}
+
+vec3 skyColor(vec3 d) {
+  float t = clamp(d.y, 0.0, 1.0);
+  vec3 horizon = uFogColor;
+  vec3 zenith = uSkyTop;
+  vec3 c = mix(horizon, zenith, pow(t, 0.55));
+  float sd = max(dot(d, uSunDir), 0.0);
+  c += vec3(1.0, 0.93, 0.8) * (pow(sd, 6.0) * 0.12 + pow(sd, 64.0) * 0.35);   // glow
+  c = mix(c, vec3(1.0, 0.98, 0.94), smoothstep(0.9993, 0.9997, sd));          // sun disc
+  c = mix(c, horizon * 0.96, smoothstep(0.0, -0.08, d.y));                     // below horizon
+  return c;
 }
 
 void main() {
   if (uSky > 0.5) {
-    vec3 d = normalize(vWorld - uCamPos);
-    float t = clamp(d.y * 1.8, 0.0, 1.0);
-    vec3 c = mix(uFogColor, uSkyTop, pow(t, 0.7));
-    c += vec3(1.0, 0.97, 0.9) * pow(max(dot(d, uSunDir), 0.0), 48.0) * 0.25;
-    outColor = vec4(c, 1.0);
+    outColor = vec4(skyColor(normalize(vWorld - uCamPos)), 1.0);
     return;
   }
 
   vec3 n = normalize(vNormal);
   vec3 base = uColor;
+  bool world = uShadowOn > 0.5;
 
   if (uGrid > 0.5) {
     vec3 an = abs(n);
     vec2 p = an.y > 0.5 ? vWorld.xz : (an.x > 0.5 ? vWorld.zy : vWorld.xy);
-    float minor = grid(p, 0.5, 1.0) * 0.2;
-    float major = grid(p, 2.0, 1.6) * 0.45;
-    base = mix(base, base * 0.5, max(minor, major));
+    float minor = grid(p, 0.5, 1.0) * 0.1;
+    float major = grid(p, 2.0, 1.4) * 0.32;
+    base = mix(base, base * 0.62, max(minor, major));
   }
 
+  // material grain: large blotches + fine speckle, like painted concrete / worn metal
+  float lum0 = dot(base, vec3(0.3, 0.59, 0.11));
+  if (uEmissive < 0.5) {
+    vec3 q = world ? vWorld : vLocal * uScale * 4.0;
+    float n1 = noise(q * 0.9), n2 = noise(q * 7.0), n3 = noise(q * 31.0);
+    float grain = (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.07 + (n3 - 0.5) * 0.05;
+    base *= 1.0 + grain * (world ? 1.0 : 0.6);
+  }
+
+  float edge = 0.0;
   if (uEdges > 0.5) {
     vec3 lp = abs(vLocal * uScale);
     vec3 e = uScale * 0.5 - lp + abs(vLocalN) * 1000.0;
     float em = min(e.x, min(e.y, e.z));
     float fw = fwidth(em);
-    float edge = 1.0 - smoothstep(0.012, 0.012 + fw * 1.5 + 0.004, em);
-    base = mix(base, base * 0.35, edge * 0.85);
+    edge = 1.0 - smoothstep(0.01, 0.01 + fw * 1.5 + 0.004, em);
+    base = mix(base, base * 0.5, edge * 0.6);
   }
 
-  // cheap contact shadow at the bottom of vertical faces
+  // contact shadow at the bottom of vertical faces + a little extra under overhangs
   float ao = 1.0;
   if (abs(n.y) < 0.5) {
     float h = (vLocal.y + 0.5) * uScale.y;
-    ao = mix(0.72, 1.0, smoothstep(0.0, 0.9, h));
-  }
+    ao = mix(0.62, 1.0, smoothstep(0.0, 1.1, h));
+  } else if (n.y < -0.5) ao = 0.7;
 
-  float sun = max(dot(n, uSunDir), 0.0);
-  if (uShadowOn > 0.5 && sun > 0.0) sun *= shadow();
-  vec3 ambient = mix(vec3(0.5, 0.51, 0.55), vec3(0.6, 0.61, 0.64), n.y * 0.5 + 0.5);
-  vec3 col = base * (ambient + vec3(1.0, 0.98, 0.94) * 0.46 * sun) * ao;
-  col = mix(col, uColor, uEmissive);
+  vec3 albedo = toLin(base) * (world ? 0.82 : 1.0);   // real-world whites are greyer than paper
+  vec3 V = normalize(uCamPos - vWorld);
+  vec3 L = uSunDir;
+  float ndl = max(dot(n, L), 0.0);
+  float sh = (world && ndl > 0.0) ? shadow() : 1.0;
 
+  // sun + sky (hemisphere) + bounce light from the floor
+  vec3 sunCol = vec3(1.0, 0.95, 0.86) * 2.25;
+  vec3 skyCol = mix(vec3(0.3), toLin(uSkyTop) * 0.6, 0.45) + vec3(0.03);
+  vec3 groundCol = vec3(0.2, 0.19, 0.18);
+  vec3 hemi = mix(groundCol, skyCol, n.y * 0.5 + 0.5);
+
+  // glossier when dark (metal, rubber), rougher when light (paint, concrete)
+  float rough = mix(0.32, 0.82, smoothstep(0.02, 0.45, lum0));
+  float specPow = 2.0 / max(rough * rough * rough * rough, 0.002) - 2.0;
+  vec3 H = normalize(L + V);
+  float ndh = max(dot(n, H), 0.0), vdh = max(dot(V, H), 0.0);
+  float F = 0.04 + 0.96 * pow(1.0 - vdh, 5.0);
+  float spec = pow(ndh, specPow) * (specPow + 8.0) / 25.13 * F;
+  float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
+
+  vec3 col = albedo * (hemi * ao + sunCol * ndl * sh) + sunCol * spec * ndl * sh * (1.0 - edge * 0.5)
+           + skyCol * fres * (1.0 - rough) * 0.2 * ao;
+  col = mix(col, toLin(uColor) * 2.2, uEmissive);
+
+  vec3 display = toSrgb(aces(col * 0.85));
+
+  // fog in display space so it blends into the sky's horizon, warmer toward the sun
   float f = 1.0 - exp(-pow(uFogDensity * vViewZ, 2.0));
-  col = mix(col, uFogColor, f);
-  outColor = vec4(col, uAlpha);
+  vec3 vd = -V;
+  vec3 fogCol = uFogColor + vec3(0.06, 0.04, 0.0) * pow(max(dot(vd, L), 0.0), 8.0);
+  display = mix(display, fogCol, f);
+  outColor = vec4(display, uAlpha);
 }`;
 
 const SHADOW_VERT = `#version 300 es
@@ -198,7 +258,7 @@ export class Renderer {
     gl.enable(gl.CULL_FACE);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-    this.fogColor = [0.92, 0.925, 0.94];
+    this.fogColor = [0.86, 0.89, 0.93];
     const sd = [0.45, 0.8, 0.38], l = Math.hypot(...sd);
     this.sunDir = sd.map((v) => v / l);
     this.lightVP = mat4();
@@ -207,7 +267,7 @@ export class Renderer {
     gl.useProgram(this.prog);
     gl.uniform3fv(this.u.uSunDir, this.sunDir);
     gl.uniform3fv(this.u.uFogColor, this.fogColor);
-    gl.uniform3fv(this.u.uSkyTop, [0.72, 0.78, 0.88]);
+    gl.uniform3fv(this.u.uSkyTop, [0.48, 0.64, 0.86]);
     gl.uniform1i(this.u.uShadowMap, 1);
     gl.uniformMatrix4fv(this.u.uLightVP, false, this.lightVP);
     this.drawCalls = 0;

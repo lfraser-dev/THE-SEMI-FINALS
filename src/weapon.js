@@ -2,8 +2,8 @@
 // cycling, equip animation, and the first-person viewmodel with hands.
 import { compose, mul, mat4, damp, clamp, lerp, anglesFor, spring } from './math.js';
 
-const GLOVE = [0.86, 0.86, 0.88];
-const SLEEVE = [0.16, 0.16, 0.19];
+const GLOVE = [0.3, 0.29, 0.27];
+const SLEEVE = [0.22, 0.24, 0.25];
 const FLASH = [1, 0.93, 0.75];
 const RED = [0.95, 0.12, 0.1];
 
@@ -47,6 +47,9 @@ export class Weapon {
     this.vaultT = 0;
     this.wallT = 0;
     this.wallSide = 1;
+    this.dashT = 0;
+    this.slamT = 0;
+    this.grapT = 0;
     this.equipT = 1;
     this.queued = 0;
     this.events = [];
@@ -55,6 +58,18 @@ export class Weapon {
     this.parts = def.parts.map((p) => ({ ...p, model: mat4(), local: mat4() }));
     this.handModels = [mat4(), mat4(), mat4(), mat4(), mat4()];
   }
+
+  // swap in a new definition (e.g. after changing attachments); refills the gun
+  setDef(def) {
+    this.def = def;
+    this.parts = def.parts.map((p) => ({ ...p, model: mat4(), local: mat4() }));
+    this.ammo = def.mag;
+    this.reload = null;
+    this.cycleT = null;
+  }
+
+  // laser emitter position in view space (after viewmodel() ran this frame), or null
+  laserPoint() { return this.def.laser ? transformPoint(this.root, this.def.laser) : null; }
 
   get ads() { return this.adsT > 0.5; }
   get reloading() { return !!this.reload; }
@@ -81,6 +96,10 @@ export class Weapon {
     const wr = player.wallRun;
     this.wallT += ((wr ? 1 : 0) - this.wallT) * damp(12, dt);
     if (wr) this.wallSide = wr.side;
+    this.dashT += ((player.dash ? 1 : 0) - this.dashT) * damp(player.dash ? 30 : 8, dt);
+    this.slamT += ((player.slam?.phase === 'fall' ? 1 : 0) - this.slamT) * damp(14, dt);
+    const gp = player.grapple && player.grapple.phase !== 'miss';
+    this.grapT += ((gp ? 1 : 0) - this.grapT) * damp(gp ? 20 : 10, dt);
     this.vaultT += ((tr?.kind === 'vault' ? 1 : 0) - this.vaultT) * damp(tr ? 20 : 9, dt);
     this.adsT += ((wantAds ? 1 : 0) - this.adsT) * damp(d.adsSpeed, dt);
     this.sprintT += ((player.sprinting && !this.reload ? 1 : 0) - this.sprintT) * damp(10, dt);
@@ -228,7 +247,7 @@ export class Weapon {
     v += Math.min(player.hSpeed / 8, 1) * s.move;
     if (!player.grounded) v += s.air;
     if (player.crouching && !player.sliding) v *= 0.8;
-    return v * lerp(1, s.ads, this.adsT);
+    return v * lerp(this.def.hipSpread ?? 1, s.ads, this.adsT);
   }
 
   // ---------------------------------------------------------------- viewmodel
@@ -313,6 +332,7 @@ export class Weapon {
     // --- root transform ---
     const hip = d.hip, adsPos = [0, -d.sightY, d.adsZ];
     const mt = this.mantleT, vt = this.vaultT, lag = this.lag, wt = this.wallT * this.wallSide;
+    const dt_ = this.dashT, st = this.slamT, gt = this.grapT;
     const land = player.landOff;
     // sprint gets a bigger figure-8 swing so running reads clearly
     const sx = Math.sin(player.bobT) * 0.018 * sp * player.bobAmt;
@@ -321,12 +341,16 @@ export class Weapon {
       lerp(hip[0], adsPos[0], a) + bx + sx + this.sway[0] + lag[0] - sp * 0.04 - tilt * 0.03 - sl * 0.05 + mt * 0.04 + vt * 0.07,
       lerp(hip[1], adsPos[1], a) + by + syb + idle - this.sway[1] + lag[1] - tilt * 0.035 - sp * 0.04 + player.stepSmooth * 0.3 + land * 0.35
         - e * 0.28 + bump * 0.012 - sl * 0.02 - mt * 0.1 - vt * 0.08,
-      lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04 + lag[2] + mt * 0.06 + vt * 0.03,
+      lerp(hip[2], adsPos[2], a) + this.vmKick * 0.04 + lag[2] + mt * 0.06 + vt * 0.03 + dt_ * 0.06,
     ];
+    pos[0] += gt * 0.03 + st * 0.02;
+    pos[1] += -dt_ * 0.03 - st * 0.06 - gt * 0.02;
     const rot = [
-      this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2,
+      this.vmKick * 0.06 + tilt * 0.14 - sp * 0.25 + this.sway[1] * 2 - e * 0.9 + bump * 0.06 + land * 0.9 - mt * 0.55 - vt * 0.3 - lag[1] * 2
+        - dt_ * 0.12 - st * 0.45,
       sp * 0.55 + this.sway[0] * 2 + tilt * 0.12 * rollDir + mt * 0.25 - vt * 0.4 + lag[0] * 2.5,
-      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3 + wt * 0.3,
+      tilt * 0.5 * rollDir + sp * 0.15 - this.sway[0] * 1.5 + sl * 0.3 + mt * 0.35 + vt * 0.75 - lag[0] * 3 + wt * 0.3
+        + dt_ * 0.35 + gt * 0.25,
     ];
     compose(this.root, pos, rot, [1, 1, 1]);
 
@@ -375,10 +399,10 @@ export class Weapon {
       compose(this.tmp, add3(left, [-0.042, -0.03, 0]), [0.1, 0, -0.25], glove);
       mul(hm[0], this.root, this.tmp);
     }
-    out.push({ model: hm[0], scale: glove, color: GLOVE, emissive: 0.25 });
+    out.push({ model: hm[0], scale: glove, color: GLOVE, emissive: 0 });
     compose(this.tmp, add3(right, [0.004, -0.01, 0.005]), [-0.3, 0, 0], palm);
     mul(hm[1], this.root, this.tmp);
-    out.push({ model: hm[1], scale: palm, color: GLOVE, emissive: 0.25 });
+    out.push({ model: hm[1], scale: palm, color: GLOVE, emissive: 0 });
 
     const rv = transformPoint(this.root, right);
     let lShoulder = lerp3([-0.32, -0.62, 0.0], [-0.24, -0.55, 0.05], a);
@@ -397,8 +421,9 @@ export class Weapon {
       out.push({ model: m, scale: s, color: SLEEVE, emissive: 0 });
     });
 
-    if (this.flash > 0) {
-      const f = hm[4], s = [0.09, 0.09, 0.12];
+    const fs = d.flashScale ?? 1;
+    if (this.flash > 0 && fs > 0) {
+      const f = hm[4], s = [0.09 * fs, 0.09 * fs, 0.12 * fs];
       compose(this.tmp, add3(d.muzzle, [0, 0, -0.06]), [0, 0, Math.random() * Math.PI], s);
       mul(f, this.root, this.tmp);
       out.push({ model: f, scale: s, color: FLASH, emissive: 1 });
@@ -409,6 +434,12 @@ export class Weapon {
   // Where the free hand goes (view space) while mantling or vaulting, and how much (t).
   plantTarget(player) {
     const tr = player.trav;
+    if (!tr && player.grapple && player.grapple.phase !== 'miss') {
+      // grapple: free hand thrust out toward the hook
+      const g = player.grapple;
+      const t = smooth(clamp((g.phase === 'fire' ? g.t : 1) / 0.08, 0, 1));
+      return { t, pos: [-0.17, -0.1, -0.62], rot: [-0.1, 0.1, 0.3] };
+    }
     if (!tr) {
       // wall run on your left: free hand braces against the wall
       if (!player.wallRun || player.wallRun.side > 0) return null;

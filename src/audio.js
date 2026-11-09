@@ -81,6 +81,20 @@ export class Sounds {
   startRun() { this.tone(660, 1320, 0.18, 0.12, 'square'); }
   finish() { [0, 90, 180, 300].forEach((d, i) => setTimeout(() => this.tone(660 * [1, 1.25, 1.5, 2][i], 660 * [1, 1.25, 1.5, 2][i], 0.18, 0.12, 'triangle'), d)); }
   fail() { this.tone(400, 140, 0.3, 0.16, 'sawtooth'); }
+  dash() { this.burst(0.22, 1800, 0.22, 'bandpass', 0.8); this.burst(0.12, 400, 0.18); this.tone(300, 900, 0.15, 0.05, 'sawtooth'); }
+  dashReady() { this.tone(1400, 1700, 0.06, 0.05, 'triangle'); }
+  grappleFire() { this.burst(0.18, 3200, 0.14, 'highpass'); this.tone(900, 2400, 0.16, 0.05, 'sawtooth'); }
+  grappleHit() { this.click(1500, 0.35, 3); this.burst(0.1, 600, 0.22); }
+  grappleRelease() { this.burst(0.1, 2200, 0.08, 'bandpass', 2); }
+  grappleMiss() { this.tone(1600, 500, 0.25, 0.05, 'sawtooth'); }
+  slamLeap() { this.burst(0.15, 500, 0.2); this.tone(200, 500, 0.2, 0.08, 'triangle'); }
+  slamDive() { this.burst(0.4, 1200, 0.16, 'bandpass', 0.7); this.tone(700, 160, 0.35, 0.06, 'sawtooth'); }
+  slam(power = 1) {
+    this.burst(0.7, 260, 0.9 * Math.min(power, 1.2));
+    this.burst(0.35, 1400, 0.35, 'bandpass', 0.8);
+    this.tone(90, 32, 0.6, 0.6 * Math.min(power, 1.2));
+    setTimeout(() => this.burst(0.5, 700, 0.25), 60);
+  }
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
   crumble() { this.burst(0.3, 700, 0.35); }

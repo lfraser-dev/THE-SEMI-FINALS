@@ -6,8 +6,10 @@ import { Weapon } from './weapon.js';
 import { WEAPONS, CASE_ORDER } from './weapons.js';
 import { Effects } from './effects.js';
 import { Sounds } from './audio.js';
-import { Dummy, DestructibleWall, WeaponCase } from './props.js';
-import { mat4, perspective, lookDir, mul, cross, norm, damp, dot } from './math.js';
+import { Dummy, DestructibleWall, WeaponCase, Workbench } from './props.js';
+import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, anglesFor, clamp } from './math.js';
+import { buildDef } from './attachments.js';
+import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
 import { Course, fmtTime } from './course.js';
 
@@ -25,7 +27,7 @@ try {
 }
 
 // ---------- settings ----------
-const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold' };
+const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold', dashKey: 'KeyQ', grappleKey: 'KeyG', slamKey: 'KeyZ' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('semifinals.settings') || '{}')); } catch { /* ignore */ }
 const saveSettings = () => { try { localStorage.setItem('semifinals.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 
@@ -42,12 +44,17 @@ const map = testRange;
 map.build(world);
 const dummies = map.dummies.map((d) => new Dummy(world, effects, d.pos, d.move));
 const walls = map.walls.map((w) => new DestructibleWall(world, effects, w.origin, w));
-const cases = CASE_ORDER.map((id, i) => new WeaponCase(world, WEAPONS[id], [map.cases.xs[i], 0, map.cases.z], i + 1));
+// attachments: one saved loadout per weapon
+let loadouts = {};
+try { loadouts = JSON.parse(localStorage.getItem('semifinals.loadouts') || '{}') || {}; } catch { /* ignore */ }
+const defFor = (id) => buildDef(WEAPONS[id], loadouts[id] || {});
+const cases = CASE_ORDER.map((id, i) => new WeaponCase(world, defFor(id), [map.cases.xs[i], 0, map.cases.z], i + 1));
+const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
 
 // two weapon slots: primary + sidearm
-const slots = [new Weapon(WEAPONS.ar), new Weapon(WEAPONS.pistol)];
+const slots = [new Weapon(defFor('ar')), new Weapon(defFor('pistol'))];
 let current = 0;
 let lastSlot = 1;
 const weapon = () => slots[current];
@@ -62,13 +69,24 @@ function switchTo(i) {
   updateSlotHud();
 }
 
-function pickUp(def) {
+function pickUp(caseDef) {
+  const def = defFor(caseDef.id);
   const other = slots.findIndex((w, i) => i !== current && w.def.id === def.id);
   if (weapon().def.id === def.id) { weapon().ammo = def.mag; weapon().equip(); sounds.pickup(); return; }
   if (other >= 0) { switchTo(other); return; }
   slots[current] = new Weapon(def);
   slots[current].equip();
   sounds.pickup();
+  updateSlotHud();
+}
+
+// called by the workbench when a loadout changes
+function applyLoadout(id, lo) {
+  loadouts[id] = lo;
+  try { localStorage.setItem('semifinals.loadouts', JSON.stringify(loadouts)); } catch { /* ignore */ }
+  const def = defFor(id);
+  slots.forEach((w) => { if (w.def.id === id) w.setDef(def); });
+  cases.forEach((c) => { if (c.def.id === id) c.def = def; });
   updateSlotHud();
 }
 
@@ -123,7 +141,9 @@ function fire(w) {
     if (!hit) continue;
     const b = hit.box;
     if (b.tag === 'dummy') {
-      const dmg = Math.round(d.dmg * (b.head ? d.headMult : 1));
+      // damage falls off past the weapon's range (down to 55% at 2.2x range)
+      const fall = 1 - 0.45 * clamp((hit.t - d.range) / (d.range * 1.2), 0, 1);
+      const dmg = Math.round(d.dmg * (b.head ? d.headMult : 1) * fall);
       const e = perDummy.get(b.ref) || { dmg: 0, head: false, point: hit.point, dir };
       e.dmg += dmg;
       e.head = e.head || b.head;
@@ -176,9 +196,59 @@ function handlePlayerEvents() {
     else if (ev === 'walljump') { sounds.wallJump(); effects.dust(player.eye(), 3, player.vel); }
     else if (ev === 'grab') sounds.grab();
     else if (ev === 'chain') sounds.chain(player.chain);
+    else if (ev === 'dash') { sounds.dash(); effects.dust(player.pos, 4, player.vel); }
+    else if (ev === 'dashready') sounds.dashReady();
+    else if (ev === 'grapplefire') sounds.grappleFire();
+    else if (ev === 'grapplehit') { sounds.grappleHit(); if (player.grapple) effects.impact(player.grapple.point, player.grapple.normal, [0.6, 0.6, 0.62]); }
+    else if (ev === 'grapplerelease') sounds.grappleRelease();
+    else if (ev === 'grapplemiss') sounds.grappleMiss();
+    else if (ev === 'slamleap') sounds.slamLeap();
+    else if (ev === 'slamdive') sounds.slamDive();
+    else if (ev === 'slam') slamShockwave(player.slamHit);
   }
   player.events.length = 0;
   if (player.sliding && player.grounded && Math.random() < 0.5) effects.dust(player.pos, 1, player.vel);
+}
+
+// ground slam: damage dummies and break wall chunks in a radius
+function slamShockwave(h) {
+  if (!h) return;
+  player.slamHit = null;
+  const R = 4.2 * Math.sqrt(h.power), p = h.pos;
+  sounds.slam(h.power);
+  // ring of dust + chunks thrown out
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2, r = 0.6 + Math.random() * 0.5;
+    const dir = [Math.cos(a), 0, Math.sin(a)];
+    effects.dust([p[0] + dir[0] * r, p[1], p[2] + dir[2] * r], 1, [dir[0] * 14, 0, dir[2] * 14]);
+    if (i % 3 === 0) {
+      const sz = 0.06 + Math.random() * 0.08;
+      effects.spawnPiece([p[0] + dir[0] * r, p[1] + 0.1, p[2] + dir[2] * r], [sz, sz, sz],
+        [dir[0] * (4 + Math.random() * 4), 3 + Math.random() * 4, dir[2] * (4 + Math.random() * 4)], [0.55, 0.55, 0.58], 1.2);
+    }
+  }
+  let hitAny = false, killed = false;
+  for (const d of dummies) {
+    if (!d.alive) continue;
+    const dx = d.pos[0] - p[0], dy = d.pos[1] - p[1], dz = d.pos[2] - p[2];
+    const dist = Math.hypot(dx, dz);
+    if (dist > R || Math.abs(dy) > 2.5) continue;
+    const dmg = Math.round((25 + 65 * (1 - dist / R)) * h.power);
+    const dir = norm([dx || 0.01, 0.6, dz || 0.01]);
+    const dead = d.damage(dmg, dir);
+    hitAny = true;
+    if (dead) { stats.kills++; killed = true; }
+    damageNumbers.push({ pos: [d.pos[0], d.pos[1] + 1.6, d.pos[2]], amount: dmg, head: false, t: 0, el: null, drift: Math.random() - 0.5 });
+  }
+  if (hitAny) { showHitmarker(killed, false); killed ? sounds.kill() : sounds.hit(); }
+  for (const w of walls) {
+    for (const row of w.cells) for (const b of row) {
+      if (!b) continue;
+      const dx = b.center[0] - p[0], dy = b.center[1] - p[1], dz = b.center[2] - p[2];
+      const dist = Math.hypot(dx, dy * 1.4, dz);
+      if (dist < R * 0.75) stats.chunks += w.hit(b, norm([dx, 0.4, dz]));
+    }
+  }
 }
 
 // ---------- HUD ----------
@@ -187,6 +257,7 @@ const hud = {
   kills: $('kills'), acc: $('acc'), chunks: $('chunks'), cross: $('crosshair'), hitmarker: $('hitmarker'),
   dmgLayer: $('damage'), state: $('state'), wname: $('weaponname'), wtype: $('weapontype'), prompt: $('prompt'),
   scope: $('scope'), slots: [$('slot1'), $('slot2')],
+  ab: { dash: $('ab-dash'), grapple: $('ab-grapple'), slam: $('ab-slam') },
   speedo: $('speedo'), speedBar: $('speedbar'), speedNum: $('speednum'), chain: $('chain'),
   course: $('course'), courseTime: $('coursetime'), courseInfo: $('courseinfo'), flash: $('flash'), fade: $('fade'),
 };
@@ -195,6 +266,32 @@ function showHitmarker(kill, head) {
   hud.hitmarker.className = kill ? 'kill' : head ? 'head' : '';
   hud.hitmarker.style.opacity = 1;
   hitTimer = kill ? 0.28 : 0.14;
+}
+
+function keyLabel(code) { return code.replace(/^Key/, '').replace(/^Digit/, '').toUpperCase(); }
+let grappleOk = false;
+function updateAbilityHud() {
+  const a = player.abil;
+  const set = (el, frac, ready, extra = '') => {
+    el.style.setProperty('--p', frac.toFixed(3));
+    el.classList.toggle('ready', ready);
+    el.querySelector('.cd').textContent = extra;
+  };
+  const dRem = a.dash.charges < a.dash.max ? 1 - a.dash.t / a.dash.recharge : 0;
+  set(hud.ab.dash, a.dash.charges > 0 ? 0 : dRem, a.dash.charges > 0);
+  hud.ab.dash.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < a.dash.charges));
+  const gActive = player.grapple && player.grapple.phase !== 'miss';
+  set(hud.ab.grapple, gActive ? 0 : a.grapple.cd / a.grapple.max, a.grapple.cd <= 0 || gActive, a.grapple.cd > 0 && !gActive ? a.grapple.cd.toFixed(1) : '');
+  hud.ab.grapple.classList.toggle('active', !!gActive);
+  set(hud.ab.slam, a.slam.cd / a.slam.max, a.slam.cd <= 0, a.slam.cd > 0 ? a.slam.cd.toFixed(1) : '');
+  // grapple range hint on the crosshair
+  grappleOk = a.grapple.cd <= 0 && !player.grapple && !!player.grappleTarget();
+  hud.cross.classList.toggle('grapple', grappleOk);
+}
+function refreshAbilityKeys() {
+  hud.ab.dash.querySelector('kbd').textContent = keyLabel(settings.dashKey);
+  hud.ab.grapple.querySelector('kbd').textContent = keyLabel(settings.grappleKey);
+  hud.ab.slam.querySelector('kbd').textContent = keyLabel(settings.slamKey);
 }
 
 function updateSlotHud() {
@@ -206,6 +303,7 @@ function updateSlotHud() {
   hud.wtype.textContent = weapon().def.type;
 }
 updateSlotHud();
+refreshAbilityKeys();
 
 const vp = mat4();
 function project(p) {
@@ -216,7 +314,12 @@ function project(p) {
   return [(x / w * 0.5 + 0.5) * innerWidth, (1 - (y / w * 0.5 + 0.5)) * innerHeight];
 }
 
-let nearCase = null;
+let nearCase = null, nearBench = false;
+function findBench() {
+  const eye = player.eye(), fwd = player.forward(), c = workbench.center;
+  const to = [c[0] - eye[0], 1.0 - eye[1] + c[1], c[2] + 0.4 - eye[2]];
+  return Math.hypot(...to) < 3.0 && dot(norm(to), fwd) > 0.4;
+}
 function findCase() {
   const eye = player.eye(), fwd = player.forward();
   let best = null, bestDot = 0.55;
@@ -245,7 +348,8 @@ function updateHud(dt, fovRad) {
   hud.kills.textContent = stats.kills;
   hud.chunks.textContent = stats.chunks;
   hud.acc.textContent = stats.shots ? `${Math.round((stats.hits / stats.shots) * 100)}%` : '--';
-  hud.state.textContent = player.hanging ? 'HANG' : player.wallRunning ? 'WALL RUN' : player.mantle ? 'MANTLE' : player.vaulting ? 'VAULT' : player.sliding ? 'SLIDE' : player.crouching ? 'CROUCH' : player.sprinting ? 'SPRINT' : !player.grounded ? 'AIR' : '';
+  updateAbilityHud();
+  hud.state.textContent = player.grapple?.phase === 'pull' ? 'GRAPPLE' : player.dash ? 'DASH' : player.slam ? 'SLAM' : player.hanging ? 'HANG' : player.wallRunning ? 'WALL RUN' : player.mantle ? 'MANTLE' : player.vaulting ? 'VAULT' : player.sliding ? 'SLIDE' : player.crouching ? 'CROUCH' : player.sprinting ? 'SPRINT' : !player.grounded ? 'AIR' : '';
 
   // speed meter + slide-hop chain
   hud.speedBar.style.setProperty('--p', Math.min(player.hSpeed / 16, 1).toFixed(3));
@@ -280,7 +384,10 @@ function updateHud(dt, fovRad) {
   hud.cross.classList.toggle('shotgun', w.def.pellets > 1);
   hud.scope.style.opacity = w.scoped ? 1 : 0;
 
-  if (nearCase) {
+  if (nearBench && !nearCase) {
+    hud.prompt.innerHTML = '<kbd>E</kbd> WORKBENCH <span>ATTACHMENTS</span>';
+    hud.prompt.style.opacity = 1;
+  } else if (nearCase) {
     const d = nearCase.def;
     hud.prompt.innerHTML = `<kbd>E</kbd> ${weapon().def.id === d.id ? 'REFILL' : 'TAKE'} <b>${d.name}</b> <span>${d.type}</span>`;
     hud.prompt.style.opacity = 1;
@@ -340,13 +447,41 @@ document.addEventListener('pointerlockchange', () => {
     $('locknote').classList.add('hidden');
   } else if (locked) {
     locked = false;
-    setPlaying(false);
+    if (!bench.open) setPlaying(false);    // leaving lock to use the workbench isn't pausing
   }
 });
 addEventListener('keydown', (e) => {
+  if (bench.open) {
+    if (e.code === 'Escape' || e.code === 'KeyE') { e.preventDefault(); closeBench(); }
+    return;
+  }
   if (playing && !locked && (e.code === 'Escape' || e.code === 'KeyP')) setPlaying(false);
   else if (!playing && e.code === 'Enter') start();
 });
+
+// ---------- workbench ----------
+const bench = new Bench({
+  root: $('bench'),
+  getLoadout: (id) => loadouts[id] || {},
+  setLoadout: (id, lo) => applyLoadout(id, lo),
+  sounds,
+  onClose: () => closeBench(),
+});
+function openBench() {
+  bench.show(weapon().def.id);
+  document.body.classList.add('benching');
+  input.enabled = false;
+  input.reset();
+  document.body.classList.remove('playing');
+  sounds.cloth();
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+function closeBench() {
+  bench.hide();
+  document.body.classList.remove('benching');
+  sounds.cloth();
+  start();       // re-locks the mouse (this runs from a click/keypress, so the browser allows it)
+}
 let lastWheel = 0;
 addEventListener('wheel', () => {
   if (!playing || performance.now() - lastWheel < 250) return;
@@ -371,15 +506,16 @@ bindSlider('vol', 'volume', (v) => `${Math.round(v * 100)}%`, (v) => sounds.setV
 
 // ---------- keyboard aim / shoot, rebindable ----------
 const RESERVED = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ControlLeft', 'KeyC', 'KeyR', 'KeyE',
-  'KeyT', 'KeyQ', 'KeyX', 'Digit1', 'Digit2', 'Escape', 'KeyP', 'Enter'];
+  'KeyT', 'KeyX', 'Digit1', 'Digit2', 'Escape', 'KeyP', 'Enter'];
+const BINDS = { aimKey: 'bind-aim', fireKey: 'bind-fire', dashKey: 'bind-dash', grappleKey: 'bind-grapple', slamKey: 'bind-slam' };
 const keyName = (code) => code.replace(/^Key/, '').replace(/^Digit/, '').replace(/Left$|Right$/, (m) => ` ${m.toUpperCase()}`).toUpperCase();
 let rebinding = null;
 function refreshBindButtons() {
-  $('bind-aim').textContent = keyName(settings.aimKey);
-  $('bind-fire').textContent = keyName(settings.fireKey);
+  for (const [k, id] of Object.entries(BINDS)) $(id).textContent = keyName(settings[k]);
   $('aim-mode').textContent = settings.aimMode === 'toggle' ? 'TOGGLE' : 'HOLD';
   document.querySelectorAll('.keyhint-aim').forEach((el) => { el.textContent = keyName(settings.aimKey); });
   document.querySelectorAll('.keyhint-fire').forEach((el) => { el.textContent = keyName(settings.fireKey); });
+  for (const k of ['dash', 'grapple', 'slam']) document.querySelectorAll(`.keyhint-${k}`).forEach((el) => { el.textContent = keyName(settings[`${k}Key`]); });
 }
 function startRebind(which, btn) {
   rebinding = { which, btn };
@@ -387,8 +523,7 @@ function startRebind(which, btn) {
   btn.classList.add('waiting');
   $('bindnote').textContent = 'Esc to cancel';
 }
-$('bind-aim').addEventListener('click', (e) => startRebind('aimKey', e.currentTarget));
-$('bind-fire').addEventListener('click', (e) => startRebind('fireKey', e.currentTarget));
+for (const [k, id] of Object.entries(BINDS)) $(id).addEventListener('click', (e) => startRebind(k, e.currentTarget));
 $('aim-mode').addEventListener('click', () => {
   settings.aimMode = settings.aimMode === 'toggle' ? 'hold' : 'toggle';
   applyBinds(); saveSettings(); refreshBindButtons();
@@ -401,18 +536,65 @@ addEventListener('keydown', (e) => {
   btn.classList.remove('waiting');
   rebinding = null;
   if (e.code !== 'Escape') {
-    const other = which === 'aimKey' ? settings.fireKey : settings.aimKey;
-    if (RESERVED.includes(e.code) || e.code === other) {
+    const taken = Object.keys(BINDS).some((k) => k !== which && settings[k] === e.code);
+    if (RESERVED.includes(e.code) || taken) {
       $('bindnote').textContent = `${keyName(e.code)} is already used — pick another key`;
     } else {
       settings[which] = e.code;
       $('bindnote').textContent = '';
-      applyBinds(); saveSettings();
+      applyBinds(); saveSettings(); refreshAbilityKeys();
     }
   } else $('bindnote').textContent = '';
   refreshBindButtons();
 }, true);
 refreshBindButtons();
+
+// ---------- grapple rope + laser sight ----------
+const previewM = mat4();
+const beamPool = Array.from({ length: 4 }, () => mat4());
+function beam(i, a, b, thick, color, emissive, alpha) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], l = Math.hypot(...d);
+  if (l < 0.01) return null;
+  const s = [thick, thick, l];
+  compose(beamPool[i], [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], anglesFor(d), s);
+  return { model: beamPool[i], scale: s, color, emissive, alpha };
+}
+function worldBeams(w) {
+  const out = [];
+  const g = player.grapple;
+  if (g && !bench.open) {
+    const hm = w.handModels[0];
+    const hand = viewToWorld([hm[12], hm[13], hm[14]]);
+    let tip;
+    if (g.phase === 'fire') {
+      const k = Math.min(g.t / g.travel, 1);
+      tip = hand.map((c, i) => c + (g.point[i] - c) * k);
+    } else if (g.phase === 'pull') tip = g.point;
+    else {
+      const k = g.t < 0.16 ? g.t / 0.16 : Math.max(0, 1 - (g.t - 0.16) / 0.16);
+      tip = g.from.map((c, i) => c + g.dir[i] * 45 * k);
+    }
+    const r = beam(0, hand, tip, 0.018, [0.12, 0.12, 0.13], 0, 1);
+    if (r) out.push(r);
+    const hook = beam(1, tip.map((c, i) => c - (tip[i] - hand[i]) * 0.0), tip.map((c, i) => c + (tip[i] - hand[i]) / (Math.hypot(...tip.map((v, j) => v - hand[j])) || 1) * 0.12), 0.07, [0.95, 0.15, 0.1], 0.4, 1);
+    if (hook) out.push(hook);
+  }
+  const lp = !bench.open && !w.scoped ? w.laserPoint() : null;
+  if (lp) {
+    const start = viewToWorld(lp);
+    const hit = world.raycast(camEye, camFwd, 120);
+    const end = hit ? hit.point : camEye.map((c, i) => c + camFwd[i] * 120);
+    const r = beam(2, start, end, 0.006, [1, 0.12, 0.08], 1, 0.35);
+    if (r) out.push(r);
+    if (hit) {
+      const sz = 0.025 + hit.t * 0.0012;
+      const dm = beamPool[3];
+      compose(dm, hit.point.map((c, i) => c + hit.normal[i] * 0.01), [0, 0, 0], [sz, sz, sz]);
+      out.push({ model: dm, scale: [sz, sz, sz], color: [1, 0.15, 0.1], emissive: 1, alpha: 0.9 });
+    }
+  }
+  return out;
+}
 
 // ---------- main loop ----------
 const proj = mat4(), view = mat4(), vmProj = mat4(), identity = mat4();
@@ -424,18 +606,20 @@ function frame(now) {
   last = now;
   time += dt;
 
-  if (playing) {
+  if (playing && !bench.open) {
     let w = weapon();
     const sens = settings.sens * 0.0022 * (1 - w.adsT * (1 - w.def.adsZoom) * 0.9);
     player.look(input.dx, input.dy, sens);
     if (input.hit('KeyT')) resetRange();
     if (input.hit('Digit1')) switchTo(0);
     if (input.hit('Digit2')) switchTo(1);
-    if (input.hit('KeyQ')) switchTo(lastSlot);
     nearCase = findCase();
+    nearBench = findBench();
     if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
+    else if (nearBench && input.hit('KeyE')) openBench();
     w = weapon();
-    player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav });
+    const act = { dash: input.hit(settings.dashKey), grapple: input.hit(settings.grappleKey), slam: input.hit(settings.slamKey) };
+    player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     course.update(dt, player, input);
     handlePlayerEvents();
     updateCamera();
@@ -448,8 +632,8 @@ function frame(now) {
   // ---- render ----
   const w = weapon();
   const aspect = renderer.resize();
-  const targetKick = player.wallRunning ? 8 : player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
-  fovKick += (targetKick - fovKick) * damp(6, dt);
+  const targetKick = player.dash ? 16 : player.grapple?.phase === 'pull' ? 10 : player.slam?.phase === 'fall' ? 7 : player.wallRunning ? 8 : player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
+  fovKick += (targetKick - fovKick) * damp(player.dash ? 18 : 6, dt);
   const hfov = (settings.fov + fovKick) * (1 - w.adsT * (1 - w.def.adsZoom)) * Math.PI / 180;
   const vfov = 2 * Math.atan(Math.tan(Math.min(hfov, 2.9) / 2) / aspect);
   perspective(proj, vfov, aspect, 0.05, 500);
@@ -458,6 +642,9 @@ function frame(now) {
   mul(vp, proj, view);
 
   const caseParts = cases.flatMap((c) => c.parts(time));
+  // viewmodel first: the grapple rope and laser start from the hands / gun
+  const vmParts = bench.open ? [] : w.viewmodel(player, time);
+  const beams = worldBeams(w);
 
   // shadow pass
   // keep the sun's shadow map centred on the player so the annex gets shadows too
@@ -479,6 +666,7 @@ function frame(now) {
   renderer.setBlend(true);
   for (const b of world.boxes) if (b.alpha < 1) renderer.drawBox(b);
   effects.drawTransparent(renderer);
+  for (const b of beams) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
   renderer.setBlend(false);
 
   // viewmodel
@@ -487,7 +675,13 @@ function frame(now) {
   const vmView = mat4();
   lookDir(vmView, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   renderer.setCamera(vmProj, vmView, 0, [0, 0, 0], false);
-  for (const p of w.viewmodel(player, time)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  if (bench.open) {
+    // gun preview on the right of the workbench menu
+    compose(previewM, [0.5, -0.02, -1.25], [0.12, bench.rotY + time * 0.25, 0], [1, 1, 1]);
+    for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  } else {
+    for (const p of vmParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  }
 
   updateHud(dt, vfov);
   input.endFrame();
@@ -496,4 +690,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
-window.game = { course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+window.game = { bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

@@ -21,7 +21,8 @@ export default {
 
   build(world) {
     const add = (b) => world.add(b);
-    const deco = (min, max, o = {}) => add(makeBox(min, max, { grid: false, ...o }));
+    // decorative trim/floor markings don't collide unless asked to
+    const deco = (min, max, o = {}) => add(makeBox(min, max, { grid: false, solid: false, ...o }));
     const S = 32; // half size of the arena
     const H = 9;
 
@@ -51,7 +52,7 @@ export default {
           deco(min, max, o);
         }
       };
-      band(0, 0.45, 0.12, { color: CHAR });
+      band(0, 0.45, 0.12, { color: CHAR, solid: true });
       band(3.4, 3.5, 0.06, { color: RED, emissive: 0.9, solid: false, noShadow: true });
       band(H - 0.35, H, 0.25, { color: CHAR });
       // pilasters every 8m
@@ -150,6 +151,7 @@ export default {
 
   // weapon cases along the south wall (the slot number is shown above each)
   cases: { z: 31.15, xs: [-12.5, -7.5, -2.5, 2.5, 7.5, 12.5] },
+  bench: { pos: [-23.5, 0, 30.5] },        // gunsmith workbench (front edge), against the south wall
 
   dummies: [
     { pos: [-6, 0, -8] },
@@ -201,7 +203,7 @@ function buildParkour(add, deco, H) {
   box([S, 0, AZ1], [AX1 + 1, H, AZ1 + 1], { color: WALL });
   box([AX1, 0, AZ0], [AX1 + 1, H, AZ1], { color: WALL });
   // trim: skirting + red light strip on the inner faces
-  for (const [y0, y1, d, o] of [[0, 0.45, 0.12, { color: CHAR }], [3.4, 3.5, 0.06, { color: RED, emissive: 0.9, solid: false, noShadow: true }]]) {
+  for (const [y0, y1, d, o] of [[0, 0.45, 0.12, { color: CHAR, solid: true }], [3.4, 3.5, 0.06, { color: RED, emissive: 0.9, solid: false, noShadow: true }]]) {
     deco([S + 1, y0, AZ0], [AX1, y1, AZ0 + d], o);
     deco([S + 1, y0, AZ1 - d], [AX1, y1, AZ1], o);
     deco([AX1 - d, y0, AZ0], [AX1, y1, AZ1], o);

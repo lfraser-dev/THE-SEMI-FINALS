@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.4: Test Range + Parkour Course.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.5: Test Range + Parkour Course, with attachments and abilities.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -31,8 +31,11 @@ Then open http://localhost:8000.
 | Left mouse / F | Shoot |
 | Right mouse / V | Aim down sights (the sniper scopes in) |
 | R | Reload |
-| E | Take a gun from a case |
-| 1 / 2 / Q / scroll | Switch weapon |
+| E | Take a gun from a case, or use the workbench |
+| Q | Dash (2 charges, works in the air) |
+| G | Grapple (works in the air; press again or jump to let go) |
+| Z | Ground slam (dive and send out a shockwave; leaps first if you're on the ground) |
+| 1 / 2 / scroll | Switch weapon |
 | T | Reset the range |
 | X | Restart the parkour course |
 | Esc | Menu / settings |
@@ -52,7 +55,30 @@ Six guns sit in glass cases on the wall behind the spawn. You carry two at a tim
 
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.
 
-Aim and shoot keys can be changed in the menu (Settings → Aim key / Shoot key), and aim can be set to hold or toggle. This helps on trackpads.
+Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Settings, and aim can be set to hold or toggle. This helps on trackpads.
+
+## Abilities
+
+| Ability | Key | Cooldown | Notes |
+| --- | --- | --- | --- |
+| Dash | Q | 2 charges, 2.2 s each | A burst in the direction you're holding. You keep the speed afterwards, and a mid-air dash catches your fall. |
+| Grapple | G | 4.5 s | A hook up to 45 m away reels you in. The crosshair turns into a ring when a target is in range. Jump to let go with a boost. |
+| Ground slam | Z | 7 s | Dives into the ground. The shockwave damages dummies and breaks destructible wall chunks, and it hits harder the further you fall. |
+
+## Workbench and attachments
+
+The workbench sits in the south-west corner by the weapon wall. Press E there to open it, pick a gun, and click attachments on or off. The stat bars show the change, with a marker for the factory value, and hovering an option previews it. Loadouts are saved per gun.
+
+| Slot | Options |
+| --- | --- |
+| Optic | Mini red dot, holo sight, 2× prism, 4× scope (with overlay) |
+| Muzzle | Suppressor (quiet, no flash), compensator, muzzle brake, full choke (shotgun) |
+| Barrel | Long barrel (more range), CQB barrel (better handling) |
+| Underbarrel | Vertical grip, angled grip, laser sight (visible beam, tighter hip fire) |
+| Magazine | Extended mag, fast mag, drum mag (AR / SMG) |
+| Stock | Light, heavy, or no stock |
+
+Not every gun takes every slot. For example, the pistol has no barrel or stock options. Damage now falls off past each gun's range.
 
 ## Parkour course
 
@@ -66,6 +92,10 @@ Go through the doorway in the east wall. Run through the red start gate to start
 6. Wall run the last wall and go through the white finish gate.
 
 Touching red floor sends you back to your last checkpoint. There are four checkpoints, each showing your split against your best. Your best time is saved in the browser.
+
+## Look
+
+Lighting is done in linear space with ACES tone mapping. It has sun, sky and ground-bounce light, specular highlights (dark metal is glossier than painted concrete), concrete-like surface grain, soft 12-tap shadows, a sky gradient with a sun disc, and a light vignette. Gloves and sleeves are now tactical colours.
 
 ## Movement feel
 
@@ -93,6 +123,8 @@ src/world.js          box list, collision queries, raycasts
 src/player.js         movement, vault/mantle/ledge grab/wall run, collision, camera springs
 src/course.js         parkour time trial: gates, checkpoints, hazards, best times
 src/weapon.js         gun logic, reload animations, first-person viewmodel + hands
+src/attachments.js    attachment list, per-gun mounts, buildDef() that applies stats + model parts
+src/bench.js          workbench menu UI
 src/weapons.js        weapon stats + box models (add new guns here)
 src/effects.js        debris, tracers, decals
 src/props.js          dummies, destructible walls, weapon cases, 7-seg signs
