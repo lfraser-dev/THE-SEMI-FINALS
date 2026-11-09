@@ -30,9 +30,10 @@ in vec3 vWorld, vNormal, vLocal, vLocalN;
 in vec4 vLightPos;
 in float vViewZ;
 uniform vec3 uColor, uScale, uFogColor, uSunDir, uCamPos, uSkyTop;
-uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky;
+uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky, uViewUnder;
 uniform sampler2DShadow uShadowMap;
 out vec4 outColor;
+const float UNDER_Y = -1.2;     // below this, you're in the underground arena: lamp light, no sun
 
 // ---- lighting is done in linear space, then ACES tone-mapped back to sRGB ----
 vec3 toLin(vec3 c) { return pow(c, vec3(2.2)); }
@@ -129,15 +130,27 @@ void main() {
 
   vec3 albedo = toLin(base) * (world ? 0.82 : 1.0);   // real-world whites are greyer than paper
   vec3 V = normalize(uCamPos - vWorld);
-  vec3 L = uSunDir;
+  bool indoor = world ? vWorld.y < UNDER_Y : uViewUnder > 0.5;
+  vec3 L = indoor ? normalize(vec3(0.25, 1.0, 0.2)) : uSunDir;
   float ndl = max(dot(n, L), 0.0);
-  float sh = (world && ndl > 0.0) ? shadow() : 1.0;
+  float sh = (world && !indoor && ndl > 0.0) ? shadow() : 1.0;
 
   // sun + sky (hemisphere) + bounce light from the floor
   vec3 sunCol = vec3(1.0, 0.95, 0.86) * 2.25;
   vec3 skyCol = mix(vec3(0.3), toLin(uSkyTop) * 0.6, 0.45) + vec3(0.03);
   vec3 groundCol = vec3(0.2, 0.19, 0.18);
   vec3 hemi = mix(groundCol, skyCol, n.y * 0.5 + 0.5);
+  float pool = 0.6;
+  if (indoor) {
+    // ceiling lamps every 8 m (at x, z = 8k + 4): warm pools of light on the floor
+    vec2 g = (fract(vWorld.xz / 8.0) - 0.5) * 8.0;
+    float r2 = dot(g * vec2(0.75, 1.5), g * vec2(0.75, 1.5));
+    pool = world ? exp(-r2 * 0.05) : 0.55;
+    sunCol = vec3(1.0, 0.88, 0.74) * (0.35 + 1.9 * pool);
+    skyCol = vec3(0.12, 0.13, 0.16);
+    hemi = mix(vec3(0.035, 0.035, 0.045), vec3(0.13, 0.14, 0.17), n.y * 0.5 + 0.5);
+    hemi += vec3(0.2, 0.17, 0.13) * (1.0 - abs(n.y)) * (0.22 + pool * 0.7);   // light washing down the walls
+  }
 
   // glossier when dark (metal, rubber), rougher when light (paint, concrete)
   float rough = mix(0.32, 0.82, smoothstep(0.02, 0.45, lum0));
@@ -158,6 +171,10 @@ void main() {
   float f = 1.0 - exp(-pow(uFogDensity * vViewZ, 2.0));
   vec3 vd = -V;
   vec3 fogCol = uFogColor + vec3(0.06, 0.04, 0.0) * pow(max(dot(vd, L), 0.0), 8.0);
+  if (indoor) {
+    fogCol = vec3(0.045, 0.05, 0.065);
+    f = 1.0 - exp(-pow(uFogDensity * 1.7 * vViewZ, 2.0));
+  }
   display = mix(display, fogCol, f);
   outColor = vec4(display, uAlpha);
 }`;
@@ -215,7 +232,7 @@ export class Renderer {
     this.shadowProg = compile(gl, SHADOW_VERT, SHADOW_FRAG);
     this.u = {};
     for (const name of ['uProj', 'uView', 'uModel', 'uScale', 'uColor', 'uFogColor', 'uSunDir', 'uCamPos',
-      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap']) {
+      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder']) {
       this.u[name] = gl.getUniformLocation(this.prog, name);
     }
     this.su = {
@@ -326,6 +343,9 @@ export class Renderer {
   }
 
   clearDepth() { this.gl.clear(this.gl.DEPTH_BUFFER_BIT); }
+
+  // the gun is lit by lamps instead of the sun when you're underground
+  setUnder(on) { this.gl.uniform1f(this.u.uViewUnder, on ? 1 : 0); }
 
   setCamera(proj, view, fogDensity, camPos = [0, 0, 0], shadows = true) {
     const gl = this.gl;

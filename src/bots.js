@@ -1,32 +1,41 @@
 // Combat bots for the deck: drop-in spawn, strafe / cover AI, burst fire with accuracy that
 // drops when you move fast, and a wave manager.
 import { makeBox, moveBoxTo } from './world.js';
-import { compose, mat4, norm, clamp } from './math.js';
+import { compose, mat4, norm, clamp, anglesFor } from './math.js';
 
 const DARK = [0.16, 0.17, 0.19];
 const BLACK = [0.08, 0.08, 0.09];
 
+// all bots are red like the range dummies; types differ in build and behaviour
+const RED = [0.92, 0.1, 0.08], RED_HEAD = [1, 0.22, 0.16], RED_DARK = [0.55, 0.06, 0.05];
+const GUN = [0.1, 0.1, 0.11];
 const TYPES = {
-  rifle: { hp: 100, speed: 4.2, range: [11, 19], body: [0.55, 0.57, 0.6], visor: [1, 0.55, 0.1], rpm: 560, burst: [3, 5], dmg: 6, acc: 1, pause: [0.7, 1.5] },
-  rusher: { hp: 80, speed: 5.6, range: [4, 8], body: [0.85, 0.75, 0.25], visor: [1, 0.95, 0.3], rpm: 900, burst: [5, 8], dmg: 5, acc: 0.85, pause: [0.5, 1.0] },
-  heavy: { hp: 240, speed: 3.0, range: [9, 15], body: [0.45, 0.16, 0.14], visor: [1, 0.2, 0.15], rpm: 720, burst: [8, 12], dmg: 6, acc: 0.9, pause: [1.0, 1.8], scale: 1.15 },
+  rifle: { hp: 100, speed: 4.2, range: [11, 19], rpm: 560, burst: [3, 5], dmg: 6, acc: 1, pause: [0.7, 1.5], build: 1 },
+  rusher: { hp: 80, speed: 5.6, range: [4, 8], rpm: 900, burst: [5, 8], dmg: 5, acc: 0.85, pause: [0.5, 1.0], build: 0.88 },
+  heavy: { hp: 240, speed: 3.0, range: [9, 15], rpm: 720, burst: [8, 12], dmg: 6, acc: 0.9, pause: [1.0, 1.8], scale: 1.15, build: 1.3 },
 };
-
-// model parts in bot space: feet at y=0, facing -z
-const PARTS = [
-  { c: [-0.12, 0.42, 0], s: [0.17, 0.84, 0.19], col: DARK, leg: -1 },
-  { c: [0.12, 0.42, 0], s: [0.17, 0.84, 0.19], col: DARK, leg: 1 },
-  { c: [0, 0.9, 0], s: [0.42, 0.18, 0.26], col: DARK },
-  { c: [0, 1.23, 0], s: [0.5, 0.52, 0.3], col: 'body' },
-  { c: [0, 1.27, -0.16], s: [0.38, 0.3, 0.04], col: 'visor', em: 0.25 },
-  { c: [0, 1.22, 0.19], s: [0.38, 0.42, 0.12], col: DARK },
-  { c: [0, 1.64, 0], s: [0.27, 0.29, 0.29], col: 'body', head: true },
-  { c: [0, 1.66, -0.15], s: [0.21, 0.07, 0.02], col: 'visor', em: 1 },
-  { c: [-0.28, 1.25, -0.16], s: [0.12, 0.12, 0.42], col: DARK },
-  { c: [0.28, 1.22, -0.12], s: [0.12, 0.12, 0.36], col: DARK },
-  { c: [0.12, 1.27, -0.44], s: [0.07, 0.1, 0.58], col: BLACK, gun: true },
-];
 const MUZZLE = [0.12, 1.29, -0.76];
+const N_MODELS = 28;
+
+// two-bone IK: joint between a and b (segment lengths l1, l2), bent toward `hint`
+function ik(a, b, l1, l2, hint) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  let len = Math.hypot(...d);
+  const u = d.map((v) => v / (len || 1));
+  len = Math.min(len, l1 + l2 - 1e-3);
+  const x = (l1 * l1 - l2 * l2 + len * len) / (2 * len);
+  const h = Math.sqrt(Math.max(l1 * l1 - x * x, 0));
+  // hint direction made perpendicular to the bone
+  const hd = hint[0] * u[0] + hint[1] * u[1] + hint[2] * u[2];
+  let p = [hint[0] - u[0] * hd, hint[1] - u[1] * hd, hint[2] - u[2] * hd];
+  const pl = Math.hypot(...p) || 1;
+  p = p.map((v) => v / pl);
+  return [a[0] + u[0] * x + p[0] * h, a[1] + u[1] * x + p[1] * h, a[2] + u[2] * x + p[2] * h];
+}
+const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+// tilt a bot-space offset forward by `a` (top goes toward -z)
+const lean = (v, a) => [v[0], v[1] * Math.cos(a) + v[2] * Math.sin(a), -v[1] * Math.sin(a) + v[2] * Math.cos(a)];
 
 let nextId = 1;
 
@@ -59,7 +68,11 @@ export class Bot {
     this.muzzleT = 0;
     this.stuck = 0;
     this.strafe = Math.random() < 0.5 ? 1 : -1;
-    this.models = PARTS.map(() => mat4());
+    this.models = Array.from({ length: N_MODELS }, () => mat4());
+    // animation state
+    this.recoil = 0; this.flinch = 0; this.flinchTwist = 0; this.landK = 0;
+    this.aimPitch = 0; this.breath = Math.random() * 6; this.lastPos = [...pos];
+    this.localVel = [0, 0]; this.dying = -1; this.fallSign = 1;
     const s = this.sc;
     this.body = world.add(makeBox([0, 0, 0], [0.62 * s, 1.47 * s, 0.62 * s], { tag: 'bot', ref: this, hidden: true, noShadow: true }));
     this.headBox = world.add(makeBox([0, 0, 0], [0.32 * s, 0.32 * s, 0.32 * s], { tag: 'bot', ref: this, hidden: true, noShadow: true }));
@@ -84,14 +97,25 @@ export class Bot {
   }
 
   eye() { return this.toWorld([0, 1.66, -0.1]); }
-  muzzle() { return this.toWorld(MUZZLE); }
+  muzzle() { return this.muzzlePt || this.toWorld(MUZZLE); }
 
   damage(amount, dir) {
     if (!this.alive || !this.visible) return false;
     this.hp -= amount;
     this.flash = 0.08;
     if (this.state === 'fight') this.think = Math.min(this.think, 0.15);   // react: move
-    if (this.hp <= 0) { this.alive = false; this.killDir = dir; return true; }
+    this.flinch = 1;
+    this.flinchTwist = (Math.random() - 0.5) * 0.6;
+    if (this.hp <= 0) {
+      this.alive = false;
+      this.killDir = dir;
+      this.dying = 0;
+      // fall away from the shot
+      const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+      const lz = sy * (dir?.[0] || 0) + cy * (dir?.[2] || 0);
+      this.fallSign = lz >= 0 ? 1 : -1;
+      return true;
+    }
     return false;
   }
 
@@ -121,13 +145,24 @@ export class Bot {
   update(dt, g) {
     this.flash -= dt;
     this.muzzleT -= dt;
+    this.recoil *= Math.exp(-16 * dt);
+    this.flinch *= Math.exp(-7 * dt);
+    this.landK *= Math.exp(-3.5 * dt);
+    this.breath += dt;
+    // movement in bot space, for leg swing direction
+    const vx = (this.pos[0] - this.lastPos[0]) / Math.max(dt, 1e-4), vz = (this.pos[2] - this.lastPos[2]) / Math.max(dt, 1e-4);
+    this.lastPos = [...this.pos];
+    const cy0 = Math.cos(this.yaw), sy0 = Math.sin(this.yaw);
+    const lx = cy0 * vx - sy0 * vz, lz = sy0 * vx + cy0 * vz;
+    this.localVel[0] += (lx - this.localVel[0]) * Math.min(1, dt * 10);
+    this.localVel[1] += (lz - this.localVel[1]) * Math.min(1, dt * 10);
     if (this.state === 'drop') {
       this.dropT += dt;
       const t = this.dropT - this.dropDelay;
       if (t < 0) return;
       const fall = clamp(t / 0.55, 0, 1);
       this.dropY = (1 - fall * fall) * 10;
-      if (fall >= 1 && !this.landed) { this.landed = true; g.onLand(this); }
+      if (fall >= 1 && !this.landed) { this.landed = true; this.landK = 1; g.onLand(this); }
       this.place();
       if (fall >= 1) this.state = 'wait';
       return;
@@ -142,6 +177,8 @@ export class Bot {
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
     this.yaw += dy * Math.min(1, dt * 8);
+    const pitchWant = Math.atan2(pe[1] - (this.pos[1] + 1.4 * this.sc), Math.max(dist, 0.5));
+    this.aimPitch += (pitchWant - this.aimPitch) * Math.min(1, dt * 6);
     if (this.state !== 'fight' || !g.active) { this.place(); return; }
 
     // line of sight, refreshed a few times a second
@@ -228,6 +265,7 @@ export class Bot {
     const pl = g.player;
     const from = this.muzzle();
     this.muzzleT = 0.05;
+    this.recoil = 1;
     // harder to hit you when you're fast, sliding, in the air or far away
     const hs = Math.hypot(pl.vel[0], pl.vel[2]);
     let chance = (0.5 - Math.max(0, dist - 8) * 0.018) * this.t.acc * g.accMul;
@@ -253,25 +291,95 @@ export class Bot {
     g.shot(this, from, end, dist);
   }
 
-  // drawable parts (with walk cycle, hit flash, drop-in offset)
+  // ---------------------------------------------------------------- articulated model
+  // Everything is posed in bot space (feet at origin, facing -z) then moved into the world.
   parts() {
-    if (!this.visible) return [];
+    const dyingT = this.dying;
+    if (!this.alive && (dyingT < 0 || dyingT > 0.75)) return [];
+    if (this.alive && !this.visible) return [];
     const out = [];
-    const t = this.t, s = this.sc, cy = this.yaw;
-    const sw = Math.sin(this.walk) * 0.5 * this.moving;
+    const t = this.t, s = this.sc, b = t.build;
+    const g = this.moving, w = this.walk;
+    const lv = this.localVel, ls = Math.hypot(lv[0], lv[1]);
+    const md = ls > 0.2 ? [lv[0] / ls, lv[1] / ls] : [0, -1];        // stride direction (bot space)
+    const fl = this.flash > 0 ? 0.85 : 0;
+    const col = (c) => (fl ? c.map((v) => v + (1 - v) * fl) : c);
+    const em = fl ? 0.9 : 0.12;
+    // whole-body fall when dying
+    const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.45 : 0, fs = this.fallSign;
+    const fall = (v) => fa ? [v[0], v[1] * Math.cos(fa) - v[2] * fs * Math.sin(fa), v[2] * Math.cos(fa) + v[1] * fs * Math.sin(fa)] : v;
     const lift = this.dropY || 0;
-    const fl = this.flash > 0 ? 0.8 : 0;
-    PARTS.forEach((p, i) => {
-      let c = [...p.c], rx = 0;
-      if (p.leg) { rx = sw * p.leg; c[2] += Math.sin(this.walk) * 0.1 * p.leg * this.moving; }
-      const w = this.toWorld(c);
-      w[1] += lift + (p.leg ? 0 : Math.abs(Math.cos(this.walk)) * 0.03 * this.moving);
-      const sc = p.s.map((v) => v * s);
-      compose(this.models[i], w, [rx, cy, 0], sc);
-      let col = p.col === 'body' ? t.body : p.col === 'visor' ? t.visor : p.col;
-      if (fl) col = col.map((v) => v + (1 - v) * fl);
-      out.push({ model: this.models[i], scale: sc, color: col, emissive: fl ? 0.9 : (p.em || 0) });
-    });
+    const W = (v) => { const p = this.toWorld(fall(v)); p[1] += lift; return p; };
+    let mi = 0;
+    const boxAlong = (a, c, thick, color) => {                       // limb between two bot-space points
+      const A = W(a), C = W(c);
+      const d = [C[0] - A[0], C[1] - A[1], C[2] - A[2]], L = Math.hypot(...d);
+      const sc = [thick * s, thick * s, L + thick * s * 0.6];
+      compose(this.models[mi], mid(A, C), anglesFor(d), sc);
+      out.push({ model: this.models[mi++], scale: sc, color: col(color), emissive: em });
+    };
+    const boxAt = (c, size, rx, color, e = em) => {                   // block at a bot-space point, pitched by rx
+      const sc = size.map((v) => v * s);
+      compose(this.models[mi], W(c), [rx + (fa ? fs * fa : 0), this.yaw, 0], sc);
+      out.push({ model: this.models[mi++], scale: sc, color: col(color), emissive: e });
+    };
+
+    // --- pose parameters
+    const crouch = this.landK * 0.28 + (dyingT >= 0 ? Math.min(1, dyingT / 0.5) * 0.35 : 0);
+    const bob = -Math.abs(Math.sin(w)) * 0.06 * g;
+    const breathe = Math.sin(this.breath * 2.1) * 0.012 * (1 - g);
+    const pelvis = [0, 0.95 + bob - crouch, 0];
+    const leanF = 0.12 * g + (this.type === 'rusher' ? 0.12 * g : 0) - this.flinch * 0.35 - this.recoil * 0.05 + this.landK * 0.2;
+    const twist = Math.sin(w) * 0.12 * g + this.flinch * this.flinchTwist;
+    const up = (v) => add3(pelvis, lean([v[0] * Math.cos(twist) + v[2] * Math.sin(twist), v[1], -v[0] * Math.sin(twist) + v[2] * Math.cos(twist)], leanF));
+
+    // --- legs: swing along the stride direction, feet lift on the way forward, knees bend forward
+    const legL = 0.47;
+    for (const side of [-1, 1]) {
+      const ph = w + (side > 0 ? Math.PI : 0);
+      const swing = Math.sin(ph) * 0.42 * g;
+      const hip = add3(pelvis, [side * 0.12 * b, -0.04, 0]);
+      const footLift = Math.max(0, Math.cos(ph)) * 0.14 * g;
+      const foot = [hip[0] + md[0] * Math.sin(swing) * 0.8 + side * 0.03, footLift + 0.06, hip[2] + md[1] * Math.sin(swing) * 0.8];
+      const knee = ik(hip, foot, legL, legL, [0, 0.2, -1]);
+      boxAt(hip, [0.2 * b, 0.12, 0.22], 0, RED_DARK);
+      boxAlong(hip, knee, 0.17 * b, RED);
+      boxAlong(knee, foot, 0.14 * b, RED_DARK);
+      boxAt([foot[0], 0.05 + footLift * 0.5, foot[2] - 0.05], [0.15 * b, 0.1, 0.28], 0, RED_DARK);
+    }
+
+    // --- torso, head
+    const chest = up([0, 0.32 + breathe, 0]);
+    boxAt(add3(pelvis, [0, 0.05, 0]), [0.42 * b, 0.2, 0.26], -leanF * 0.4, RED_DARK);         // hips
+    boxAt(chest, [0.56 * b, 0.56, 0.32 * b], -leanF, RED);                                      // torso
+    boxAt(up([0, 0.36, -0.17 * b]), [0.36 * b, 0.32, 0.04], -leanF, RED_HEAD);                  // chest plate
+    if (this.type === 'heavy') {
+      boxAt(up([-0.34 * b, 0.55, 0]), [0.22, 0.12, 0.34], -leanF, RED_DARK);                   // shoulder armour
+      boxAt(up([0.34 * b, 0.55, 0]), [0.22, 0.12, 0.34], -leanF, RED_DARK);
+    }
+    const neck = up([0, 0.64, 0]);
+    const headC = add3(neck, [0, 0.16, 0]);
+    boxAt(headC, [0.3, 0.32, 0.3], this.aimPitch * 0.6 - leanF * 0.3, RED_HEAD);
+    boxAt(add3(headC, [0, 0.02, -0.155]), [0.22, 0.06, 0.02], this.aimPitch * 0.6 - leanF * 0.3, [0.12, 0.02, 0.02], fl ? 0.9 : 0.4); // visor slit
+
+    // --- gun held at the chest, aimed at you, kicking back when it fires
+    const cp = Math.cos(this.aimPitch), sp = Math.sin(this.aimPitch);
+    const gd = [0, sp, -cp];                                           // gun direction (bot space)
+    const gunC = add3(up([0.12 * b, 0.42, -0.3]), [0, this.recoil * 0.025, this.recoil * 0.07]);
+    boxAt(gunC, [0.07, 0.11, 0.6], this.aimPitch + this.recoil * 0.12, GUN, 0);
+    boxAt(add3(gunC, [0, -0.09, 0.08]), [0.05, 0.12, 0.08], this.aimPitch, GUN, 0);              // mag
+    const muz = add3(gunC, gd.map((v) => v * 0.33));
+    this.muzzlePt = W(muz);
+    const gripR = add3(gunC, [0, -0.05, 0.16]), gripL = add3(gunC, gd.map((v) => v * 0.18)).map((v, i) => v + (i === 1 ? -0.05 : 0));
+
+    // --- arms solved to the gun
+    for (const [side, hand] of [[-1, gripL], [1, gripR]]) {
+      const sh = up([side * 0.28 * b, 0.56, 0]);
+      const elbow = ik(sh, hand, 0.31, 0.3, [side * 0.8, -0.6, 0.2]);
+      boxAlong(sh, elbow, 0.12 * b, RED);
+      boxAlong(elbow, hand, 0.1 * b, RED_DARK);
+      boxAt(hand, [0.09, 0.09, 0.1], 0, RED_DARK);
+    }
     return out;
   }
 }
@@ -360,6 +468,11 @@ export class BotManager {
     for (const b of this.bots) {
       if (!b.alive) {
         if (!b.removed) { b.removed = true; b.remove(); g.onKill?.(b); }
+        if (b.dying >= 0) {
+          b.dying += dt;
+          b.flash -= dt;
+          if (b.dying > 0.75 && !b.shattered) { b.shattered = true; g.onShatter?.(b); }
+        }
         continue;
       }
       b.update(dt, g);
@@ -395,7 +508,7 @@ export class BotManager {
     const out = [];
     for (const b of this.bots) {
       out.push(...b.parts());
-      if (b.visible && b.muzzleT > 0) {
+      if (b.alive && b.visible && b.muzzleT > 0) {
         const m = mat4(), p = b.muzzle(), s = [0.14, 0.14, 0.14];
         compose(m, p, [0, b.yaw, Math.random() * 3], s);
         out.push({ model: m, scale: s, color: [1, 0.85, 0.5], emissive: 1 });
@@ -414,7 +527,7 @@ export class BotManager {
       const a = t < 0 ? (t + 0.35) / 0.35 : t < 0.55 ? 1 : 1 - (t - 0.55) / 0.35;
       const m = mat4(), s = [0.9, 14, 0.9];
       compose(m, [b.pos[0], b.pos[1] + 7, b.pos[2]], [0, 0, 0], s);
-      out.push({ model: m, scale: s, color: b.t.visor, emissive: 1, alpha: 0.28 * a });
+      out.push({ model: m, scale: s, color: [1, 0.25, 0.15], emissive: 1, alpha: 0.28 * a });
     }
     return out;
   }

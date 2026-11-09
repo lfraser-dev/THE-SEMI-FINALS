@@ -110,11 +110,11 @@ export class Sounds {
   botLand() { this.burst(0.2, 260, 0.35); }
   botDie() { this.burst(0.4, 1400, 0.3, 'bandpass', 1); this.tone(700, 120, 0.35, 0.1, 'square'); }
   doors() { this.burst(0.9, 500, 0.2); this.burst(0.5, 3000, 0.05, 'highpass'); }
-  beep(hi = false) { this.tone(hi ? 1320 : 880, hi ? 1320 : 880, hi ? 0.4 : 0.12, 0.12, 'triangle'); }
+  beep(hi = false) { this.click(hi ? 2600 : 1900, hi ? 0.4 : 0.25, 5); }   // dry tick, no melody
   waveClear() { [0, 110, 220].forEach((d, i) => setTimeout(() => this.tone(523 * [1, 1.25, 1.5][i], 523 * [1, 1.25, 1.5][i], 0.25, 0.1, 'triangle'), d)); }
   whoosh() { this.burst(0.9, 900, 0.12, 'bandpass', 0.6); }
-  elevatorStart() { this.tone(140, 180, 0.6, 0.08, 'sawtooth'); this.click(1200, 0.2, 2); }
-  elevatorDing() { this.tone(1320, 1320, 0.3, 0.08, 'sine'); setTimeout(() => this.tone(990, 990, 0.4, 0.08, 'sine'), 160); }
+  elevatorStart() { this.click(900, 0.3, 2); this.burst(0.4, 400, 0.12); }      // gate latch + motor clunk
+  elevatorDing() { this.burst(0.25, 300, 0.25); this.click(1400, 0.25, 3); }   // car settles
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
   crumble() { this.burst(0.3, 700, 0.35); }

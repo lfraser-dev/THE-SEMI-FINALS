@@ -14,7 +14,9 @@ const HAZ = [0.95, 0.2, 0.14];
 const GZ0 = -29.9, GZ1 = -5;             // doorway (z range) in the east wall
 const AX1 = 73, AZ0 = -30, AZ1 = -5;      // annex extents (x from the arena wall at 32)
 const HALF_PI = Math.PI / 2;
-const DECK_Y = 12;                        // floor height of the combat deck
+const DECK_Y = -16;                       // floor height of the underground combat arena
+const CEIL_Y = DECK_Y + 13.5;              // underside of its ceiling (just below the range floor)
+const HATCH = { x0: -30, x1: -27, z0: -4.5, z1: -1.5 };   // elevator shaft opening in the range floor
 
 export default {
   name: 'TEST RANGE',
@@ -28,7 +30,11 @@ export default {
     const H = 9;
 
     // ---------------- floor + outer walls ----------------
-    add(makeBox([-S, -1, -S], [S, 0, S]));
+    // floor, with a hatch for the elevator shaft
+    add(makeBox([-S, -1, -S], [HATCH.x0, 0, S]));
+    add(makeBox([HATCH.x1, -1, -S], [S, 0, S]));
+    add(makeBox([HATCH.x0, -1, -S], [HATCH.x1, 0, HATCH.z0]));
+    add(makeBox([HATCH.x0, -1, HATCH.z1], [HATCH.x1, 0, S]));
     add(makeBox([-S - 1, 0, -S - 1], [S + 1, H, -S], { color: WALL }));
     add(makeBox([-S - 1, 0, S], [S + 1, H, S + 1], { color: WALL }));
     add(makeBox([-S - 1, 0, -S], [-S, H, S], { color: WALL }));
@@ -169,10 +175,10 @@ export default {
   ],
 
   // combat deck up the elevator (geometry in buildDeck below)
-  elevator: { x: -28.5, z: -3, w: 3, d: 3, top: DECK_Y },
+  elevator: { x: -28.5, z: -3, w: 3, d: 3, top: 0, bottom: DECK_Y },
   deck: {
     y: DECK_Y,
-    area: { min: [-82, DECK_Y - 2, -28], max: [-36, DECK_Y + 30, 22] },
+    area: { min: [-83, DECK_Y - 2, -29], max: [-26, CEIL_Y, 23] },
     respawn: { pos: [-39, DECK_Y, -3], yaw: HALF_PI },
     console: [-39.5, DECK_Y, -7.2],          // button pedestal (centre, floor)
     bounds: { min: [-81.3, -27.3], max: [-38.5, 21.3] },
@@ -180,8 +186,8 @@ export default {
     podX: -78,
     gateX: -74,
     cam: {                                    // cutscene camera shots
-      wide: { from: [-38, 23, 15], to: [-50, 20, 10], look: [-76, 13, -3] },
-      pods: { from: [-68.5, 27.5, 5], to: [-70.5, 26, -2], look: [-78.2, 12.2, -3.2] },     // high, looking down into the open pods
+      wide: { from: [-39, DECK_Y + 11.5, 16], to: [-50, DECK_Y + 9.5, 10], look: [-76, DECK_Y + 1, -3] },
+      pods: { from: [-69.5, DECK_Y + 12.2, 5], to: [-71, DECK_Y + 11.6, -2], look: [-78.2, DECK_Y + 0.2, -3.2] },   // high, looking down into the open pods
     },
   },
 
@@ -284,29 +290,45 @@ function buildDeck(add, deco) {
   const Y = DECK_Y;
   const box = (min, max, o = {}) => add(makeBox(min, max, o));
   const STEEL = [0.34, 0.35, 0.38];
-  // floor slab + supports reaching down into the fog
-  box([-82, Y - 1, -28], [-36, Y, 22]);
-  box([-82, Y - 1.6, -28], [-36, Y - 1, 22], { color: CHAR, grid: false });
-  for (const x of [-78, -59, -40]) for (const z of [-24, -3, 18]) add(boxAt(x, -18, z, 2.2, 29.4, 2.2, { color: CHAR, grid: false }));
-  // perimeter walls (good for wall running), with a gap in the east wall for the bridge
-  const wallH = 6;
+  const CONC = [0.62, 0.62, 0.64];
+  // floor slab and ceiling (this whole arena is underground, below the range)
+  box([-83, Y - 1, -29], [-35, Y, 23]);
+  box([-83, CEIL_Y, -29], [-35, CEIL_Y + 0.9, 23], { color: CONC, grid: false });
+  // ceiling lamps: their light pools are done in the shader (one every 8 m)
+  for (const x of [-76, -68, -60, -52, -44]) for (const z of [-20, -12, -4, 4, 12, 20]) {
+    box([x - 1.7, CEIL_Y - 0.18, z - 0.4], [x + 1.7, CEIL_Y, z + 0.4], { color: [0.2, 0.21, 0.23], grid: false, solid: false });
+    box([x - 1.5, CEIL_Y - 0.2, z - 0.25], [x + 1.5, CEIL_Y - 0.18, z + 0.25], { color: [1, 0.95, 0.85], emissive: 1, grid: false, solid: false, noShadow: true });
+  }
+  // ceiling beams
+  for (const x of [-72, -56, -40]) box([x - 0.4, CEIL_Y - 0.7, -28], [x + 0.4, CEIL_Y, 22], { color: CHAR, grid: false, solid: false });
+  // perimeter walls up to the ceiling (good for wall running), with a gap in the east wall for the tunnel
+  const wallH = CEIL_Y - Y;
   box([-83, Y, -29], [-35, Y + wallH, -28], { color: WALL });
   box([-83, Y, 22], [-35, Y + wallH, 23], { color: WALL });
   box([-83, Y, -28], [-82, Y + wallH, 22], { color: WALL });
   box([-37, Y, -28], [-36, Y + wallH, -4.5], { color: WALL });
   box([-37, Y, -1.5], [-36, Y + wallH, 22], { color: WALL });
-  box([-37, Y + 3.2, -4.5], [-36, Y + wallH, -1.5], { color: WALL });   // header over the entrance
+  box([-37, Y + 4, -4.5], [-36, Y + wallH, -1.5], { color: WALL });   // header over the entrance
   for (const [y0, y1, o] of [[0, 0.4, { color: CHAR, solid: true }], [3.4, 3.5, { color: RED, emissive: 0.9, noShadow: true }], [wallH - 0.3, wallH, { color: CHAR }]]) {
     deco([-82, Y + y0, -28], [-37, Y + y1, -27.88], o);
     deco([-82, Y + y0, 21.88], [-37, Y + y1, 22], o);
     deco([-82, Y + y0, -28], [-81.88, Y + y1, 22], o);
   }
-  // bridge from the elevator over the main wall onto the deck
-  box([-36.5, Y - 0.4, -4.5], [-30, Y, -1.5], { color: STEEL, grid: false });
-  box([-36.5, Y, -4.62], [-30, Y + 1.1, -4.5], { color: STEEL, grid: false });
-  box([-36.5, Y, -1.5], [-30, Y + 1.1, -1.38], { color: STEEL, grid: false });
-  deco([-36.5, Y + 1.1, -4.62], [-30, Y + 1.14, -4.5], { color: RED, emissive: 0.8, noShadow: true });
-  deco([-36.5, Y + 1.1, -1.5], [-30, Y + 1.14, -1.38], { color: RED, emissive: 0.8, noShadow: true });
+  // access tunnel from the bottom of the elevator shaft into the arena
+  box([-37, Y - 0.4, -4.5], [-30.4, Y, -1.5], { color: STEEL, grid: false });
+  box([-37, Y, -5], [-30.4, Y + 4.4, -4.5], { color: CONC });
+  box([-37, Y, -1.5], [-30.4, Y + 4.4, -1]);
+  box([-37, Y + 4, -5], [-30.4, Y + 4.4, -1], { color: CONC });
+  deco([-37, Y + 3.9, -3.2], [-30.4, Y + 3.98, -2.8], { color: [1, 0.95, 0.85], emissive: 1, noShadow: true });
+  for (const z of [-4.5, -1.62]) deco([-37, Y + 0.02, z], [-30.4, Y + 0.05, z + 0.12], { color: [0.95, 0.75, 0.1], emissive: 0.4, edges: false });
+  // the shaft itself, from the arena up to the underside of the range floor
+  const SH = { x0: -30.4, x1: -26.6, z0: -4.9, z1: -1.1 };
+  box([SH.x0, Y, SH.z0], [SH.x1, -1, SH.z0 + 0.3], { color: CONC });
+  box([SH.x0, Y, SH.z1 - 0.3], [SH.x1, -1, SH.z1], { color: CONC });
+  box([SH.x1 - 0.3, Y, SH.z0], [SH.x1, -1, SH.z1], { color: CONC });
+  box([SH.x0, Y + 4.4, SH.z0], [SH.x0 + 0.1, -1, SH.z1], { color: CONC });
+  box([SH.x0, Y - 1, SH.z0], [SH.x1, Y - 0.2, SH.z1], { color: CHAR, grid: false });   // pit floor
+  for (let y = Y + 2; y < -2; y += 3) deco([SH.x1 - 0.32, y, -3.2], [SH.x1 - 0.3, y + 0.15, -2.8], { color: [1, 0.6, 0.15], emissive: 1, noShadow: true });
 
   // ---- player base: entry pad, console, low cover
   deco([-44, Y, -10], [-37, Y + 0.02, 4], { color: [0.3, 0.31, 0.34], edges: false });

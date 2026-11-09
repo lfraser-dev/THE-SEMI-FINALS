@@ -326,7 +326,8 @@ function die(name) {
 }
 
 function respawnPlayer() {
-  const onDeck = botMgr.running || player.pos[1] > map.deck.y - 3;
+  const A = map.deck.area, P = player.pos;
+  const onDeck = botMgr.running || (P[0] > A.min[0] && P[0] < A.max[0] && P[1] > A.min[1] && P[1] < A.max[1] && P[2] > A.min[2] && P[2] < A.max[2]);
   const r = onDeck ? map.deck.respawn : { pos: map.spawn.pos, yaw: map.spawn.yaw };
   player.teleport(r.pos, r.yaw);
   Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5 });
@@ -350,15 +351,21 @@ const botHooks = {
   onLand: (bot) => { effects.dust(bot.pos, 6); sounds.botLand(); },
   onKill: (bot) => {
     sounds.botDie();
-    const s = bot.sc;
-    for (const [c, sz, col] of [[[0, 0.45, 0], [0.4, 0.9, 0.3], [0.16, 0.17, 0.19]], [[0, 1.25, 0], [0.5, 0.55, 0.3], bot.t.body], [[0, 1.64, 0], [0.28, 0.28, 0.28], bot.t.body]]) {
-      const w = bot.toWorld(c), sc = sz.map((v) => v * s);
-      effects.shatter({ min: w.map((v, i) => v - sc[i] / 2), max: w.map((v, i) => v + sc[i] / 2), scale: sc, center: w, color: col }, bot.killDir || [0, 0, 0], 3, 4, 0.1);
-    }
     if (botMgr.state === 'fight' && botMgr.alive === 0) { slowmo = 0.9; }
   },
-  onCleared: (n) => { banner('WAVE CLEARED', `WAVE ${n} DONE · NEXT WAVE IN 5`, 'good', 3); sounds.waveClear(); },
-  onNextWave: (n) => { banner(`WAVE ${n}`, `${botMgr.bots.length} HOSTILES INBOUND`, 'bad', 2.2); sounds.alarm(); sounds.botDrop(); },
+  // after the death fall: the body breaks apart
+  onShatter: (bot) => {
+    const s = bot.sc, f = bot.fallSign;
+    const lay = (c) => bot.toWorld([c[0], 0.25, c[2] + f * c[1] * 0.9]);
+    for (const [c, sz, col] of [[[0, 0.45, 0], [0.4, 0.3, 0.9], [0.55, 0.06, 0.05]], [[0, 1.25, 0], [0.55, 0.32, 0.55], [0.92, 0.1, 0.08]], [[0, 1.64, 0], [0.3, 0.3, 0.3], [1, 0.22, 0.16]]]) {
+      const w = lay(c), sc = sz.map((v) => v * s);
+      effects.shatter({ min: w.map((v, i) => v - sc[i] / 2), max: w.map((v, i) => v + sc[i] / 2), scale: sc, center: w, color: col }, bot.killDir || [0, 0, 0], 3, 2.5, 0.12);
+    }
+    effects.dust(bot.pos, 6);
+    sounds.crumble();
+  },
+  onCleared: (n) => { banner('WAVE CLEARED', `WAVE ${n} DONE · NEXT WAVE IN 5`, 'good', 3); },
+  onNextWave: (n) => { banner(`WAVE ${n}`, `${botMgr.bots.length} HOSTILES INBOUND`, 'bad', 2.2); },
 };
 
 // big centre banner (wave titles, countdown)
@@ -405,7 +412,6 @@ function updatePress(dt) {
   const down = ps.t > 0.38 && ps.t < 0.62;
   if (ps.t > 0.38 && !ps.clicked) { ps.clicked = true; sounds.button(); btn.color = [1, 0.85, 0.7]; btn.emissive = 1; map.deckRefs.screen.color = [0.9, 0.15, 0.1]; }
   const c = [...btn.center]; c[1] = map.deck.y + 1.14 - (down ? 0.05 : 0); moveBoxTo(btn, c);
-  if (ps.t > 0.5 && !ps.alarmed) { ps.alarmed = true; sounds.alarm(); }
   if (ps.t >= 0.9) {
     pressSeq = null;
     player.press = null;
@@ -421,7 +427,6 @@ function startCutscene() {
   botMgr.start(true);
   cutscene = { t: 0, eye0: player.eye(), fwd0: player.forward(), shown: false, doors: false };
   document.body.classList.add('cine');
-  sounds.whoosh();
 }
 function cutsceneCam() {
   const c = cutscene, cam = map.deck.cam;
@@ -442,10 +447,8 @@ function cutsceneCam() {
 function updateCutscene(dt) {
   const c = cutscene;
   c.t += dt;
-  if (c.t > 1.9 && !c.cut) { c.cut = true; sounds.botDrop(); }
   if (c.t > 2.2 && !c.shown) { c.shown = true; banner(`WAVE ${botMgr.wave}`, `${botMgr.bots.length} HOSTILES INBOUND`, 'bad', 2.4); }
   if (c.t > 3.2 && !c.doors) { c.doors = true; botMgr.doorTarget = 1; sounds.doors(); }
-  if (c.t > 3.9 && !c.back) { c.back = true; sounds.whoosh(); }
   if (c.t >= 4.8) {
     cutscene = null;
     document.body.classList.remove('cine');
@@ -966,6 +969,7 @@ function frame(now) {
   // viewmodel
   renderer.clearDepth();
   renderer.setCamera(vmProjM, vmViewM, 0, [0, 0, 0], false);
+  renderer.setUnder(camEye[1] < -1.2);
   if (bench.open) {
     // gun preview on the right of the workbench menu
     compose(previewM, [0.5, -0.02, -1.25], [0.12, bench.rotY + time * 0.25, 0], [1, 1, 1]);

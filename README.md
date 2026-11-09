@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.6: Test Range, Parkour Course and Combat Deck, with bots that fight back.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.7: Test Range, Parkour Course and an underground arena with bots that fight back.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -71,35 +71,45 @@ Reload animations differ by gun. The old mag drops onto the floor, a fresh one c
 
 Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Settings, and aim can be set to hold or toggle. This helps on trackpads.
 
-## Combat Deck
+## Underground arena
 
-The deck is a raised arena 12 m up, off the west wall of the range.
+The combat arena is underground, beneath the range.
 
-**Getting there.** Ride the cage elevator by the west wall. Stand on the car for a moment and it moves, or stand next to the shaft and it comes to you. At the top, a bridge crosses over the wall onto the deck.
+**Getting there.** Take the cage elevator by the west wall down through a hatch in the floor. Step into the car and it goes, or stand near either landing and it comes to you. Each landing has a gate that only opens when the car is there. At the bottom, a tunnel leads into the arena.
 
-**The arena.** The deck has:
-- tall walls to wall-run on, and perimeter walls you can run along too
+**The arena.** It is lit by rows of ceiling lamps that throw warm pools of light, with darker fog than the range. It has:
+- walls that run up to the ceiling, good for wall running
 - a central platform with steps
 - a 9 m grapple tower
 - cover to vault, mantle and ledge-grab
-- a bot bay at the far end, laid out like a firing range, with three open-top spawn pods behind doors
+- a bot bay at the far end, laid out like a firing range, with three spawn pods behind doors
 
 **Starting a fight.** Press **E** at the console by the entrance.
-1. Your hand punches the button, the screen goes red and the alarms sound.
-2. A short cutscene sweeps over the deck. Bots drop out of the sky on beams of light into the pods, and the doors open.
+1. Your hand punches the button and the screen goes red.
+2. A short cutscene sweeps over the arena and looks down into the pods as the bots drop in on beams of light, and the doors open.
 3. A 3-2-1 countdown runs, then FIGHT.
 
-**How the bots fight.** They pick spots at their preferred range with a view of you, strafe, and fall back to cover when hurt. They fire in bursts. You're much harder to hit when you're moving fast, sliding, in the air, dashing or grappling. There are three types:
+There's no music. The game only plays sound effects.
+
+**The bots.** They're red like the range dummies, with jointed legs and arms and the gun held in both hands. Their animations:
+- walk, run and strafe cycles, with legs that swing the way they're moving
+- breathing at idle
+- head and gun tracking you, with recoil on every shot
+- a flinch when hit
+- a crouch on landing
+- a death fall away from the shot before they shatter
+
+**How they fight.** They pick spots at their preferred range with a view of you, strafe, and fall back to cover when hurt. They fire in bursts. You're much harder to hit when you're moving fast, sliding, in the air, dashing or grappling. There are three types:
 
 | Bot | Notes |
 | --- | --- |
-| Rifle (grey, orange visor) | Mid range, the backbone of every wave |
-| Rusher (yellow) | Fast, gets close, high fire rate. From wave 2 |
-| Heavy (dark red) | 240 HP, long bursts. From wave 3 |
+| Rifle | Mid range, the backbone of every wave |
+| Rusher | Leaner build, fast, gets close, high fire rate. From wave 2 |
+| Heavy | Bulkier with shoulder armour, 240 HP, long bursts. From wave 3 |
 
-**Waves.** Waves get bigger and more accurate. Clearing one triggers slow motion on the last kill, then the next wave drops in after 5 s. Your best wave is saved. Press E at the console again to end the session.
+**Waves.** Waves get bigger and more accurate. The last kill of a wave plays in slow motion, and the next wave drops in after 5 s. Your best wave is saved. Press E at the console again to end the session.
 
-**Survival.** You have 150 HP. Health regenerates after 4 s without taking damage. Red arrows around the crosshair show where shots come from, and near misses whiz past your head. There's a kill feed, and if you die you see an eliminated screen and respawn on the deck after 3 s.
+**Survival.** You have 150 HP, which regenerates after 4 s without taking damage. You also get damage-direction arrows, near-miss whizzes, a kill feed, and an eliminated screen that respawns you in the arena after 3 s.
 
 ## Abilities
 
@@ -168,7 +178,7 @@ src/renderer.js       WebGL2 renderer + grid/edge shader (everything is a box)
 src/world.js          box list, collision queries, raycasts
 src/player.js         movement, vault/mantle/ledge grab/wall run, collision, camera springs
 src/course.js         parkour time trial: gates, checkpoints, hazards, best times
-src/elevator.js       cage elevator between the range and the combat deck
+src/elevator.js       cage elevator from the range down to the underground arena (gates, car, cage)
 src/bots.js           combat bots (model, AI, shooting) + wave manager
 src/weapon.js         gun logic, reload animations, first-person viewmodel + hands
 src/attachments.js    attachment list, per-gun mounts, buildDef() that applies stats + model parts
