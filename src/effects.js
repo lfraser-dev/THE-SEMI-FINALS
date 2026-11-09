@@ -52,6 +52,29 @@ export class Effects {
     }
   }
 
+  // light puffs kicked up by slides and landings
+  dust(pos, count = 3, push = [0, 0, 0]) {
+    for (let i = 0; i < count; i++) {
+      const v = [push[0] * 0.4 + (Math.random() - 0.5) * 2, 0.6 + Math.random() * 1.2, push[2] * 0.4 + (Math.random() - 0.5) * 2];
+      const sz = 0.05 + Math.random() * 0.06;
+      const p = [pos[0] + (Math.random() - 0.5) * 0.4, pos[1] + 0.05, pos[2] + (Math.random() - 0.5) * 0.4];
+      this.spawnPiece(p, [sz, sz, sz], v, [0.97, 0.97, 0.98], 0.45 + Math.random() * 0.2);
+      this.debris[this.debris.length - 1].noGravity = true;
+    }
+  }
+
+  casing(pos, vel) {
+    this.spawnPiece(pos, [0.012, 0.012, 0.032], vel, [0.86, 0.66, 0.24], 2.2, 0.15);
+  }
+
+  drawShadows(r) {
+    for (const d of this.debris) {
+      if (d.size[0] < 0.08 || d.life < 0.5 || d.noGravity) continue;
+      compose(this.m, d.pos, d.rot, d.size);
+      r.shadowDraw(this.m);
+    }
+  }
+
   decal(point, normal) {
     if (this.decals.length >= MAX_DECALS) this.decals.shift();
     const size = [0.07, 0.07, 0.07];
@@ -75,6 +98,11 @@ export class Effects {
       const d = this.debris[i];
       d.life -= dt;
       if (d.life <= 0) { this.debris.splice(i, 1); continue; }
+      if (d.noGravity) {
+        for (let k = 0; k < 3; k++) d.pos[k] += d.vel[k] * dt;
+        d.vel = d.vel.map((v) => v * Math.exp(-4 * dt));
+        continue;
+      }
       d.vel[1] -= 20 * dt;
       const hy = d.size[1] / 2;
       const nx = d.pos[0] + d.vel[0] * dt, ny = d.pos[1] + d.vel[1] * dt, nz = d.pos[2] + d.vel[2] * dt;
@@ -101,7 +129,7 @@ export class Effects {
     for (const d of this.debris) {
       if (d.life < 0.5) continue;
       compose(this.m, d.pos, d.rot, d.size);
-      r.draw(this.m, d.size, d.color, 0, 1, d.emissive);
+      r.draw(this.m, d.size, d.color, 0, d.size[0] > 0.03 ? 1 : 0, d.emissive);
     }
   }
 

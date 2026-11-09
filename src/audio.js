@@ -53,17 +53,27 @@ export class Sounds {
     o.stop(t + dur + 0.02);
   }
 
-  shot() { this.burst(0.13, 2600, 0.55); this.burst(0.05, 6000, 0.25, 'highpass'); this.tone(150, 45, 0.11, 0.5); }
+  shot(s = { freq: 2600, thump: 150, gain: 0.55 }) {
+    const dur = s.dur || 0.13;
+    this.burst(dur, s.freq, s.gain);
+    this.burst(0.05, 6000, s.gain * 0.45, 'highpass');
+    this.tone(s.thump, 40, dur * 0.85, s.gain * 0.9);
+  }
+  click(freq = 2800, gain = 0.25, q = 4) { this.burst(0.045, freq, gain, 'bandpass', q); }
+  magOut() { this.click(2200, 0.28); setTimeout(() => this.burst(0.08, 900, 0.12), 60); }
+  magIn() { this.click(3200, 0.35, 5); setTimeout(() => this.click(2600, 0.2), 70); }
+  bolt() { this.click(2000, 0.3); setTimeout(() => this.click(3400, 0.32, 5), 110); }
+  pump() { this.burst(0.07, 1400, 0.3, 'bandpass', 2); setTimeout(() => this.burst(0.07, 1900, 0.32, 'bandpass', 2), 150); }
+  shell() { this.click(2600, 0.22, 3); }
+  cloth() { this.burst(0.15, 1200, 0.07); }
+  swap() { this.burst(0.12, 1500, 0.1); setTimeout(() => this.click(3000, 0.18), 120); }
+  pickup() { this.tone(600, 1200, 0.12, 0.12, 'triangle'); this.click(2600, 0.25); }
+  slide() { this.burst(0.55, 900, 0.22); this.burst(0.3, 3000, 0.06, 'highpass'); }
+  mantle() { this.burst(0.18, 600, 0.22); this.click(1400, 0.12, 2); }
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
   crumble() { this.burst(0.3, 700, 0.35); }
   dry() { this.tone(2200, 1800, 0.03, 0.12, 'square'); }
-  reload() {
-    if (!this.ctx) return;
-    this.burst(0.05, 3000, 0.2, 'bandpass', 3);
-    setTimeout(() => this.burst(0.06, 2400, 0.25, 'bandpass', 3), 650);
-    setTimeout(() => this.burst(0.05, 3200, 0.3, 'bandpass', 4), 1350);
-  }
   jump() { this.burst(0.08, 500, 0.12); }
   land() { this.burst(0.12, 300, 0.25); }
 }

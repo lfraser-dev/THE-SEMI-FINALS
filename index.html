@@ -63,6 +63,25 @@
   #state { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); font-weight: 800; font-style: italic; letter-spacing: .2em; font-size: 15px; opacity: .55; }
   #debug { position: absolute; right: 26px; top: 20px; font-size: 13px; font-weight: 700; letter-spacing: .1em; opacity: .55; text-align: right; }
   #hint { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); font-size: 13px; font-weight: 700; letter-spacing: .12em; opacity: .45; }
+  #weapontype { position: absolute; right: 30px; bottom: 116px; font-weight: 700; letter-spacing: .18em; font-size: 12px; opacity: .55; }
+  #slots { position: absolute; right: 30px; bottom: 140px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  #slots div { font-weight: 800; font-style: italic; font-size: 14px; letter-spacing: .08em; opacity: .4; white-space: pre; }
+  #slots div.active { opacity: 1; color: var(--red); }
+  #prompt { position: absolute; left: 50%; top: calc(50% + 70px); transform: translateX(-50%); background: rgba(17,18,22,.88); color: #fff;
+    padding: 8px 18px; font-size: 18px; font-weight: 700; letter-spacing: .06em; opacity: 0; transition: opacity .1s; white-space: nowrap;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+  #prompt kbd { background: #fff; color: var(--ink); font: 800 14px var(--font); padding: 1px 7px; margin-right: 6px; }
+  #prompt b { color: #ff4a40; font-style: italic; }
+  #prompt span { opacity: .6; font-size: 14px; margin-left: 4px; }
+  #crosshair.shotgun::after { content: ''; position: absolute; left: calc(var(--gap) * -1 - 4px); top: calc(var(--gap) * -1 - 4px);
+    width: calc(var(--gap) * 2 + 8px); height: calc(var(--gap) * 2 + 8px); border: 1.5px solid rgba(17,18,22,.55); border-radius: 50%; }
+  #crosshair.shotgun i:not(.dot) { display: none; }
+  #scope { position: absolute; inset: 0; opacity: 0; pointer-events: none;
+    background: radial-gradient(circle at center, transparent 0, transparent min(36vh, 36vw), #0c0d10 calc(min(36vh, 36vw) + 1px)); }
+  #scope::before, #scope::after { content: ''; position: absolute; left: 50%; top: 50%; background: #0c0d10; }
+  #scope::before { width: 1.5px; height: min(72vh, 72vw); transform: translate(-50%, -50%); }
+  #scope::after { height: 1.5px; width: min(72vh, 72vw); transform: translate(-50%, -50%); }
+  #scope i { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: var(--red); border-radius: 50%; z-index: 1; }
 
   /* ---------- menu ---------- */
   #menu { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px;
@@ -94,6 +113,7 @@
 <canvas id="game"></canvas>
 
 <div id="hud">
+  <div id="scope"><i></i></div>
   <div id="damage"></div>
   <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i><i class="dot"></i></div>
   <div id="hitmarker"></div>
@@ -103,18 +123,21 @@
     <div><b id="acc">--</b><span>ACCURACY</span></div>
     <div><b id="chunks">0</b><span>DESTRUCTION</span></div>
   </div>
-  <div id="hint">T — RESET RANGE · ESC — MENU</div>
+  <div id="hint">E — TAKE WEAPON · 1/2/Q — SWAP · T — RESET · ESC — MENU</div>
+  <div id="prompt"></div>
   <div id="debug"><span id="fps">--</span> FPS · <span id="speed">0.0</span> M/S</div>
   <div id="state"></div>
   <div id="mapname"><div class="small">THE SEMI-FINALS</div><div class="big">TEST RANGE</div></div>
-  <div id="weaponname">SF-47 AUTO</div>
+  <div id="slots"><div id="slot1"></div><div id="slot2"></div></div>
+  <div id="weapontype"></div>
+  <div id="weaponname"></div>
   <div class="panel" id="ammobox"><span id="ammo">30</span><span id="reserve">/ ∞</span></div>
 </div>
 
 <div id="menu">
   <div class="card">
     <h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <div class="sub">TEST RANGE · BUILD 0.1</div>
+    <div class="sub">TEST RANGE · BUILD 0.2</div>
     <button id="play">CLICK TO PLAY</button>
     <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     <div class="grid2">
@@ -124,9 +147,11 @@
           <kbd>WASD</kbd>move<br>
           <kbd>SHIFT</kbd>sprint<br>
           <kbd>SPACE</kbd>jump<br>
-          <kbd>CTRL</kbd>/<kbd>C</kbd>crouch · slide while sprinting<br>
+          <kbd>CTRL</kbd>/<kbd>C</kbd>crouch · slide when running<br>
+          jump into ledges to mantle<br>
           <kbd>LMB</kbd>shoot · <kbd>RMB</kbd>aim<br>
-          <kbd>R</kbd>reload · <kbd>T</kbd>reset range
+          <kbd>R</kbd>reload · <kbd>E</kbd>take gun from case<br>
+          <kbd>1</kbd><kbd>2</kbd><kbd>Q</kbd>swap · <kbd>T</kbd>reset range
         </div>
       </div>
       <div>

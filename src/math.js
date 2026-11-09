@@ -28,11 +28,29 @@ export function perspective(out, fovy, aspect, near, far) {
   return out;
 }
 
-// View matrix from an eye position and a forward direction.
-export function lookDir(out, eye, fwd, up = [0, 1, 0]) {
+export function ortho(out, l, r, b, t, n, f) {
+  out.fill(0);
+  out[0] = 2 / (r - l);
+  out[5] = 2 / (t - b);
+  out[10] = -2 / (f - n);
+  out[12] = -(r + l) / (r - l);
+  out[13] = -(t + b) / (t - b);
+  out[14] = -(f + n) / (f - n);
+  out[15] = 1;
+  return out;
+}
+
+// View matrix from an eye position and a forward direction (+ optional camera roll).
+export function lookDir(out, eye, fwd, up = [0, 1, 0], roll = 0) {
   const z = norm([-fwd[0], -fwd[1], -fwd[2]]);
-  const x = norm(cross(up, z));
-  const y = cross(z, x);
+  let x = norm(cross(up, z));
+  let y = cross(z, x);
+  if (roll) {
+    const c = Math.cos(roll), s = Math.sin(roll);
+    const nx = [x[0] * c + y[0] * s, x[1] * c + y[1] * s, x[2] * c + y[2] * s];
+    y = [y[0] * c - x[0] * s, y[1] * c - x[1] * s, y[2] * c - x[2] * s];
+    x = nx;
+  }
   out[0] = x[0]; out[1] = y[0]; out[2] = z[0]; out[3] = 0;
   out[4] = x[1]; out[5] = y[1]; out[6] = z[1]; out[7] = 0;
   out[8] = x[2]; out[9] = y[2]; out[10] = z[2]; out[11] = 0;

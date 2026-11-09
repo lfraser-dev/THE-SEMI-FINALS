@@ -1,4 +1,6 @@
 // Shootable things in the test range: red training dummies and a destructible wall.
+import { Weapon } from './weapon.js';
+import { compose, mat4 } from './math.js';
 import { makeBox, moveBoxTo } from './world.js';
 
 const RED = [0.92, 0.1, 0.08];
@@ -169,4 +171,63 @@ export class DestructibleWall {
   }
 
   reset() { this.build(); }
+}
+
+// ---------------------------------------------------------------- weapon cases
+
+const CASE_DARK = [0.22, 0.23, 0.26];
+const GLASS = [0.75, 0.85, 0.95];
+
+// A glass display case with a slowly spinning gun. Walk up and press E.
+export class WeaponCase {
+  constructor(world, def, center, slot) {
+    this.def = def;
+    this.center = center;          // centre of the case floor
+    this.slot = slot;
+    const [x, y, z] = center;
+    const add = (min, max, o) => world.add(makeBox(min, max, o));
+    add([x - 0.75, y, z - 0.45], [x + 0.75, y + 1.0, z + 0.45], { color: CASE_DARK, grid: false });
+    add([x - 0.76, y + 0.78, z - 0.46], [x + 0.76, y + 0.84, z - 0.4], { color: [0.95, 0.15, 0.1], grid: false, emissive: 0.85, solid: false, noShadow: true });
+    this.glass = add([x - 0.7, y + 1.0, z - 0.4], [x + 0.7, y + 2.1, z + 0.4], { color: GLASS, grid: false, alpha: 0.16, noBullet: true, noShadow: true });
+    add([x - 0.75, y + 2.1, z - 0.45], [x + 0.75, y + 2.22, z + 0.45], { color: CASE_DARK, grid: false });
+    add([x - 0.6, y + 2.08, z - 0.3], [x + 0.6, y + 2.1, z + 0.3], { color: [1, 1, 0.97], grid: false, emissive: 1, solid: false, noShadow: true });
+    // wall panel behind the case
+    add([x - 1.1, y, z + 0.5], [x + 1.1, y + 3.6, z + 0.75], { color: [0.97, 0.97, 0.98], grid: false });
+    add([x - 1.1, y + 3.6, z + 0.45], [x + 1.1, y + 3.75, z + 0.75], { color: CASE_DARK, grid: false });
+    digitBoxes(String(slot), x + 0.18, y + 2.55, z + 0.48, 0.7, -1, [0.95, 0.15, 0.1], 0.9).forEach((b) => world.add(b));
+    this.matrix = mat4();
+  }
+
+  parts(time) {
+    const [x, y, z] = this.center;
+    const s = 1.5;
+    compose(this.matrix, [x, y + 1.5 + Math.sin(time * 1.5 + this.slot) * 0.03, z], [0, time * 0.6 + this.slot, 0], [s, s, s]);
+    return Weapon.worldParts(this.def, this.matrix).map((p) => ({ ...p, scale: p.scale.map((v) => v * s) }));
+  }
+}
+
+// ---------------------------------------------------------------- 7-seg digits
+const SEGS = {
+  0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd',
+  6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg', '-': 'g',
+};
+// Builds boxes spelling `text` on a wall. dir = +1 reads from +Z side, -1 from -Z side
+// (text runs along -X when read from -Z). (x, y, z) = bottom-left from the reader's view.
+export function digitBoxes(text, x, y, z, h, dir, color, emissive = 0) {
+  const w = h * 0.55, t = h * 0.13, gap = h * 0.25, depth = 0.04;
+  const segs = {
+    a: [w / 2, h - t / 2, w, t], b: [w - t / 2, h * 0.75, t, h / 2], c: [w - t / 2, h * 0.25, t, h / 2],
+    d: [w / 2, t / 2, w, t], e: [t / 2, h * 0.25, t, h / 2], f: [t / 2, h * 0.75, t, h / 2], g: [w / 2, h / 2, w, t],
+  };
+  const out = [];
+  [...text].forEach((ch, i) => {
+    const u0 = i * (w + gap);
+    for (const s of SEGS[ch] || '') {
+      const [u, v, sw, sh] = segs[s];
+      const cx = x + dir * (u0 + u);
+      out.push(makeBox([cx - sw / 2, y + v - sh / 2, z - depth / 2], [cx + sw / 2, y + v + sh / 2, z + depth / 2],
+        { color, grid: false, edges: false, emissive, solid: false, noShadow: true }));
+    }
+  });
+  return out;
 }

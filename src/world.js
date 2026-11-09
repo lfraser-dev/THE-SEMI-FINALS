@@ -14,6 +14,9 @@ export function makeBox(min, max, o = {}) {
     edges: o.edges ?? true,
     solid: o.solid ?? true,
     emissive: o.emissive || 0,
+    alpha: o.alpha ?? 1,          // < 1 = drawn in the transparent pass (glass)
+    noBullet: !!o.noBullet,       // bullets pass through
+    noShadow: !!o.noShadow,       // doesn't cast shadows
     tag: o.tag || null,
     ref: o.ref || null,
     model: new Float32Array(16),
@@ -72,10 +75,10 @@ export class World {
   }
 
   // Slab-method ray cast. Returns { t, box, point, normal } or null.
-  raycast(o, d, maxT = 500) {
+  raycast(o, d, maxT = 500, bullets = true) {
     let best = null, bestT = maxT;
     for (const b of this.boxes) {
-      if (!b.solid) continue;
+      if (!b.solid || (bullets && b.noBullet)) continue;
       let tmin = -Infinity, tmax = Infinity, axis = 0, sign = 0, miss = false;
       for (let a = 0; a < 3; a++) {
         if (Math.abs(d[a]) < 1e-9) {
