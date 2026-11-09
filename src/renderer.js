@@ -344,6 +344,22 @@ export class Renderer {
 
   clearDepth() { this.gl.clear(this.gl.DEPTH_BUFFER_BIT); }
 
+  // draw into a sub-rectangle of the screen (pixels, origin bottom-left), e.g. a TV in the scene
+  beginRect(x, y, w, h) {
+    const gl = this.gl;
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(x, y, w, h);
+    gl.viewport(x, y, w, h);
+    gl.clearColor(...this.fogColor, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  }
+
+  endRect() {
+    const gl = this.gl;
+    gl.disable(gl.SCISSOR_TEST);
+    gl.viewport(0, 0, this.size[0], this.size[1]);
+  }
+
   // the gun is lit by lamps instead of the sun when you're underground
   setUnder(on) { this.gl.uniform1f(this.u.uViewUnder, on ? 1 : 0); }
 

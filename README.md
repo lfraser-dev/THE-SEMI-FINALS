@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.7: Test Range, Parkour Course and an underground arena with bots that fight back.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.8: Test Range, Parkour Course, underground arena with bots, and an in-engine intro trailer.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -70,6 +70,21 @@ Reload animations differ by gun, and they have some flair:
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.
 
 Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Settings, and aim can be set to hold or toggle. This helps on trackpads.
+
+## Intro trailer
+
+The game opens with a roughly 60-second trailer made in the engine. Click **Start** to watch it, or **Skip intro** to go straight to the menu. You can rewatch it any time with **Watch trailer** in the menu, and Space, Esc or a click skips it.
+
+1. **Cold open:** "SEMI STUDIOS PRESENTS", then a glitchy "TOURNAMENT ROUND 1 / THE TEST RANGE" card.
+2. **Gameplay montage:** a slide-shot, a wall run, a grapple, a wall-smashing ground slam and a vault chain. These are real gameplay, with the player driven by a script and aim assist.
+3. **Pull-out:** the shot pulls back from the screen to reveal it's playing on a TV in a living room.
+4. **The couch:** two contestants, VIPER and BOLT, trash-talk on the couch with subtitles and little voice blips.
+5. **Underground:** bots drop into the pods, then an arena firefight, a dash-and-slam into a group of bots, and a scoped sniper headshot in slow-mo.
+6. **Trios:** "WELCOME TO", then three trios in outfits on a light stage (blue, gold and pink) with SEASON 1.
+7. **The question:** "CAN YOU / MAKE THE / SEMI-FINALS?", then a fast montage burst.
+8. **Key art:** the champion over red with "THE SEMI-FINALS · PLAY NOW!", then you drop into the game.
+
+The trailer is our own footage with our own characters. It takes its structure from the kind of trailer it imitates, but no footage from any other game.
 
 ## Underground arena
 
@@ -180,6 +195,8 @@ src/player.js         movement, vault/mantle/ledge grab/wall run, collision, cam
 src/course.js         parkour time trial: gates, checkpoints, hazards, best times
 src/elevator.js       cage elevator from the range down to the underground arena (gates, car, cage)
 src/bots.js           combat bots (model, AI, shooting) + wave manager
+src/contestant.js     human contestant rig, outfits ("skins") and poses for the trailer
+src/trailer.js        the intro trailer: shot list, scripted gameplay clips, studio cameras
 src/weapon.js         gun logic, reload animations, first-person viewmodel + hands
 src/attachments.js    attachment list, per-gun mounts, buildDef() that applies stats + model parts
 src/bench.js          workbench menu UI

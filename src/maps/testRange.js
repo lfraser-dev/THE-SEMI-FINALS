@@ -155,6 +155,7 @@ export default {
 
     buildParkour(add, deco, H);
     this.deckRefs = buildDeck(add, deco);
+    this.studioRefs = buildStudio(add);
   },
 
   // weapon cases along the south wall (the slot number is shown above each)
@@ -189,6 +190,13 @@ export default {
       wide: { from: [-39, DECK_Y + 11.5, 16], to: [-50, DECK_Y + 9.5, 10], look: [-76, DECK_Y + 1, -3] },
       pods: { from: [-69.5, DECK_Y + 12.2, 5], to: [-71, DECK_Y + 11.6, -2], look: [-78.2, DECK_Y + 0.2, -3.2] },   // high, looking down into the open pods
     },
+  },
+
+  // trailer sets, far away and deep underground (lamp lit)
+  studio: {
+    tv: { x0: 298.7, x1: 301.3, y0: -39.2, y1: -37.7375, z: 294.87 },   // screen rectangle (faces +z)
+    seats: [[299.35, -40, 302.25], [300.65, -40, 302.25]],
+    stage: { spots: [[298.55, -40, 331.6], [300, -40, 331.2], [301.45, -40, 331.6]] },
   },
 
   // parkour time trial (geometry is in buildParkour below)
@@ -389,4 +397,76 @@ function buildDeck(add, deco) {
   // bay back wall lights
   for (let z = -26; z <= 20; z += 4) deco([-81.88, Y + 1, z], [-81.8, Y + 4.5, z + 0.25], { color: [1, 0.96, 0.9], emissive: 1, noShadow: true });
   return { doors, alarms, button, buttonRing, screen };
+}
+
+// ---------------------------------------------------------------- trailer sets
+function buildStudio(add) {
+  const box = (min, max, o = {}) => add(makeBox(min, max, { grid: false, ...o }));
+  const Y = -40;
+  // ---- living room (TV on the north wall, couch facing it)
+  const WALLC = [0.42, 0.4, 0.38], WOOD = [0.4, 0.27, 0.17];
+  box([293.5, Y - 1, 293.5], [306.5, Y, 306.5], { color: [0.36, 0.28, 0.21] });          // wooden floor
+  box([293.7, Y, 293.4], [306.3, Y + 4, 293.7], { color: WALLC });
+  box([293.7, Y, 306.3], [306.3, Y + 4, 306.6], { color: WALLC });
+  box([293.4, Y, 293.4], [293.7, Y + 4, 306.6], { color: WALLC });
+  box([306.3, Y, 293.4], [306.6, Y + 4, 306.6], { color: WALLC });
+  box([293.4, Y + 4, 293.4], [306.6, Y + 4.2, 306.6], { color: [0.3, 0.29, 0.28] });      // ceiling
+  for (const [x0, x1] of [[293.7, 306.3]]) box([x0, Y, 293.7], [x1, Y + 0.12, 293.78], { color: [0.9, 0.88, 0.84] });   // skirting
+  // TV + cabinet + speakers
+  box([297.6, Y, 293.75], [302.4, Y + 0.55, 294.45], { color: WOOD });
+  box([297.7, Y + 0.12, 294.44], [302.3, Y + 0.45, 294.46], { color: [0.28, 0.18, 0.11], solid: false });
+  box([298.55, Y + 0.68, 294.55], [301.45, Y + 2.35, 294.85], { color: [0.05, 0.05, 0.06] });                // TV body
+  box([298.7, Y + 0.8, 294.85], [301.3, Y + 2.2625, 294.87], { color: [0.02, 0.02, 0.03], solid: false });   // screen (gameplay is drawn over it)
+  box([299.6, Y + 0.55, 294.5], [300.4, Y + 0.68, 294.75], { color: [0.05, 0.05, 0.06] });
+  for (const x of [297.2, 302.8]) {
+    box([x - 0.25, Y, 294.0], [x + 0.25, Y + 1.25, 294.5], { color: [0.1, 0.1, 0.11] });
+    box([x - 0.12, Y + 0.85, 294.5], [x + 0.12, Y + 1.09, 294.52], { color: [0.2, 0.2, 0.22], solid: false });
+  }
+  // posters + shelf + window + plant + floor lamp
+  box([295.0, Y + 1.2, 293.7], [296.4, Y + 3.1, 293.74], { color: [0.92, 0.1, 0.08], emissive: 0.15, solid: false });
+  box([295.15, Y + 2.3, 293.74], [296.25, Y + 2.9, 293.76], { color: [1, 1, 1], emissive: 0.2, solid: false });
+  box([303.6, Y + 1.2, 293.7], [305.0, Y + 3.1, 293.74], { color: [0.12, 0.12, 0.14], solid: false });
+  box([303.75, Y + 1.4, 293.74], [304.85, Y + 2.0, 293.76], { color: [0.92, 0.1, 0.08], emissive: 0.4, solid: false });
+  box([306.25, Y + 1.0, 297.5], [306.3, Y + 3.0, 301.0], { color: [0.12, 0.22, 0.45], emissive: 0.55, solid: false });   // night window
+  box([306.2, Y + 1.95, 297.5], [306.26, Y + 2.05, 301.0], { color: [0.15, 0.15, 0.16], solid: false });
+  box([306.2, Y + 1.0, 299.2], [306.26, Y + 3.0, 299.3], { color: [0.15, 0.15, 0.16], solid: false });
+  box([294.2, Y, 304.8], [294.7, Y + 0.5, 305.3], { color: [0.55, 0.3, 0.2] });            // plant pot
+  box([294.15, Y + 0.5, 304.75], [294.75, Y + 1.4, 305.35], { color: [0.15, 0.4, 0.18], solid: false });
+  box([304.9, Y, 304.4], [305.2, Y + 0.05, 304.7], { color: [0.1, 0.1, 0.1] });            // floor lamp
+  box([305.02, Y, 304.52], [305.08, Y + 1.6, 304.58], { color: [0.1, 0.1, 0.1], solid: false });
+  box([304.8, Y + 1.6, 304.3], [305.3, Y + 1.95, 304.8], { color: [1, 0.85, 0.6], emissive: 1, solid: false, noShadow: true });
+  // rug, coffee table, cans, controllers, snacks
+  box([297.4, Y, 298.6], [302.6, Y + 0.012, 301.6], { color: [0.6, 0.08, 0.06], solid: false });
+  box([297.5, Y + 0.012, 298.7], [302.5, Y + 0.016, 298.8], { color: [0.9, 0.85, 0.8], solid: false });
+  box([298.6, Y + 0.38, 299.6], [301.4, Y + 0.45, 300.6], { color: WOOD });
+  for (const [x, z] of [[298.75, 299.75], [301.25, 299.75], [298.75, 300.45], [301.25, 300.45]]) box([x - 0.04, Y, z - 0.04], [x + 0.04, Y + 0.38, z + 0.04], { color: WOOD });
+  for (const [x, z, c] of [[299.0, 300.0, [0.92, 0.1, 0.08]], [299.15, 300.25, [0.92, 0.1, 0.08]], [300.9, 299.95, [0.15, 0.5, 0.9]]]) box([x - 0.035, Y + 0.45, z - 0.035], [x + 0.035, Y + 0.57, z + 0.035], { color: c, solid: false });
+  box([299.6, Y + 0.45, 299.85], [299.85, Y + 0.48, 300.0], { color: [0.08, 0.08, 0.09], solid: false });   // controllers
+  box([300.25, Y + 0.45, 300.15], [300.5, Y + 0.48, 300.3], { color: [0.95, 0.95, 0.95], solid: false });
+  box([300.5, Y + 0.45, 299.7], [300.8, Y + 0.53, 300.0], { color: [0.9, 0.7, 0.2], solid: false });      // snack bowl
+  // couch
+  const COUCH = [0.18, 0.2, 0.26];
+  box([298.0, Y, 301.8], [302.0, Y + 0.38, 303.0], { color: COUCH });
+  box([298.25, Y + 0.38, 301.85], [299.95, Y + 0.5, 302.75], { color: [0.22, 0.24, 0.31], solid: false });
+  box([300.05, Y + 0.38, 301.85], [301.75, Y + 0.5, 302.75], { color: [0.22, 0.24, 0.31], solid: false });
+  box([298.0, Y, 302.7], [302.0, Y + 1.15, 303.1], { color: COUCH });
+  box([297.75, Y, 301.8], [298.1, Y + 0.72, 303.1], { color: COUCH });
+  box([301.9, Y, 301.8], [302.25, Y + 0.72, 303.1], { color: COUCH });
+
+  // ---- trio stage: glossy floor, a big colour light wall behind
+  box([290, Y - 1, 324], [310, Y, 340], { color: [0.07, 0.07, 0.08] });
+  const panels = [];
+  for (let i = 0; i < 8; i++) {
+    const x0 = 290 + i * 2.5;
+    panels.push(box([x0 + 0.05, Y, 337], [x0 + 2.45, Y + 9, 337.2], { color: [0.15, 0.4, 0.9], emissive: 1, solid: false, noShadow: true }));
+  }
+  box([290, Y, 337.2], [310, Y + 9, 337.5], { color: [0.05, 0.05, 0.06] });
+  const strip = box([292, Y, 333.6], [308, Y + 0.02, 333.7], { color: [0.15, 0.4, 0.9], emissive: 1, solid: false, noShadow: true });
+  // side towers with light bars
+  const bars = [];
+  for (const x of [292.5, 307.5]) {
+    box([x - 0.4, Y, 334], [x + 0.4, Y + 6, 334.8], { color: [0.05, 0.05, 0.06] });
+    for (let y = 0.6; y < 6; y += 0.9) bars.push(box([x - 0.3, Y + y, 333.95], [x + 0.3, Y + y + 0.12, 334.0], { color: [0.15, 0.4, 0.9], emissive: 1, solid: false, noShadow: true }));
+  }
+  return { panels, strip, bars };
 }

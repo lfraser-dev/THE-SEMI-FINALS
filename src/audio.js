@@ -115,6 +115,14 @@ export class Sounds {
   whoosh() { this.burst(0.9, 900, 0.12, 'bandpass', 0.6); }
   elevatorStart() { this.click(900, 0.3, 2); this.burst(0.4, 400, 0.12); }      // gate latch + motor clunk
   elevatorDing() { this.burst(0.25, 300, 0.25); this.click(1400, 0.25, 3); }   // car settles
+  // trailer chatter: little syllable blips + a grunt to start each line (no real voices)
+  talk(who = 0) {
+    const base = who ? 210 : 330;
+    const f = base * (0.8 + Math.random() * 0.55);
+    this.tone(f, f * (0.85 + Math.random() * 0.3), 0.06, 0.06, who ? 'sawtooth' : 'square');
+    this.burst(0.04, 900 + Math.random() * 500, 0.04, 'bandpass', 3);
+  }
+  grunt(who = 0) { const f = who ? 120 : 180; this.tone(f * 1.3, f, 0.16, 0.12, 'sawtooth'); this.burst(0.12, 500, 0.1); }
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
   crumble() { this.burst(0.3, 700, 0.35); }
