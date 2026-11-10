@@ -74,8 +74,8 @@ Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Set
 ## Look
 
 Characters are built from smooth shapes: tapered capsules for limbs, ellipsoids and rounded boxes. Surfaces have materials (matte fabric, skin, polymer, anodised metal, polished steel, wood, brass and glass), and metal reflects its surroundings.
-- **Menu studio (build 0.13):** a seamless backdrop in the class colour with a soft light shaft, a vignette, one key light and a contact shadow. Your contestant stands relaxed with the rifle resting across the shoulders.
-- **Contestants:** realistic proportions and slim, matte athletic outfits. Light wears a charcoal quarter-zip with a blue cap and white trainers. Medium wears a navy quarter-zip with a gold chest chevron. Heavy wears a yellow plate carrier and a balaclava with goggles. Faces are simple and stylised, and the hands are bare.
+- **Menu studio (build 0.13):** a seamless backdrop in the class colour with a soft light shaft, a vignette, one key light and a contact shadow. Your contestant stands relaxed, holding the gun low across the body in both hands.
+- **Contestants (build 0.14):** smooth, joinless bodies (rounded hips, chest, sloped shoulders, filled knees and elbows, finer meshes), realistic proportions and slim, matte athletic outfits. Light wears a charcoal quarter-zip with a blue cap and white trainers. Medium wears a navy quarter-zip with a gold chest chevron. Heavy wears a yellow plate carrier and a balaclava with goggles. Faces are simple and stylised, and the hands are bare.
 - **Guns (build 0.13):** each gun has 30 to 100 parts, including rails with teeth, ejection ports, charging handles, triggers, selectors, pins, slotted handguards, flash-hider slots and mag base plates.
   - The shotgun has a wooden pump and stock, plus a side saddle with shells.
   - The sniper has a fluted barrel, scope turrets and a folded bipod.

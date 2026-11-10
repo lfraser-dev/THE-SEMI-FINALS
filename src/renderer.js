@@ -247,7 +247,7 @@ function cubeGeometry() {
 }
 
 // ---- rounded shapes (all in unit space, centred, extents -0.5..0.5) ----
-function sphereGeometry(seg = 28, rings = 20) {
+function sphereGeometry(seg = 40, rings = 28) {
   const v = [], idx = [];
   for (let i = 0; i <= rings; i++) {
     const th = (i / rings) * Math.PI, y = Math.cos(th), r = Math.sin(th);
@@ -316,7 +316,7 @@ function roundedBoxGeometry(D, r) {
 
 // tapered capsule along Z: sphere radius r1 centred at -L/2, r2 at +L/2, joined by a cone.
 // Built in physical units then divided by D = [2rm, 2rm, L + 2rm] so it scales like the others.
-function capsuleGeometry(L, r1, r2, seg = 22, ringsPerCap = 7) {
+function capsuleGeometry(L, r1, r2, seg = 32, ringsPerCap = 10) {
   const rm = Math.max(r1, r2), D = [2 * rm, 2 * rm, L + 2 * rm];
   // profile: [z, r, nz, nr]
   const prof = [];
