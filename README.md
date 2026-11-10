@@ -73,10 +73,10 @@ Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Set
 
 ## Look
 
-The game doesn't use cubes for everything any more. The renderer has three extra shapes: rounded boxes (with real, size-correct bevels), cylinders and spheres.
-- **Guns:** barrels, muzzles, suppressors, scopes and tubes are cylinders. Everything else has softly rounded edges, and the gloves have fingers and cuffs.
-- **Contestants:** smooth limbs with ball joints, a shaped torso, and a rounded head with eyes, brows, nose, ears and a moving mouth. Hats, hair, helmets and masks are fitted.
-- **Bots and dummies:** mannequin-style with rounded armour, a helmet and visor, and a better-shaped rifle.
+Characters are built from smooth shapes: tapered capsules for limbs (thick at one end, thin at the other), ellipsoids and rounded boxes. Guns use cylinders and bevelled parts. The menu showroom adds a soft class-coloured rim light.
+- **Contestants (build 0.12):** human proportions with a smaller head and short neck. The face is simple and stylised. Trousers have cargo pockets and knee pads, and the boots have shafts, toe caps and soles. Jackets, vests, straps and pouches sit on the body. Light wears a cap and hoodie. Medium wears a helmet with a wraparound visor. Heavy wears a balaclava with glowing goggles.
+- **Bots:** sleek red robots. They have dark mechanical frames under red armour shells, joint balls, shoulder plates, a glowing chest core and back vents, and a faceless helmet with a glowing visor band. Their rifles have a glowing optic and light strip.
+- **Dummies:** mannequins with separate legs and arms, a chest target plate and a visor band. The hitboxes match the body.
 
 ## Main menu
 

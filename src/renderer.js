@@ -30,7 +30,8 @@ in vec3 vWorld, vNormal, vLocal, vLocalN;
 in vec4 vLightPos;
 in float vViewZ;
 uniform vec3 uColor, uScale, uFogColor, uSunDir, uCamPos, uSkyTop;
-uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky, uViewUnder;
+uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky, uViewUnder, uAO;
+uniform vec3 uRim;
 uniform sampler2DShadow uShadowMap;
 out vec4 outColor;
 const float UNDER_Y = -1.2;     // below this, you're in the underground arena: lamp light, no sun
@@ -123,7 +124,10 @@ void main() {
 
   // contact shadow at the bottom of vertical faces + a little extra under overhangs
   float ao = 1.0;
-  if (abs(n.y) < 0.5) {
+  if (uAO < 0.5) {
+    // characters / props: soft top-down occlusion instead of the box contact shadow
+    ao = mix(0.78, 1.0, n.y * 0.5 + 0.5);
+  } else if (abs(n.y) < 0.5) {
     float h = (vLocal.y + 0.5) * uScale.y;
     ao = mix(0.62, 1.0, smoothstep(0.0, 1.1, h));
   } else if (n.y < -0.5) ao = 0.7;
@@ -163,6 +167,8 @@ void main() {
 
   vec3 col = albedo * (hemi * ao + sunCol * ndl * sh) + sunCol * spec * ndl * sh * (1.0 - edge * 0.5)
            + skyCol * fres * (1.0 - rough) * 0.2 * ao;
+  // rim light (used for characters in the showroom / arena)
+  col += toLin(uRim) * pow(1.0 - max(dot(n, V), 0.0), 3.0) * 1.6;
   col = mix(col, toLin(uColor) * 2.2, uEmissive);
 
   vec3 display = toSrgb(aces(col * 0.85));
@@ -206,7 +212,7 @@ function cubeGeometry() {
 }
 
 // ---- rounded shapes (all in unit space, centred, extents -0.5..0.5) ----
-function sphereGeometry(seg = 20, rings = 14) {
+function sphereGeometry(seg = 28, rings = 20) {
   const v = [], idx = [];
   for (let i = 0; i <= rings; i++) {
     const th = (i / rings) * Math.PI, y = Math.cos(th), r = Math.sin(th);
@@ -223,7 +229,7 @@ function sphereGeometry(seg = 20, rings = 14) {
 }
 
 // cylinder along Z (radius 0.5), with caps
-function cylinderGeometry(seg = 20) {
+function cylinderGeometry(seg = 28) {
   const v = [], idx = [];
   for (let j = 0; j <= seg; j++) {
     const a = (j / seg) * Math.PI * 2, x = Math.cos(a), y = Math.sin(a);
@@ -273,6 +279,36 @@ function roundedBoxGeometry(D, r) {
   return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
 }
 
+// tapered capsule along Z: sphere radius r1 centred at -L/2, r2 at +L/2, joined by a cone.
+// Built in physical units then divided by D = [2rm, 2rm, L + 2rm] so it scales like the others.
+function capsuleGeometry(L, r1, r2, seg = 22, ringsPerCap = 7) {
+  const rm = Math.max(r1, r2), D = [2 * rm, 2 * rm, L + 2 * rm];
+  // profile: [z, r, nz, nr]
+  const prof = [];
+  const k = Math.max(-1, Math.min(1, (r1 - r2) / Math.max(L, 1e-4)));   // cone tangency angle
+  const phi = Math.asin(k);
+  for (let i = 0; i <= ringsPerCap; i++) {                // back cap: from the tip (-z) to the tangent
+    const a = (i / ringsPerCap) * (Math.PI / 2 + phi);
+    prof.push([-L / 2 - r1 * Math.cos(a), r1 * Math.sin(a), -Math.cos(a), Math.sin(a)]);
+  }
+  for (let i = 0; i <= ringsPerCap; i++) {                // front cap: from the tangent to the tip (+z)
+    const a = Math.PI / 2 + phi + (i / ringsPerCap) * (Math.PI / 2 - phi);
+    prof.push([L / 2 - r2 * Math.cos(a), r2 * Math.sin(a), -Math.cos(a), Math.sin(a)]);
+  }
+  const v = [], idx = [];
+  prof.forEach(([z, r, nz, nr]) => {
+    for (let j = 0; j <= seg; j++) {
+      const t = (j / seg) * Math.PI * 2, c = Math.cos(t), sn = Math.sin(t);
+      v.push(c * r / D[0], sn * r / D[1], z / D[2], c * nr, sn * nr, nz);
+    }
+  });
+  for (let i = 0; i < prof.length - 1; i++) for (let j = 0; j < seg; j++) {
+    const a = i * (seg + 1) + j, b = a + seg + 1;
+    idx.push(a, a + 1, b, a + 1, b + 1, b);       // counter-clockwise seen from outside
+  }
+  return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
+}
+
 function compile(gl, vs, fs) {
   const prog = gl.createProgram();
   for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
@@ -300,7 +336,7 @@ export class Renderer {
     this.shadowProg = compile(gl, SHADOW_VERT, SHADOW_FRAG);
     this.u = {};
     for (const name of ['uProj', 'uView', 'uModel', 'uScale', 'uColor', 'uFogColor', 'uSunDir', 'uCamPos',
-      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder']) {
+      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim']) {
       this.u[name] = gl.getUniformLocation(this.prog, name);
     }
     this.su = {
@@ -372,6 +408,20 @@ export class Renderer {
   meshFor(shape, scl) {
     if (shape == null) return this.cube;
     if (typeof shape === 'string') return this.meshes[shape] || this.cube;
+    if (typeof shape === 'object') {
+      // { cap: [r1, r2] } with scl = [2rm, 2rm, L + 2rm]
+      const q = (x) => Math.max(1, Math.round(Math.abs(x) * 500));
+      const [r1, r2] = shape.cap, rm = Math.max(r1, r2);
+      const L = Math.max(0.002, scl[2] - 2 * rm);
+      const key = `c${q(L)}_${q(r1)}_${q(r2)}`;
+      let m = this.rounded.get(key);
+      if (!m) {
+        if (this.rounded.size > 4000) this.rounded.clear();
+        m = this.makeMesh(capsuleGeometry(q(L) / 500, q(r1) / 500, q(r2) / 500));
+        this.rounded.set(key, m);
+      }
+      return m;
+    }
     const q = (x) => Math.max(1, Math.round(Math.abs(x) * 500));      // 2 mm buckets
     const key = `${q(scl[0])}_${q(scl[1])}_${q(scl[2])}_${q(shape)}`;
     let m = this.rounded.get(key);
@@ -434,6 +484,7 @@ export class Renderer {
   // ---- main pass ----
   begin() {
     const gl = this.gl;
+    this.boundMesh = null;
     gl.viewport(0, 0, this.size[0], this.size[1]);
     gl.clearColor(...this.fogColor, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -484,6 +535,7 @@ export class Renderer {
     const m = this.meshFor(shape, scl);
     this.bindMesh(m);
     if (shape != null) edges = 0;
+    gl.uniform1f(u.uAO, shape != null ? 0 : 1);
     gl.uniformMatrix4fv(u.uModel, false, model);
     gl.uniform3fv(u.uScale, scl);
     gl.uniform3fv(u.uColor, color);
@@ -494,6 +546,8 @@ export class Renderer {
     gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0);
     this.drawCalls++;
   }
+
+  setRim(c) { this.gl.uniform3fv(this.u.uRim, c || [0, 0, 0]); }
 
   // draw a part object { model, scale, color, emissive, shape, alpha }
   drawPart(p, edges = 1) {

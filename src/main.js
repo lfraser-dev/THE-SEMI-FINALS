@@ -937,7 +937,8 @@ function renderMenu() {
 }
 
 // ---------- showroom (the 3D scene behind the main menu) ----------
-let showroomChar = null, showroomKey = '';
+let showroomChar = null, showroomKey = '', showroomCls = 'medium';
+const skinClassShown = () => showroomCls;
 function setShowroomClass() {
   const dressing = menuTab === 'custom' || menuTab === 'shop';
   const cls = dressing ? (custCls || classLo.cls) : classLo.cls;
@@ -945,6 +946,7 @@ function setShowroomClass() {
   const key = `${cls}|${sel.weapon}|${JSON.stringify(cosmetics.equip[cls])}|${tryOn}`;
   if (key === showroomKey) return;
   showroomKey = key;
+  showroomCls = cls;
   const sp = map.showroom.spot;
   const keepT = showroomChar ? showroomChar.t : 0;
   showroomChar = new Contestant({ ...buildOutfit(cosmetics, cls, tryOn), name: c.name }, sp, 0.5);   // 3/4 turn so the gun faces you
@@ -979,8 +981,11 @@ function drawShowroom(aspect) {
   for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden && near(b)) renderer.drawBox(b);
   if (showroomChar) {
     showroomChar.t = time;
+    const rc = CLASSES[skinClassShown()].color;
+    renderer.setRim(rc.map((v) => v * 0.35));
     for (const p of showroomChar.parts()) renderer.drawPart(p);
     for (const p of Weapon.worldParts(showroomChar.gunDef, showroomChar.gunMatrix)) renderer.drawPart(p);
+    renderer.setRim(null);
   }
 }
 showTab('home');
@@ -1270,4 +1275,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { map, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

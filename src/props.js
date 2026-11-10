@@ -7,10 +7,17 @@ const RED = [0.92, 0.1, 0.08];
 const RED_HEAD = [1, 0.22, 0.16];
 
 // Dummy parts relative to its feet: [center, size, color]
+const RED_DARK2 = [0.5, 0.07, 0.06];
 const DUMMY = [
-  { c: [0, 0.38, 0], s: [0.42, 0.76, 0.26], col: RED, shape: 0.1 },              // legs
-  { c: [0, 1.1, 0], s: [0.58, 0.7, 0.3], col: RED, shape: 0.13 },                // torso
-  { c: [0, 1.62, 0], s: [0.3, 0.32, 0.3], col: RED_HEAD, head: true, shape: 'sphere' },
+  { c: [-0.11, 0.42, 0], s: [0.17, 0.84, 0.2], col: RED, shape: 0.08 },              // legs
+  { c: [0.11, 0.42, 0], s: [0.17, 0.84, 0.2], col: RED, shape: 0.08 },
+  { c: [0, 0.86, 0], s: [0.4, 0.2, 0.24], col: RED_DARK2, shape: 0.09 },            // hips
+  { c: [0, 1.17, 0], s: [0.52, 0.48, 0.28], col: RED, shape: 0.14 },                // chest
+  { c: [0, 1.17, -0.13], s: [0.3, 0.28, 0.06], col: RED_HEAD, shape: 0.03 },        // chest target plate
+  { c: [-0.32, 1.15, 0], s: [0.12, 0.44, 0.14], col: RED_DARK2, shape: 0.06 },      // arms
+  { c: [0.32, 1.15, 0], s: [0.12, 0.44, 0.14], col: RED_DARK2, shape: 0.06 },
+  { c: [0, 1.62, 0], s: [0.27, 0.31, 0.28], col: RED_HEAD, head: true, shape: 'sphere' },
+  { c: [0, 1.63, -0.005], s: [0.285, 0.07, 0.295], col: [0.25, 0.04, 0.03], head: true, shape: 0.035 },   // visor band
 ];
 
 export class Dummy {

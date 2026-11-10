@@ -2,13 +2,15 @@
 // drops when you move fast, and a wave manager.
 import { makeBox, moveBoxTo } from './world.js';
 import { compose, mat4, norm, clamp, anglesFor } from './math.js';
+import { Builder, at, pitchBasis, basisFrom } from './rig.js';
 
 const DARK = [0.16, 0.17, 0.19];
 const BLACK = [0.08, 0.08, 0.09];
 
 // all bots are red like the range dummies; types differ in build and behaviour
 const RED = [0.92, 0.1, 0.08], RED_HEAD = [1, 0.22, 0.16], RED_DARK = [0.55, 0.06, 0.05];
-const GUN = [0.1, 0.1, 0.11];
+const GUN = [0.1, 0.1, 0.11], GUN2 = [0.2, 0.2, 0.22];
+const FRAME = [0.11, 0.11, 0.125], JOINT = [0.26, 0.26, 0.28], SOLE = [0.06, 0.06, 0.07], GLOW = [1, 0.32, 0.18];
 const TYPES = {
   rifle: { hp: 100, speed: 4.2, range: [11, 19], rpm: 560, burst: [3, 5], dmg: 6, acc: 1, pause: [0.7, 1.5], build: 1 },
   rusher: { hp: 80, speed: 5.6, range: [4, 8], rpm: 900, burst: [5, 8], dmg: 5, acc: 0.85, pause: [0.5, 1.0], build: 0.88 },
@@ -33,8 +35,10 @@ function ik(a, b, l1, l2, hint) {
   return [a[0] + u[0] * x + p[0] * h, a[1] + u[1] * x + p[1] * h, a[2] + u[2] * x + p[2] * h];
 }
 const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const lerp3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
 // tilt a bot-space offset forward by `a` (top goes toward -z)
+const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const lean = (v, a) => [v[0], v[1] * Math.cos(a) + v[2] * Math.sin(a), -v[1] * Math.sin(a) + v[2] * Math.cos(a)];
 
 let nextId = 1;
@@ -297,40 +301,25 @@ export class Bot {
     const dyingT = this.dying;
     if (!this.alive && (dyingT < 0 || dyingT > 0.75)) return [];
     if (this.alive && !this.visible) return [];
-    const out = [];
     const t = this.t, s = this.sc, b = t.build;
     const g = this.moving, w = this.walk;
     const lv = this.localVel, ls = Math.hypot(lv[0], lv[1]);
     const md = ls > 0.2 ? [lv[0] / ls, lv[1] / ls] : [0, -1];        // stride direction (bot space)
     const fl = this.flash > 0 ? 0.85 : 0;
     const col = (c) => (fl ? c.map((v) => v + (1 - v) * fl) : c);
-    const em = fl ? 0.9 : 0.12;
+    const em = fl ? 0.9 : 0.1, emD = fl ? 0.9 : 0;
     // whole-body fall when dying
     const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.45 : 0, fs = this.fallSign;
     const fall = (v) => fa ? [v[0], v[1] * Math.cos(fa) - v[2] * fs * Math.sin(fa), v[2] * Math.cos(fa) + v[1] * fs * Math.sin(fa)] : v;
     const lift = this.dropY || 0;
     const W = (v) => { const p = this.toWorld(fall(v)); p[1] += lift; return p; };
-    let mi = 0;
-    const M = () => { if (mi >= this.models.length) this.models.push(mat4()); return this.models[mi++]; };
-    // smooth limb: cylinder with ball joints at both ends
-    const boxAlong = (a, c, thick, color) => {
-      const A = W(a), C = W(c);
-      const d = [C[0] - A[0], C[1] - A[1], C[2] - A[2]], L = Math.hypot(...d);
-      const sc = [thick * s, thick * s, L];
-      const m = M(); compose(m, mid(A, C), anglesFor(d), sc);
-      out.push({ model: m, scale: sc, color: col(color), emissive: em, shape: 'cyl' });
-      for (const q of [A, C]) {
-        const ms = M(), ss = [thick * s, thick * s, thick * s];
-        compose(ms, q, [0, 0, 0], ss);
-        out.push({ model: ms, scale: ss, color: col(color), emissive: em, shape: 'sphere' });
-      }
-    };
-    // block at a bot-space point, pitched by rx; shape = rounded radius, 'sphere' or 'cyl'
-    const boxAt = (c, size, rx, color, e = em, shape = 0.04) => {
-      const sc = size.map((v) => v * s);
-      const m = M(); compose(m, W(c), [rx + (fa ? fs * fa : 0), this.yaw, 0], sc);
-      out.push({ model: m, scale: sc, color: col(color), emissive: e, shape });
-    };
+    const O = W([0, 0, 0]);
+    const dirW = (v) => { const p = W(v); const d = [p[0] - O[0], p[1] - O[1], p[2] - O[2]]; const l = Math.hypot(...d) || 1; return d.map((x) => x / l); };
+    const bd = (this.bd = this.bd || new Builder()).reset();
+    // colour-flashing wrappers (sizes are in bot units, scaled by the bot's size)
+    const cap = (a, c, r1, r2, color, e = em) => bd.capsule(W(a), W(c), r1 * s, r2 * s, col(color), e);
+    const ell = (c, B, size, color, e = em) => bd.ellipsoid(W(c), B, size.map((v) => v * s), col(color), e);
+    const box = (c, B, size, r, color, e = em) => bd.rbox(W(c), B, size.map((v) => v * s), r * s, col(color), e);
 
     // --- pose parameters
     const crouch = this.landK * 0.28 + (dyingT >= 0 ? Math.min(1, dyingT / 0.5) * 0.35 : 0);
@@ -339,9 +328,13 @@ export class Bot {
     const pelvis = [0, 0.95 + bob - crouch, 0];
     const leanF = 0.12 * g + (this.type === 'rusher' ? 0.12 * g : 0) - this.flinch * 0.35 - this.recoil * 0.05 + this.landK * 0.2;
     const twist = Math.sin(w) * 0.12 * g + this.flinch * this.flinchTwist;
-    const up = (v) => add3(pelvis, lean([v[0] * Math.cos(twist) + v[2] * Math.sin(twist), v[1], -v[0] * Math.sin(twist) + v[2] * Math.cos(twist)], leanF));
+    const tr = (v) => lean([v[0] * Math.cos(twist) + v[2] * Math.sin(twist), v[1], -v[0] * Math.sin(twist) + v[2] * Math.cos(twist)], leanF);
+    const up = (v) => add3(pelvis, tr(v));
+    const BB = { R: dirW([1, 0, 0]), U: dirW([0, 1, 0]), B: dirW([0, 0, 1]) };                  // body basis
+    const TB = { R: dirW(tr([1, 0, 0])), U: dirW(tr([0, 1, 0])), B: dirW(tr([0, 0, 1])) };       // torso basis
+    const heavy = this.type === 'heavy';
 
-    // --- legs: swing along the stride direction, feet lift on the way forward, knees bend forward
+    // --- legs: dark frame with red armour shells, knee joints, armoured boots
     const legL = 0.47;
     for (const side of [-1, 1]) {
       const ph = w + (side > 0 ? Math.PI : 0);
@@ -350,54 +343,81 @@ export class Bot {
       const footLift = Math.max(0, Math.cos(ph)) * 0.14 * g;
       const foot = [hip[0] + md[0] * Math.sin(swing) * 0.8 + side * 0.03, footLift + 0.06, hip[2] + md[1] * Math.sin(swing) * 0.8];
       const knee = ik(hip, foot, legL, legL, [0, 0.2, -1]);
-      boxAt(hip, [0.2 * b, 0.12, 0.22], 0, RED_DARK);
-      boxAlong(hip, knee, 0.17 * b, RED);
-      boxAlong(knee, foot, 0.14 * b, RED_DARK);
-      boxAt([foot[0], 0.06 + footLift * 0.5, foot[2] - 0.05], [0.15 * b, 0.12, 0.28], 0, RED_DARK, em, 0.05);
+      const ankle = add3(foot, [0, 0.07, 0.03]);
+      ell(hip, BB, [0.15 * b, 0.15, 0.15], FRAME, emD);                                      // hip joint
+      cap(hip, knee, 0.065 * b, 0.05 * b, FRAME, emD);
+      cap(lerp3(hip, knee, 0.08), lerp3(hip, knee, 0.78), 0.1 * b, 0.075 * b, RED);          // thigh armour
+      ell(knee, BB, [0.12 * b, 0.12, 0.12], JOINT, emD);
+      cap(knee, ankle, 0.05 * b, 0.04 * b, FRAME, emD);
+      cap(lerp3(knee, ankle, 0.12), lerp3(knee, ankle, 0.85), 0.082 * b, 0.06 * b, RED);    // shin shell
+      const kd = norm(sub3(W(knee), W(ankle)));
+      bd.rbox(W(add3(knee, [0, 0.02, -0.06])), basisFrom(kd, BB.B), [0.1 * b * s, 0.13 * s, 0.05 * s], 0.022 * s, col(RED_HEAD), em);  // knee cap
+      box([foot[0], 0.07 + footLift * 0.5, foot[2] - 0.04], BB, [0.15 * b, 0.12, 0.27], 0.05, FRAME, emD);   // boot
+      ell([foot[0], 0.075 + footLift * 0.5, foot[2] - 0.13], BB, [0.14 * b, 0.11, 0.13], RED);              // toe cap
+      box([foot[0], 0.02 + footLift * 0.5, foot[2] - 0.05], BB, [0.16 * b, 0.035, 0.31], 0.014, SOLE, emD);
     }
 
-    // --- torso, head
-    const chest = up([0, 0.32 + breathe, 0]);
-    boxAt(add3(pelvis, [0, 0.05, 0]), [0.38 * b, 0.2, 0.25], -leanF * 0.4, RED_DARK, em, 0.08);  // hips
-    boxAt(up([0, 0.2, 0]), [0.36 * b, 0.26, 0.24 * b], -leanF, RED_DARK, em, 0.09);             // waist
-    boxAt(up([0, 0.42, 0]), [0.52 * b, 0.36, 0.3 * b], -leanF, RED, em, 0.12);                  // chest
-    boxAt(up([0, 0.42, -0.15 * b]), [0.34 * b, 0.26, 0.05], -leanF, RED_HEAD, em, 0.04);        // chest plate
-    boxAt(up([0, 0.4, 0.17 * b]), [0.3 * b, 0.32, 0.08], -leanF, RED_DARK, em, 0.04);           // back pack
-    if (this.type === 'heavy') {
-      boxAt(up([-0.31 * b, 0.56, 0]), [0.24, 0.16, 0.34], -leanF, RED_DARK, em, 0.07);       // shoulder armour
-      boxAt(up([0.31 * b, 0.56, 0]), [0.24, 0.16, 0.34], -leanF, RED_DARK, em, 0.07);
-    }
-    const neck = up([0, 0.64, 0]);
-    const headC = add3(neck, [0, 0.16, 0]);
+    // --- pelvis, spine, chest
+    box(add3(pelvis, [0, 0.02, 0]), BB, [0.34 * b, 0.18, 0.24], 0.08, FRAME, emD);
+    box(add3(pelvis, [0, 0.0, -0.11]), BB, [0.22 * b, 0.14, 0.05], 0.025, RED);             // codpiece plate
+    cap(up([0, 0.08, 0]), up([0, 0.28, 0]), 0.11 * b, 0.13 * b, FRAME, emD);                // spine core
+    for (const y of [0.13, 0.21]) cap(up([0, y, 0]), up([0, y + 0.035, 0]), 0.135 * b, 0.14 * b, JOINT, emD);   // ribbed waist
+    box(up([0, 0.42 + breathe, 0.0]), TB, [0.48 * b, 0.34, 0.3 * b], 0.12, RED);            // chest
+    box(up([0, 0.44 + breathe, -0.14 * b]), TB, [0.32 * b, 0.22, 0.05], 0.035, RED_HEAD);   // chest plate
+    ell(up([0, 0.43 + breathe, -0.168 * b]), TB, [0.07, 0.07, 0.02], GLOW, fl ? 1 : 0.9);  // power core
+    box(up([0, 0.4, 0.16 * b]), TB, [0.3 * b, 0.3, 0.09], 0.04, FRAME, emD);               // back unit
+    for (const sx of [-1, 1]) box(up([sx * 0.08, 0.42, 0.21 * b]), TB, [0.05, 0.2, 0.02], 0.008, GLOW, fl ? 1 : 0.7);   // vents
+
+    // --- head: rounded helmet with a glowing visor band, no face
+    const neck = up([0, 0.6, 0]);
+    const headC = add3(up([0, 0.62, 0]), [0, 0.17, -0.01]);
     const hp = this.aimPitch * 0.6 - leanF * 0.3;
-    boxAt(add3(neck, [0, 0.03, 0]), [0.12, 0.1, 0.12], 0, RED_DARK, em, 'sphere');               // neck
-    boxAt(headC, [0.27, 0.3, 0.28], hp, RED_HEAD, em, 'sphere');                                 // helmet
-    boxAt(add3(headC, [0, 0.02, -0.11]), [0.22, 0.09, 0.08], hp, [0.12, 0.02, 0.02], fl ? 0.9 : 0.4, 0.035);   // visor
-    boxAt(add3(headC, [0, -0.1, -0.06]), [0.18, 0.08, 0.14], hp, RED_DARK, em, 0.035);           // jaw guard
+    const HB = pitchBasis(BB, hp);
+    const hc = Math.cos(hp), hs = Math.sin(hp);
+    const hO = (v) => add3(headC, [v[0], v[1] * hc - v[2] * hs, v[1] * hs + v[2] * hc]);   // head-space offset
+    cap(neck, add3(neck, [0, 0.12, 0]), 0.07, 0.06, FRAME, emD);
+    ell(headC, HB, [0.25, 0.28, 0.28], RED_HEAD);                                             // helmet
+    box(hO([0, -0.1, -0.005]), HB, [0.17, 0.08, 0.19], 0.04, JOINT, emD);              // jaw
+    ell(hO([0, 0.01, -0.03]), HB, [0.244, 0.09, 0.265], GLOW, fl ? 1 : 0.95);       // visor band
+    ell(hO([0, 0.01, -0.025]), HB, [0.25, 0.11, 0.262], FRAME, emD);                 // visor rim
+    for (const sx of [-1, 1]) ell(hO([sx * 0.125, -0.0, 0.01]), HB, [0.04, 0.1, 0.1], FRAME, emD);   // ear pods
+    box(hO([0, 0.13, 0.02]), HB, [0.045, 0.04, 0.2], 0.015, RED, em);               // crest
 
     // --- gun held at the chest, aimed at you, kicking back when it fires
     const cp = Math.cos(this.aimPitch), sp = Math.sin(this.aimPitch);
     const gd = [0, sp, -cp];                                           // gun direction (bot space)
     const gunC = add3(up([0.12 * b, 0.42, -0.3]), [0, this.recoil * 0.025, this.recoil * 0.07]);
-    boxAt(gunC, [0.07, 0.11, 0.42], this.aimPitch + this.recoil * 0.12, GUN, 0, 0.015);
-    boxAt(add3(gunC, gd.map((v) => v * 0.27)), [0.035, 0.035, 0.2], this.aimPitch + this.recoil * 0.12, GUN, 0, 'cyl');   // barrel
-    boxAt(add3(gunC, [0, -0.09, 0.08]), [0.05, 0.12, 0.08], this.aimPitch, GUN, 0, 0.012);       // mag
-    boxAt(add3(gunC, [0, 0.075, 0.02]), [0.05, 0.04, 0.1], this.aimPitch, GUN, 0, 0.01);         // sight
-    boxAt(add3(gunC, [0.037, 0.01, 0]), [0.006, 0.02, 0.3], this.aimPitch, [1, 0.25, 0.15], 0.6, undefined);   // light strip
-    const muz = add3(gunC, gd.map((v) => v * 0.33));
+    const GB = pitchBasis(BB, this.aimPitch + this.recoil * 0.12);
+    const gat = (v) => add3(gunC, [v[0], v[1] * cp - v[2] * sp, v[1] * sp + v[2] * cp]);   // gun-space offset (z back)
+    box(gunC, GB, [0.075, 0.11, 0.4], 0.02, GUN, emD);                                          // receiver
+    box(gat([0, 0.07, 0.02]), GB, [0.06, 0.04, 0.14], 0.015, GUN2, emD);                        // top rail / optic
+    ell(gat([0, 0.09, 0.0]), GB, [0.03, 0.03, 0.02], GLOW, fl ? 1 : 0.9);                      // optic lens
+    bd.cyl(W(add3(gunC, gd.map((v) => v * 0.28))), GB, [0.038 * s, 0.038 * s, 0.2 * s], col(GUN2), emD);   // barrel
+    bd.cyl(W(add3(gunC, gd.map((v) => v * 0.36))), GB, [0.05 * s, 0.05 * s, 0.05 * s], col(GUN), emD);     // muzzle
+    box(gat([0, -0.1, 0.06]), pitchBasis(GB, 0.2), [0.05, 0.13, 0.08], 0.015, GUN2, emD);    // mag
+    box(gat([0.04, 0.0, 0.0]), GB, [0.006, 0.022, 0.3], 0.003, GLOW, fl ? 1 : 0.8);          // light strip
+    const muz = add3(gunC, gd.map((v) => v * 0.39));
     this.muzzlePt = W(muz);
     const gripR = add3(gunC, [0, -0.05, 0.16]), gripL = add3(gunC, gd.map((v) => v * 0.18)).map((v, i) => v + (i === 1 ? -0.05 : 0));
 
     // --- arms solved to the gun
     for (const [side, hand] of [[-1, gripL], [1, gripR]]) {
-      const sh = up([side * 0.28 * b, 0.56, 0]);
+      const sh = up([side * 0.27 * b, 0.55, 0]);
       const elbow = ik(sh, hand, 0.31, 0.3, [side * 0.8, -0.6, 0.2]);
-      boxAlong(sh, elbow, 0.12 * b, RED);
-      boxAlong(elbow, hand, 0.1 * b, RED_DARK);
-      boxAt(hand, [0.09, 0.1, 0.11], 0, RED_DARK, em, 0.035);
+      ell(sh, TB, [0.14 * b, 0.14, 0.14], JOINT, emD);
+      cap(sh, elbow, 0.05 * b, 0.042 * b, FRAME, emD);
+      cap(lerp3(sh, elbow, 0.25), lerp3(sh, elbow, 0.85), 0.07 * b, 0.06 * b, RED);          // upper arm shell
+      ell(elbow, BB, [0.095 * b, 0.095, 0.095], JOINT, emD);
+      cap(elbow, hand, 0.045 * b, 0.036 * b, FRAME, emD);
+      cap(lerp3(elbow, hand, 0.1), lerp3(elbow, hand, 0.72), 0.072 * b, 0.058 * b, RED);     // forearm shell
+      box(hand, BB, [0.085, 0.095, 0.1], 0.035, FRAME, emD);
+      // pauldron
+      const pd = heavy ? 1.3 : 1;
+      box(up([side * 0.3 * b, 0.565, 0]), TB, [0.17 * b * pd, 0.11 * pd, 0.22 * pd], 0.05 * pd, RED_HEAD);
     }
-    return out;
+    return bd.out;
   }
+
 }
 
 // ---------------------------------------------------------------- waves
