@@ -239,11 +239,16 @@
   .it { all: unset; cursor: pointer; position: relative; display: block; padding: 10px 10px 8px; background: rgba(255,255,255,.07); border-bottom: 3px solid var(--r); min-height: 86px; box-sizing: border-box; }
   .it:hover { background: rgba(255,255,255,.14); }
   .it.on { outline: 2px solid #fff; outline-offset: -2px; background: rgba(255,255,255,.16); }
-  .it.locked { opacity: .55; }
+  .it.locked { opacity: .82; }
+  .it.locked .sw3 { filter: saturate(.75); }
   .it .sw { width: 34px; height: 34px; display: grid; place-items: center; font-size: 18px; background: var(--sw); color: rgba(0,0,0,.45); clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+  .it .sw3 { display: block; width: 100%; aspect-ratio: 1 / 0.82; object-fit: cover; object-position: 50% 45%; margin: -2px 0 0; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+  .it .sw3:not([src]) { animation: thumbPulse 1s ease-in-out infinite alternate; }
+  @keyframes thumbPulse { from { opacity: .45; } to { opacity: .8; } }
+  .it:hover .sw3 { filter: brightness(1.12); }
   .it b { display: block; font: 800 italic 15px var(--font); margin-top: 8px; line-height: 1.05; }
   .it small { display: block; font: 700 10px var(--font); letter-spacing: .16em; color: var(--r); margin-top: 2px; }
-  .it .price { position: absolute; right: 8px; top: 8px; font: 800 12px var(--font); color: #ffd04a; }
+  .it .price { position: absolute; right: 8px; top: 8px; z-index: 1; font: 800 12px var(--font); color: #ffd04a; background: rgba(0,0,0,.55); padding: 2px 6px; }
   .it .price.own { color: rgba(255,255,255,.6); }
   .it .tag { position: absolute; right: 8px; top: 8px; font: 800 10px var(--font); letter-spacing: .14em; background: #fff; color: var(--ink); padding: 1px 5px; }
   .cu-foot { margin-top: 12px; font: 600 14px var(--font); opacity: .75; min-height: 20px; }
@@ -254,6 +259,7 @@
   .sh-featured { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .sh-featured .it { min-height: 140px; background: linear-gradient(160deg, color-mix(in srgb, var(--r) 45%, transparent), rgba(255,255,255,.05)); }
   .sh-featured .it .sw { width: 52px; height: 52px; font-size: 26px; }
+  .sh-featured .it .sw3 { aspect-ratio: 1 / 0.9; }
   .sh-featured .it b { font-size: 19px; }
   .sh-filter { display: flex; flex-wrap: wrap; gap: 4px; margin: 16px 0 8px; }
   .sh-filter button { all: unset; cursor: pointer; font: 800 11px var(--font); letter-spacing: .14em; padding: 5px 9px; background: rgba(255,255,255,.08); }
@@ -422,7 +428,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.15</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.16</div>
       <button class="mm-big locked" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s">TOURNAMENT ARENA</span>

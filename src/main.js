@@ -11,6 +11,7 @@ import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, angle
 import { buildDef, ratings } from './attachments.js';
 import { CLASSES, CLASS_ORDER, ABILITIES, loadLoadout, saveLoadout } from './classes.js';
 import { Contestant } from './contestant.js';
+import { Thumbs } from './thumbs.js';
 import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
 import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
@@ -770,15 +771,36 @@ addEventListener('keydown', (e) => {
 });
 let custCls = null, custSlot = 'head', tryOn = null, shopFilter = 'all';
 const fmt = (n) => n.toLocaleString('en-GB');
+const thumbs = new Thumbs();
+const thumbKey = (id, cls) => `${id}|${cls}|${classLo[cls].weapon}|${JSON.stringify(cosmetics.equip[cls])}`;
+function thumbSpec(id, cls) {
+  const it = ITEMS[id], w = classLo[cls].weapon;
+  const skin = it.slot === 'wskin' ? it.gun : gunSkinFor(cosmetics, cls);
+  skinClass = cls;
+  const gunDef = skinDef(buildDef(WEAPONS[w], loadouts[w] || {}), skin);
+  skinClass = null;
+  const outfit = { ...buildOutfit(cosmetics, cls, it.slot === 'wskin' ? null : id) };
+  return { slot: it.slot, outfit, gunDef, color: RARITY[it.rarity].color.map((v) => v * 0.8) };
+}
 function itemCard(id, { onClick, on = false, priceTag = true }) {
   const it = ITEMS[id], r = RARITY[it.rarity];
   const b = el('button', `it${on ? ' on' : ''}${!owns(cosmetics, id) ? ' locked' : ''}`);
   b.type = 'button';
   b.style.setProperty('--r', rgb(r.color));
-  const sw = swatch(it);
-  const s0 = el('div', 'sw', iconFor(it.slot));
-  s0.style.setProperty('--sw', sw ? rgb(sw) : 'rgba(255,255,255,.15)');
-  b.append(s0, el('b', null, it.name), el('small', null, r.name));
+  // a live 3D portrait of the item (falls back to a colour swatch if the thumbnail renderer isn't available)
+  const cls = custCls || classLo.cls;
+  const img = el('img', 'sw3');
+  img.alt = '';
+  img.style.background = `radial-gradient(circle at 50% 40%, ${rgb(r.color.map((v) => v * 0.8))}, ${rgb(r.color.map((v) => v * 0.25))})`;
+  const url = thumbs.get(thumbKey(id, cls), () => thumbSpec(id, cls), (u) => { img.src = u; });
+  if (url) img.src = url;
+  if (!thumbs.ok) {
+    const sw = swatch(it);
+    const s0 = el('div', 'sw', iconFor(it.slot));
+    s0.style.setProperty('--sw', sw ? rgb(sw) : 'rgba(255,255,255,.15)');
+    b.append(s0);
+  } else b.append(img);
+  b.append(el('b', null, it.name), el('small', null, r.name));
   if (priceTag) {
     if (owns(cosmetics, id)) b.append(el('span', 'price own', it.price ? 'OWNED' : 'FREE'));
     else b.append(el('span', 'price', `◆ ${fmt(it.price)}`));
