@@ -311,17 +311,25 @@ export class Bot {
     const lift = this.dropY || 0;
     const W = (v) => { const p = this.toWorld(fall(v)); p[1] += lift; return p; };
     let mi = 0;
-    const boxAlong = (a, c, thick, color) => {                       // limb between two bot-space points
+    const M = () => { if (mi >= this.models.length) this.models.push(mat4()); return this.models[mi++]; };
+    // smooth limb: cylinder with ball joints at both ends
+    const boxAlong = (a, c, thick, color) => {
       const A = W(a), C = W(c);
       const d = [C[0] - A[0], C[1] - A[1], C[2] - A[2]], L = Math.hypot(...d);
-      const sc = [thick * s, thick * s, L + thick * s * 0.6];
-      compose(this.models[mi], mid(A, C), anglesFor(d), sc);
-      out.push({ model: this.models[mi++], scale: sc, color: col(color), emissive: em });
+      const sc = [thick * s, thick * s, L];
+      const m = M(); compose(m, mid(A, C), anglesFor(d), sc);
+      out.push({ model: m, scale: sc, color: col(color), emissive: em, shape: 'cyl' });
+      for (const q of [A, C]) {
+        const ms = M(), ss = [thick * s, thick * s, thick * s];
+        compose(ms, q, [0, 0, 0], ss);
+        out.push({ model: ms, scale: ss, color: col(color), emissive: em, shape: 'sphere' });
+      }
     };
-    const boxAt = (c, size, rx, color, e = em) => {                   // block at a bot-space point, pitched by rx
+    // block at a bot-space point, pitched by rx; shape = rounded radius, 'sphere' or 'cyl'
+    const boxAt = (c, size, rx, color, e = em, shape = 0.04) => {
       const sc = size.map((v) => v * s);
-      compose(this.models[mi], W(c), [rx + (fa ? fs * fa : 0), this.yaw, 0], sc);
-      out.push({ model: this.models[mi++], scale: sc, color: col(color), emissive: e });
+      const m = M(); compose(m, W(c), [rx + (fa ? fs * fa : 0), this.yaw, 0], sc);
+      out.push({ model: m, scale: sc, color: col(color), emissive: e, shape });
     };
 
     // --- pose parameters
@@ -345,29 +353,37 @@ export class Bot {
       boxAt(hip, [0.2 * b, 0.12, 0.22], 0, RED_DARK);
       boxAlong(hip, knee, 0.17 * b, RED);
       boxAlong(knee, foot, 0.14 * b, RED_DARK);
-      boxAt([foot[0], 0.05 + footLift * 0.5, foot[2] - 0.05], [0.15 * b, 0.1, 0.28], 0, RED_DARK);
+      boxAt([foot[0], 0.06 + footLift * 0.5, foot[2] - 0.05], [0.15 * b, 0.12, 0.28], 0, RED_DARK, em, 0.05);
     }
 
     // --- torso, head
     const chest = up([0, 0.32 + breathe, 0]);
-    boxAt(add3(pelvis, [0, 0.05, 0]), [0.42 * b, 0.2, 0.26], -leanF * 0.4, RED_DARK);         // hips
-    boxAt(chest, [0.56 * b, 0.56, 0.32 * b], -leanF, RED);                                      // torso
-    boxAt(up([0, 0.36, -0.17 * b]), [0.36 * b, 0.32, 0.04], -leanF, RED_HEAD);                  // chest plate
+    boxAt(add3(pelvis, [0, 0.05, 0]), [0.38 * b, 0.2, 0.25], -leanF * 0.4, RED_DARK, em, 0.08);  // hips
+    boxAt(up([0, 0.2, 0]), [0.36 * b, 0.26, 0.24 * b], -leanF, RED_DARK, em, 0.09);             // waist
+    boxAt(up([0, 0.42, 0]), [0.52 * b, 0.36, 0.3 * b], -leanF, RED, em, 0.12);                  // chest
+    boxAt(up([0, 0.42, -0.15 * b]), [0.34 * b, 0.26, 0.05], -leanF, RED_HEAD, em, 0.04);        // chest plate
+    boxAt(up([0, 0.4, 0.17 * b]), [0.3 * b, 0.32, 0.08], -leanF, RED_DARK, em, 0.04);           // back pack
     if (this.type === 'heavy') {
-      boxAt(up([-0.34 * b, 0.55, 0]), [0.22, 0.12, 0.34], -leanF, RED_DARK);                   // shoulder armour
-      boxAt(up([0.34 * b, 0.55, 0]), [0.22, 0.12, 0.34], -leanF, RED_DARK);
+      boxAt(up([-0.31 * b, 0.56, 0]), [0.24, 0.16, 0.34], -leanF, RED_DARK, em, 0.07);       // shoulder armour
+      boxAt(up([0.31 * b, 0.56, 0]), [0.24, 0.16, 0.34], -leanF, RED_DARK, em, 0.07);
     }
     const neck = up([0, 0.64, 0]);
     const headC = add3(neck, [0, 0.16, 0]);
-    boxAt(headC, [0.3, 0.32, 0.3], this.aimPitch * 0.6 - leanF * 0.3, RED_HEAD);
-    boxAt(add3(headC, [0, 0.02, -0.155]), [0.22, 0.06, 0.02], this.aimPitch * 0.6 - leanF * 0.3, [0.12, 0.02, 0.02], fl ? 0.9 : 0.4); // visor slit
+    const hp = this.aimPitch * 0.6 - leanF * 0.3;
+    boxAt(add3(neck, [0, 0.03, 0]), [0.12, 0.1, 0.12], 0, RED_DARK, em, 'sphere');               // neck
+    boxAt(headC, [0.27, 0.3, 0.28], hp, RED_HEAD, em, 'sphere');                                 // helmet
+    boxAt(add3(headC, [0, 0.02, -0.11]), [0.22, 0.09, 0.08], hp, [0.12, 0.02, 0.02], fl ? 0.9 : 0.4, 0.035);   // visor
+    boxAt(add3(headC, [0, -0.1, -0.06]), [0.18, 0.08, 0.14], hp, RED_DARK, em, 0.035);           // jaw guard
 
     // --- gun held at the chest, aimed at you, kicking back when it fires
     const cp = Math.cos(this.aimPitch), sp = Math.sin(this.aimPitch);
     const gd = [0, sp, -cp];                                           // gun direction (bot space)
     const gunC = add3(up([0.12 * b, 0.42, -0.3]), [0, this.recoil * 0.025, this.recoil * 0.07]);
-    boxAt(gunC, [0.07, 0.11, 0.6], this.aimPitch + this.recoil * 0.12, GUN, 0);
-    boxAt(add3(gunC, [0, -0.09, 0.08]), [0.05, 0.12, 0.08], this.aimPitch, GUN, 0);              // mag
+    boxAt(gunC, [0.07, 0.11, 0.42], this.aimPitch + this.recoil * 0.12, GUN, 0, 0.015);
+    boxAt(add3(gunC, gd.map((v) => v * 0.27)), [0.035, 0.035, 0.2], this.aimPitch + this.recoil * 0.12, GUN, 0, 'cyl');   // barrel
+    boxAt(add3(gunC, [0, -0.09, 0.08]), [0.05, 0.12, 0.08], this.aimPitch, GUN, 0, 0.012);       // mag
+    boxAt(add3(gunC, [0, 0.075, 0.02]), [0.05, 0.04, 0.1], this.aimPitch, GUN, 0, 0.01);         // sight
+    boxAt(add3(gunC, [0.037, 0.01, 0]), [0.006, 0.02, 0.3], this.aimPitch, [1, 0.25, 0.15], 0.6, undefined);   // light strip
     const muz = add3(gunC, gd.map((v) => v * 0.33));
     this.muzzlePt = W(muz);
     const gripR = add3(gunC, [0, -0.05, 0.16]), gripL = add3(gunC, gd.map((v) => v * 0.18)).map((v, i) => v + (i === 1 ? -0.05 : 0));
@@ -378,7 +394,7 @@ export class Bot {
       const elbow = ik(sh, hand, 0.31, 0.3, [side * 0.8, -0.6, 0.2]);
       boxAlong(sh, elbow, 0.12 * b, RED);
       boxAlong(elbow, hand, 0.1 * b, RED_DARK);
-      boxAt(hand, [0.09, 0.09, 0.1], 0, RED_DARK);
+      boxAt(hand, [0.09, 0.1, 0.11], 0, RED_DARK, em, 0.035);
     }
     return out;
   }

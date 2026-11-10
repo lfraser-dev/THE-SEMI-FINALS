@@ -8,9 +8,9 @@ const RED_HEAD = [1, 0.22, 0.16];
 
 // Dummy parts relative to its feet: [center, size, color]
 const DUMMY = [
-  { c: [0, 0.38, 0], s: [0.42, 0.76, 0.26], col: RED },        // legs
-  { c: [0, 1.1, 0], s: [0.58, 0.7, 0.3], col: RED },           // torso
-  { c: [0, 1.62, 0], s: [0.3, 0.32, 0.3], col: RED_HEAD, head: true },
+  { c: [0, 0.38, 0], s: [0.42, 0.76, 0.26], col: RED, shape: 0.1 },              // legs
+  { c: [0, 1.1, 0], s: [0.58, 0.7, 0.3], col: RED, shape: 0.13 },                // torso
+  { c: [0, 1.62, 0], s: [0.3, 0.32, 0.3], col: RED_HEAD, head: true, shape: 'sphere' },
 ];
 
 export class Dummy {
@@ -32,7 +32,7 @@ export class Dummy {
     this.hp = 100;
     this.flash = 0;
     this.boxes = DUMMY.map((p) => this.world.add(makeBox([0, 0, 0], p.s, {
-      color: [...p.col], grid: false, emissive: 0.18, tag: 'dummy', ref: this,
+      color: [...p.col], grid: false, emissive: 0.18, tag: 'dummy', ref: this, shape: p.shape,
     })));
     this.boxes.forEach((b, i) => { b.head = !!DUMMY[i].head; });
     this.place();

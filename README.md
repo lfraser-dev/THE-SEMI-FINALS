@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.10: Home screen with Armoury, Customization and Shop; Test Range, Parkour Course and underground bot arena.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.11: Home screen with Armoury, Customization and Shop; Test Range, Parkour Course and underground bot arena.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -70,6 +70,13 @@ Reload animations differ by gun, and they have some flair:
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.
 
 Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Settings, and aim can be set to hold or toggle. This helps on trackpads.
+
+## Look
+
+The game doesn't use cubes for everything any more. The renderer has three extra shapes: rounded boxes (with real, size-correct bevels), cylinders and spheres.
+- **Guns:** barrels, muzzles, suppressors, scopes and tubes are cylinders. Everything else has softly rounded edges, and the gloves have fingers and cuffs.
+- **Contestants:** smooth limbs with ball joints, a shaped torso, and a rounded head with eyes, brows, nose, ears and a moving mouth. Hats, hair, helmets and masks are fitted.
+- **Bots and dummies:** mannequin-style with rounded armour, a helmet and visor, and a better-shaped rifle.
 
 ## Main menu
 

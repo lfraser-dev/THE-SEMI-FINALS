@@ -18,6 +18,7 @@ export function makeBox(min, max, o = {}) {
     noBullet: !!o.noBullet,       // bullets pass through
     noShadow: !!o.noShadow,       // doesn't cast shadows
     hidden: !!o.hidden,           // collision / hitbox only, never drawn
+    shape: o.shape,               // undefined = box, number = rounded edges (m), 'sphere', 'cyl'
     tag: o.tag || null,
     ref: o.ref || null,
     model: new Float32Array(16),

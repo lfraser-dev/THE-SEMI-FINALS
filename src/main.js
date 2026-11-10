@@ -979,8 +979,8 @@ function drawShowroom(aspect) {
   for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden && near(b)) renderer.drawBox(b);
   if (showroomChar) {
     showroomChar.t = time;
-    for (const p of showroomChar.parts()) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
-    for (const p of Weapon.worldParts(showroomChar.gunDef, showroomChar.gunMatrix)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+    for (const p of showroomChar.parts()) renderer.drawPart(p);
+    for (const p of Weapon.worldParts(showroomChar.gunDef, showroomChar.gunMatrix)) renderer.drawPart(p);
   }
 }
 showTab('home');
@@ -1229,10 +1229,10 @@ function frame(now) {
   // keep the sun's shadow map centred on the player so the annex gets shadows too
   renderer.setShadowArea([Math.round(player.pos[0] / 8) * 8, 0, Math.round(player.pos[2] / 8) * 8], 50);
   renderer.beginShadow();
-  for (const b of world.boxes) if (!b.noShadow && !b.hidden) renderer.shadowDraw(b.model);
-  for (const p of caseParts) renderer.shadowDraw(p.model);
+  for (const b of world.boxes) if (!b.noShadow && !b.hidden) renderer.shadowDraw(b.model, b.shape, b.scale);
+  for (const p of caseParts) renderer.shadowDraw(p.model, p.shape, p.scale);
   effects.drawShadows(renderer);
-  for (const p of botParts) renderer.shadowDraw(p.model);
+  for (const p of botParts) renderer.shadowDraw(p.model, p.shape, p.scale);
   renderer.endShadow();
 
   // world
@@ -1241,9 +1241,9 @@ function frame(now) {
   renderer.drawSky(camEye);
   renderer.setBlend(false);
   for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden) renderer.drawBox(b);
-  for (const p of caseParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  for (const p of caseParts) renderer.drawPart(p);
   effects.drawOpaque(renderer);
-  for (const p of botParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  for (const p of botParts) renderer.drawPart(p);
   renderer.setBlend(true);
   for (const b of world.boxes) if (b.alpha < 1 && !b.hidden) renderer.drawBox(b);
   effects.drawTransparent(renderer);
@@ -1258,9 +1258,9 @@ function frame(now) {
   if (bench.open) {
     // gun preview on the right of the workbench menu
     compose(previewM, [0.5, -0.02, -1.25], [0.12, bench.rotY + time * 0.25, 0], [1, 1, 1]);
-    for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+    for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.drawPart(p);
   } else {
-    for (const p of vmParts) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+    for (const p of vmParts) renderer.drawPart(p);
   }
 
   updateHud(dt, vfov);

@@ -10,6 +10,16 @@ const RED = [0.95, 0.12, 0.1];
 const smooth = (t) => t * t * (3 - 2 * t);
 const seg = (t, a, b) => smooth(clamp((t - a) / (b - a), 0, 1));
 const crossed = (prev, now, at) => prev < at && now >= at;
+
+// Which mesh each gun part uses: tubes are cylinders, everything else gets softly rounded edges.
+const ROUND = /^(barrel|muzzle|tube|scope|scopeF|scBody|scBell|scEye|lens|scLens|suppressor|supRing|supCap|choke|compensator|bead|shell|front)$/;
+export function partShape(p) {
+  if (p.shape !== undefined) return p.shape;
+  if (ROUND.test(p.name) || (p.name === 'brake' && p.s[0] === p.s[1])) return 'cyl';
+  const m = Math.min(...p.s);
+  if (m < 0.006) return undefined;                 // tiny details stay crisp
+  return Math.min(0.014, m * 0.3);                  // rounded edges scaled to the part
+}
 // how long each gun's draw animation takes (s)
 const DRAW_TIME = { pistol: 0.6, smg: 0.62, ar: 0.78, shotgun: 0.8, sniper: 0.9, lmg: 0.95 };
 // moments in each draw animation that get a sound + camera jolt
@@ -66,14 +76,14 @@ export class Weapon {
     this.events = [];
     this.root = mat4();
     this.tmp = mat4();
-    this.parts = def.parts.map((p) => ({ ...p, model: mat4(), local: mat4() }));
-    this.handModels = [mat4(), mat4(), mat4(), mat4(), mat4()];
+    this.parts = def.parts.map((p) => ({ ...p, shape: partShape(p), model: mat4(), local: mat4() }));
+    this.handModels = Array.from({ length: 9 }, () => mat4());
   }
 
   // swap in a new definition (e.g. after changing attachments); refills the gun
   setDef(def) {
     this.def = def;
-    this.parts = def.parts.map((p) => ({ ...p, model: mat4(), local: mat4() }));
+    this.parts = def.parts.map((p) => ({ ...p, shape: partShape(p), model: mat4(), local: mat4() }));
     this.ammo = def.mag;
     this.reload = null;
     this.cycleT = null;
@@ -514,14 +524,14 @@ export class Weapon {
       if (p.pump) c = add3(c, [0, 0, 0.09 * pumpBack]);
       compose(p.local, c, [rx, 0, rz], p.s);
       mul(p.model, this.root, p.local);
-      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0 });
+      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape });
     }
     if (shellVisible) {
       const s = [0.024, 0.024, 0.06];
       compose(this.tmp, shellPos, [shellSpin, 0, 0], s);
       const m = mat4();
       mul(m, this.root, this.tmp);
-      out.push({ model: m, scale: s, color: RED, emissive: 0.3 });
+      out.push({ model: m, scale: s, color: RED, emissive: 0.3, shape: 'cyl' });
     }
 
     // --- hands & arms ---
@@ -546,10 +556,18 @@ export class Weapon {
       compose(this.tmp, add3(left, [-0.042, -0.03, 0]), [0.1, 0, -0.25], glove);
       mul(hm[0], this.root, this.tmp);
     }
-    out.push({ model: hm[0], scale: glove, color: GLOVE, emissive: 0 });
+    out.push({ model: hm[0], scale: glove, color: GLOVE, emissive: 0, shape: 0.024 });
     compose(this.tmp, add3(right, [0.004, -0.01, 0.005]), [-0.3, 0, 0], palm);
     mul(hm[1], this.root, this.tmp);
-    out.push({ model: hm[1], scale: palm, color: GLOVE, emissive: 0 });
+    out.push({ model: hm[1], scale: palm, color: GLOVE, emissive: 0, shape: 0.026 });
+    // trigger finger + thumb on the grip hand
+    const fing = [0.018, 0.018, 0.055];
+    compose(this.tmp, add3(right, [0.0, 0.025, -0.055]), [-0.15, 0, 0], fing);
+    mul(hm[5], this.root, this.tmp);
+    out.push({ model: hm[5], scale: fing, color: GLOVE, emissive: 0, shape: 0.008 });
+    compose(this.tmp, add3(right, [-0.04, 0.03, -0.01]), [-0.2, 0, 0], fing);
+    mul(hm[6], this.root, this.tmp);
+    out.push({ model: hm[6], scale: fing, color: GLOVE, emissive: 0, shape: 0.008 });
 
     const rv = transformPoint(this.root, right);
     let lShoulder = lerp3([-0.32, -0.62, 0.0], [-0.24, -0.55, 0.05], a);
@@ -565,7 +583,11 @@ export class Weapon {
       const th = m === hm[2] && plant ? lerp(0.075, 0.062, plant.t) : 0.075;
       const s = [th, th, len];
       compose(m, c, anglesFor(dir), s);
-      out.push({ model: m, scale: s, color: SLEEVE, emissive: 0 });
+      out.push({ model: m, scale: s, color: SLEEVE, emissive: 0, shape: 'cyl' });
+      // cuff at the wrist
+      const cm = m === hm[2] ? hm[7] : hm[8], cs = [th * 1.12, th * 1.12, 0.04];
+      compose(cm, h.map((v, k) => v + dir[k] / len * 0.02), anglesFor(dir), cs);
+      out.push({ model: cm, scale: cs, color: [0.12, 0.12, 0.13], emissive: 0, shape: 'cyl' });
     });
 
     const fs = d.flashScale ?? 1;
@@ -573,7 +595,7 @@ export class Weapon {
       const f = hm[4], s = [0.09 * fs, 0.09 * fs, 0.12 * fs];
       compose(this.tmp, add3(d.muzzle, [0, 0, -0.06]), [0, 0, Math.random() * Math.PI], s);
       mul(f, this.root, this.tmp);
-      out.push({ model: f, scale: s, color: FLASH, emissive: 1 });
+      out.push({ model: f, scale: s, color: FLASH, emissive: 1, shape: 'sphere' });
     }
     return out;
   }
@@ -638,7 +660,7 @@ export class Weapon {
       compose(local, p.c, [p.rx || 0, 0, 0], p.s);
       const m = mat4();
       mul(m, matrix, local);
-      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0 };
+      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: partShape(p) };
     });
   }
 }

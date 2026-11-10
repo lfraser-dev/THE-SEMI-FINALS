@@ -205,6 +205,74 @@ function cubeGeometry() {
   return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
 }
 
+// ---- rounded shapes (all in unit space, centred, extents -0.5..0.5) ----
+function sphereGeometry(seg = 20, rings = 14) {
+  const v = [], idx = [];
+  for (let i = 0; i <= rings; i++) {
+    const th = (i / rings) * Math.PI, y = Math.cos(th), r = Math.sin(th);
+    for (let j = 0; j <= seg; j++) {
+      const ph = (j / seg) * Math.PI * 2, x = r * Math.cos(ph), z = r * Math.sin(ph);
+      v.push(x * 0.5, y * 0.5, z * 0.5, x, y, z);
+    }
+  }
+  for (let i = 0; i < rings; i++) for (let j = 0; j < seg; j++) {
+    const a = i * (seg + 1) + j, b = a + seg + 1;
+    idx.push(a, a + 1, b, a + 1, b + 1, b);
+  }
+  return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
+}
+
+// cylinder along Z (radius 0.5), with caps
+function cylinderGeometry(seg = 20) {
+  const v = [], idx = [];
+  for (let j = 0; j <= seg; j++) {
+    const a = (j / seg) * Math.PI * 2, x = Math.cos(a), y = Math.sin(a);
+    v.push(x * 0.5, y * 0.5, -0.5, x, y, 0, x * 0.5, y * 0.5, 0.5, x, y, 0);
+  }
+  for (let j = 0; j < seg; j++) { const a = j * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  for (const zs of [-1, 1]) {
+    const c = v.length / 6;
+    v.push(0, 0, zs * 0.5, 0, 0, zs);
+    for (let j = 0; j <= seg; j++) { const a = (j / seg) * Math.PI * 2; v.push(Math.cos(a) * 0.5, Math.sin(a) * 0.5, zs * 0.5, 0, 0, zs); }
+    for (let j = 0; j < seg; j++) zs > 0 ? idx.push(c, c + 1 + j, c + 2 + j) : idx.push(c, c + 2 + j, c + 1 + j);
+  }
+  return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
+}
+
+// box with real (physical) rounded edges of radius r, for a box of size D; returned in unit space
+function roundedBoxGeometry(D, r) {
+  r = Math.max(0.0005, Math.min(r, Math.min(...D) * 0.48));
+  const steps = 4;
+  const axisVals = (h) => {
+    const a = [];
+    for (let k = 0; k <= steps; k++) a.push(-h + r * (1 - Math.cos((k / steps) * Math.PI / 2)));
+    for (let k = steps; k >= 0; k--) a.push(h - r * (1 - Math.cos((k / steps) * Math.PI / 2)));
+    return a;
+  };
+  const vals = D.map((d) => axisVals(d / 2));
+  const v = [], idx = [];
+  for (let f = 0; f < 6; f++) {
+    const ax = f >> 1, sg = f & 1 ? -1 : 1;
+    const u = (ax + 1) % 3, w = (ax + 2) % 3;
+    const base = v.length / 6, nu = vals[u].length, nw = vals[w].length;
+    for (let i = 0; i < nu; i++) for (let j = 0; j < nw; j++) {
+      const P = [0, 0, 0];
+      P[ax] = sg * D[ax] / 2; P[u] = vals[u][i]; P[w] = vals[w][j];
+      const inner = P.map((c, k) => Math.max(-D[k] / 2 + r, Math.min(D[k] / 2 - r, c)));
+      let N = P.map((c, k) => c - inner[k]);
+      const l = Math.hypot(...N);
+      if (l < 1e-6) { N = [0, 0, 0]; N[ax] = sg; } else N = N.map((c) => c / l);
+      const pos = inner.map((c, k) => (c + N[k] * r) / D[k]);
+      v.push(...pos, ...N);
+    }
+    for (let i = 0; i < nu - 1; i++) for (let j = 0; j < nw - 1; j++) {
+      const a = base + i * nw + j, b = a + nw;
+      if (sg > 0) idx.push(a, b, a + 1, a + 1, b, b + 1); else idx.push(a, a + 1, b, a + 1, b + 1, b);
+    }
+  }
+  return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
+}
+
 function compile(gl, vs, fs) {
   const prog = gl.createProgram();
   for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
@@ -240,20 +308,13 @@ export class Renderer {
       uModel: gl.getUniformLocation(this.shadowProg, 'uModel'),
     };
 
-    const { verts, indices } = cubeGeometry();
-    this.vao = gl.createVertexArray();
+    const cube = this.makeMesh(cubeGeometry());
+    this.vao = cube.vao;
+    this.indexCount = cube.count;
+    this.cube = cube;
+    this.meshes = { sphere: this.makeMesh(sphereGeometry()), cyl: this.makeMesh(cylinderGeometry()) };
+    this.rounded = new Map();
     gl.bindVertexArray(this.vao);
-    const vb = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
-    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
-    gl.enableVertexAttribArray(1);
-    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
-    const ib = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-    this.indexCount = indices.length;
 
     // shadow map
     this.shadowTex = gl.createTexture();
@@ -290,6 +351,42 @@ export class Renderer {
     this.drawCalls = 0;
   }
 
+  makeMesh({ verts, indices }) {
+    const gl = this.gl;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const vb = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    const ib = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+    return { vao, count: indices.length };
+  }
+
+  // shape: undefined = plain box, 'sphere', 'cyl' (along Z), or a number = box with rounded edges of that radius (m)
+  meshFor(shape, scl) {
+    if (shape == null) return this.cube;
+    if (typeof shape === 'string') return this.meshes[shape] || this.cube;
+    const q = (x) => Math.max(1, Math.round(Math.abs(x) * 500));      // 2 mm buckets
+    const key = `${q(scl[0])}_${q(scl[1])}_${q(scl[2])}_${q(shape)}`;
+    let m = this.rounded.get(key);
+    if (!m) {
+      if (this.rounded.size > 4000) this.rounded.clear();
+      m = this.makeMesh(roundedBoxGeometry([q(scl[0]) / 500, q(scl[1]) / 500, q(scl[2]) / 500], q(shape) / 500));
+      this.rounded.set(key, m);
+    }
+    return m;
+  }
+
+  bindMesh(m) {
+    if (this.boundMesh !== m) { this.gl.bindVertexArray(m.vao); this.boundMesh = m; }
+  }
+
   // Orthographic sun camera covering a square area around `center`.
   setShadowArea(center, half) {
     const proj = ortho(mat4(), -half, half, -half, half, 1, 200);
@@ -320,9 +417,11 @@ export class Renderer {
     gl.disable(gl.CULL_FACE); // thin boxes cast cleaner shadows double-sided
   }
 
-  shadowDraw(model) {
+  shadowDraw(model, shape, scl) {
+    const m = this.meshFor(shape, scl);
+    this.bindMesh(m);
     this.gl.uniformMatrix4fv(this.su.uModel, false, model);
-    this.gl.drawElements(this.gl.TRIANGLES, this.indexCount, this.gl.UNSIGNED_SHORT, 0);
+    this.gl.drawElements(this.gl.TRIANGLES, m.count, this.gl.UNSIGNED_SHORT, 0);
   }
 
   endShadow() {
@@ -368,6 +467,7 @@ export class Renderer {
     gl.uniform1f(this.u.uAlpha, 1);
     gl.uniformMatrix4fv(this.u.uModel, false, m);
     gl.uniform3fv(this.u.uScale, [400, 400, 400]);
+    this.bindMesh(this.cube);
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
     gl.uniform1f(this.u.uSky, 0);
     gl.depthMask(true);
@@ -379,8 +479,11 @@ export class Renderer {
     if (on) { gl.enable(gl.BLEND); gl.depthMask(false); } else { gl.disable(gl.BLEND); gl.depthMask(true); }
   }
 
-  draw(model, scl, color, grid = 0, edges = 1, emissive = 0, alpha = 1) {
+  draw(model, scl, color, grid = 0, edges = 1, emissive = 0, alpha = 1, shape) {
     const gl = this.gl, u = this.u;
+    const m = this.meshFor(shape, scl);
+    this.bindMesh(m);
+    if (shape != null) edges = 0;
     gl.uniformMatrix4fv(u.uModel, false, model);
     gl.uniform3fv(u.uScale, scl);
     gl.uniform3fv(u.uColor, color);
@@ -388,11 +491,16 @@ export class Renderer {
     gl.uniform1f(u.uEdges, edges);
     gl.uniform1f(u.uEmissive, emissive);
     gl.uniform1f(u.uAlpha, alpha);
-    gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0);
     this.drawCalls++;
   }
 
+  // draw a part object { model, scale, color, emissive, shape, alpha }
+  drawPart(p, edges = 1) {
+    this.draw(p.model, p.scale, p.color, 0, edges, p.emissive || 0, p.alpha ?? 1, p.shape);
+  }
+
   drawBox(b) {
-    this.draw(b.model, b.scale, b.color, b.grid ? 1 : 0, b.edges ? 1 : 0, b.emissive, b.alpha ?? 1);
+    this.draw(b.model, b.scale, b.color, b.grid ? 1 : 0, b.edges ? 1 : 0, b.emissive, b.alpha ?? 1, b.shape);
   }
 }
