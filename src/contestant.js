@@ -270,9 +270,8 @@ export class Contestant {
     HB = { U: HB.U, R: HB.R.map((v, i) => v * c1 - HB.B[i] * s1), B: HB.B.map((v, i) => v * c1 + HB.R[i] * s1) };
     HB = pitchBasis(HB, hp + lean * 0.6);
     const H = (v) => at(headC, HB, v);
-    bd.ellipsoid(H([0, 0.01, 0.005]), HB, [0.19, 0.225, 0.215], skin);                    // skull
-    bd.rbox(H([0, -0.058, -0.006]), HB, [0.13, 0.1, 0.15], 0.05, skin);                     // jaw
-    bd.ellipsoid(H([0, -0.088, -0.05]), HB, [0.05, 0.034, 0.04], skin);                    // chin
+    bd.ellipsoid(H([0, -0.004, 0.005]), HB, [0.19, 0.252, 0.215], skin);                  // head: one smooth egg, jaw included
+    bd.ellipsoid(H([0, -0.088, -0.05]), HB, [0.05, 0.034, 0.04], skin);                     // chin
     const masked = S.head === 'mask', visored = S.head === 'helmet';
     if (!masked) for (const sx of [-1, 1]) bd.ellipsoid(H([sx * 0.096, 0.0, 0.012]), HB, [0.03, 0.055, 0.04], shade(skin, 0.93));   // ears
     if (!masked) {

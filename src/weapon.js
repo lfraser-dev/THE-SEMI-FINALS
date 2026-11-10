@@ -21,15 +21,15 @@ export function partShape(p) {
   return Math.min(0.014, m * 0.3);                  // rounded edges scaled to the part
 }
 // how long each gun's draw animation takes (s)
-const DRAW_TIME = { pistol: 0.6, smg: 0.62, ar: 0.78, shotgun: 0.8, sniper: 0.9, lmg: 0.95 };
-// moments in each draw animation that get a sound + camera jolt
+const DRAW_TIME = { pistol: 0.85, smg: 0.85, ar: 1.05, shotgun: 1.05, sniper: 1.1, lmg: 1.1 };
+// moments in each draw animation that get a sound + camera jolt: [time, sound, jolt]
 const DRAW_BEATS = {
-  pistol: [[0.74, 'click', 0.25], [0.84, 'bolt', 0.2]],
-  smg: [[0.68, 'click', 0.35]],
-  ar: [[0.56, 'bolt', 0], [0.65, 'magIn', 0.5]],
-  shotgun: [[0.5, 'pump', 0.7]],
-  sniper: [[0.54, 'bolt', 0.3]],
-  lmg: [[0.52, 'land', 0.9]],
+  pistol: [[0.0, 'spin', 0], [0.5, 'catch', 0.5], [0.56, 'spin', 0], [0.8, 'click', 0.25], [0.88, 'bolt', 0.2]],
+  smg: [[0.0, 'spin', 0], [0.2, 'spin', 0], [0.47, 'catch', 0.5], [0.62, 'magIn', 0.4], [0.86, 'click', 0.2]],
+  ar: [[0.0, 'spin', 0], [0.35, 'catch', 0.6], [0.47, 'bolt', 0.3], [0.58, 'cloth', 0], [0.82, 'click', 0.35]],
+  shotgun: [[0.05, 'cloth', 0], [0.3, 'spin', 0], [0.45, 'pump', 0.4], [0.6, 'catch', 0.9], [0.66, 'pump', 0.7], [0.92, 'click', 0.2]],
+  sniper: [[0.0, 'spin', 0], [0.36, 'catch', 0.6], [0.48, 'bolt', 0.4], [0.68, 'cloth', 0], [0.9, 'click', 0.2]],
+  lmg: [[0.05, 'cloth', 0], [0.4, 'land', 1.0], [0.55, 'magIn', 0.7], [0.68, 'cloth', 0], [0.9, 'click', 0.3]],
 };
 
 function transformPoint(m, p) {
@@ -78,6 +78,9 @@ export class Weapon {
     this.tmp = mat4();
     this.magFrame = mat4();
     this.parts = def.parts.map((p) => ({ ...p, shape: partShape(p), model: mat4(), local: mat4() }));
+    // gun length (for the shine sweep): stock end to muzzle end
+    this.zBack = Math.max(...def.parts.filter((p) => !p.hidden).map((p) => p.c[2] + p.s[2] / 2));
+    this.zFront = Math.min(...def.parts.filter((p) => !p.hidden).map((p) => p.c[2] - p.s[2] / 2));
     this.handModels = Array.from({ length: 9 }, () => mat4());
   }
 
@@ -85,6 +88,9 @@ export class Weapon {
   setDef(def) {
     this.def = def;
     this.parts = def.parts.map((p) => ({ ...p, shape: partShape(p), model: mat4(), local: mat4() }));
+    // gun length (for the shine sweep): stock end to muzzle end
+    this.zBack = Math.max(...def.parts.filter((p) => !p.hidden).map((p) => p.c[2] + p.s[2] / 2));
+    this.zFront = Math.min(...def.parts.filter((p) => !p.hidden).map((p) => p.c[2] - p.s[2] / 2));
     this.ammo = def.mag;
     this.reload = null;
     this.cycleT = null;
@@ -124,7 +130,7 @@ export class Weapon {
     if (eq0 < 1) this.drawEvents(eq0, this.equipT, ctx);
 
     const tr = player.trav;
-    const wantAds = input.aiming && !player.sprinting && !this.reload && this.equipT > 0.6 && !tr;
+    const wantAds = input.aiming && !player.sprinting && !this.reload && this.equipT > 0.5 && !tr;
     const climb = tr?.kind === 'mantle' || tr?.kind === 'hang' || player.press != null;
     this.mantleT += ((climb ? 1 : 0) - this.mantleT) * damp(tr ? 18 : 9, dt);
     const wr = player.wallRun;
@@ -151,7 +157,9 @@ export class Weapon {
     const trigger = d.auto ? input.fireDown : this.queued > 0;
 
     if (trigger && this.reload?.shell && this.ammo > 0) this.reload.interrupt = true;
-    const blocked = this.reload || this.equipT < 0.7 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3;
+    // the show-off end of a draw never gets in the way: shoot or aim and it snaps straight to ready
+    if (this.equipT >= 0.5 && this.equipT < 1 && (trigger || input.aiming)) this.equipT = 1;
+    const blocked = this.reload || this.equipT < 0.5 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3;
     if (trigger && !blocked && this.cool <= 0) {
       if (this.ammo > 0) this.shoot(ctx);
       else if (input.fireHit) { ctx.sounds?.dry(); this.startReload(ctx); }
@@ -249,6 +257,9 @@ export class Weapon {
       if (r.empty && !d.slide && crossed(p0, p, 0.82)) this.events.push({ type: 'jolt', amt: 0.8 });
       if (r.empty && d.slide && crossed(p0, p, 0.82)) { s?.bolt(); this.events.push({ type: 'jolt', amt: 0.5 }); }
       if (p >= 0.64 && !r.filled) { r.filled = true; this.ammo = d.mag; }
+      if (crossed(p0, p, 0.36)) s?.spin();
+      if (crossed(p0, p, 0.87)) s?.spin();
+      if (crossed(p0, p, 0.985)) { s?.catch?.(); this.events.push({ type: 'jolt', amt: 0.35 }); }
       if (r.empty && crossed(p0, p, 0.8)) s?.bolt();
       if (p >= 1) this.reload = null;
       return;
@@ -262,8 +273,10 @@ export class Weapon {
         if (this.ammo >= d.mag || r.interrupt) r.stage = 'out';
       }
     } else if (r.stage === 'out') {
-      const len = r.needPump ? 0.5 : 0.28;
+      const len = r.needPump ? 0.62 : 0.34;
       if (r.needPump && crossed(prev, r.t, 0.15)) { s?.pump(); this.events.push({ type: 'jolt', amt: 0.7 }); }
+      if (crossed(prev, r.t, r.needPump ? 0.24 : 0.02)) s?.spin();
+      if (crossed(prev, r.t, len - 0.06)) { s?.catch?.(); this.events.push({ type: 'jolt', amt: 0.4 }); }
       if (r.t >= len) this.reload = null;
     }
   }
@@ -319,6 +332,7 @@ export class Weapon {
     // extra flourish offsets on top of everything: pos xyz + rot xyz
     const fl = [0, 0, 0, 0, 0, 0];
     let magSpin = 0, shellSpin = 0;
+    let shine = -1;                                 // 0..1 = a highlight sweeping from the stock to the muzzle
     const heavy = d.id === 'lmg', pistol = !!d.slide;
 
     const r = this.reload;
@@ -343,8 +357,9 @@ export class Weapon {
         // fresh mag comes up from the pouch with a twirl, then gets seated
         const rise = seg(p, 0.34, 0.47), ins = seg(p, 0.47, 0.58);
         magOff = [0.05 * (1 - rise), -0.45 + 0.33 * rise + 0.12 * ins, 0.07 * (1 - ins)];
-        magRot = 0.55 * (1 - ins);
+        magRot = 0.55 * (1 - ins) + (heavy ? 0 : (1 - rise) * Math.PI * 2);   // end-over-end tumble
         magSpin = heavy ? 0 : (1 - rise) * Math.PI * 2;
+        fl[1] += Math.sin(Math.PI * rise) * 0.02;
       }
       handT = hb;
       handTarget = add3(add3(d.magPos, magOff), [0, -0.05, 0]);
@@ -359,12 +374,21 @@ export class Weapon {
       }
       if (pistol) {
         if (r.empty && p < 0.82) boltBack = 1;
-        if (r.empty) fl[5] += seg(p, 0.82, 0.99) * Math.PI * 2;       // slide drops, then a full twirl
-        else { const t2 = seg(p, 0.62, 0.7) * (1 - seg(p, 0.72, 0.86)); fl[4] += t2 * 0.55; fl[5] += t2 * 0.3; }
+        const tw = r.empty ? seg(p, 0.82, 0.985) : seg(p, 0.74, 0.96);
+        fl[5] += tw * Math.PI * 2;                                    // full twirl around the barrel
+        fl[3] -= tw * Math.PI * 2;                                    // ...and a gunslinger spin around the trigger
+        fl[1] += Math.sin(Math.PI * tw) * 0.06;
       }
+      // finisher: a full barrel roll with a little toss (LMG: a heavy hip bounce), a shine sweeps along the gun
+      const fin = seg(p, 0.87, 0.985);
+      if (!pistol) {
+        if (heavy) { fl[1] += Math.sin(Math.PI * fin) * 0.05; fl[3] += Math.sin(Math.PI * fin) * 0.22; fl[5] += Math.sin(Math.PI * 2 * fin) * 0.25; }
+        else { fl[5] += fin * Math.PI * 2; fl[1] += Math.sin(Math.PI * fin) * 0.045; fl[3] += Math.sin(Math.PI * fin) * 0.12; }
+      }
+      if (p > 0.86) shine = seg(p, 0.86, 1);
       // springy settle at the end
-      const q = p - 0.88;
-      if (q > 0) fl[5] += Math.sin(q * 70) * Math.exp(-q * 25) * 0.09;
+      const q = p - 0.985;
+      if (q > 0) fl[5] += Math.sin(q * 90) * Math.exp(-q * 40) * 0.08;
     } else if (r && r.shell) {
       rollDir = -1;
       if (r.stage === 'in') {
@@ -384,7 +408,7 @@ export class Weapon {
         handT = 1;
         handTarget = add3(shellPos, [0, -0.035, 0.01]);
       } else {
-        const len = r.needPump ? 0.5 : 0.28;
+        const len = r.needPump ? 0.62 : 0.34;
         const back = 1 - seg(r.t, 0, Math.min(len, 0.3));
         tilt = back;
         fl[4] += 0.18 * back; fl[3] += 0.06 * back;
@@ -394,8 +418,15 @@ export class Weapon {
           pumpBack = seg(r.t, 0.12, 0.25) * (1 - seg(r.t, 0.3, 0.45));
           const whip = seg(r.t, 0.1, 0.22) * (1 - seg(r.t, 0.3, 0.5));   // whip the gun to rack it
           fl[3] += whip * 0.4; fl[1] += whip * 0.045; fl[5] -= whip * 0.25;
+          const sc = seg(r.t, 0.24, 0.54);                               // spin-cock: full flip over the hand
+          fl[3] += sc * Math.PI * 2; fl[1] += Math.sin(Math.PI * sc) * 0.08;
+          shine = seg(r.t, 0.4, 0.62);
+        } else {
+          const rl = seg(r.t, 0.02, 0.28);                                // topped up: a quick barrel roll
+          fl[5] -= rl * Math.PI * 2; fl[1] += Math.sin(Math.PI * rl) * 0.03;
+          shine = seg(r.t, 0.12, 0.34);
         }
-        const q = r.t - (len - 0.12);
+        const q = r.t - (len - 0.06);
         if (q > 0) fl[5] += Math.sin(q * 60) * Math.exp(-q * 20) * 0.07;
       }
     }
@@ -404,65 +435,96 @@ export class Weapon {
     if (this.equipT < 1) {
       const q = this.equipT;
       const settle = (t0, amp, f = 55, k = 18) => { const u = q - t0; return u > 0 ? Math.sin(u * f) * Math.exp(-u * k) * amp : 0; };
+      const TAU = Math.PI * 2;
       const style = d.id;
       if (style === 'pistol') {
-        // tossed up from the hip spinning, caught with a snap
-        const up = seg(q, 0, 0.45), fall = seg(q, 0.45, 0.72);
-        fl[1] += -0.32 * (1 - up) + 0.09 * up * (1 - fall);
-        fl[0] += 0.08 * (1 - up);
-        fl[5] += (1 - seg(q, 0, 0.72)) * Math.PI * 3;           // 1.5 spins around the barrel
-        fl[3] += (1 - seg(q, 0, 0.6)) * -0.6;
-        const catchK = seg(q, 0.72, 0.76) * (1 - seg(q, 0.76, 0.9));
-        fl[1] -= catchK * 0.03; fl[3] += catchK * 0.15 + settle(0.76, 0.06, 45, 14);
-        boltBack = Math.max(boltBack, seg(q, 0.8, 0.85) * (1 - seg(q, 0.86, 0.93)));   // press check
+        // flipped up from the hip with two flips and a roll, caught, gunslinger twirl, press check
+        const up = seg(q, 0, 0.32), fall = seg(q, 0.32, 0.5);
+        fl[1] += -0.36 * (1 - up) + 0.13 * up * (1 - fall);
+        fl[0] += 0.1 * (1 - up);
+        fl[3] += (1 - seg(q, 0, 0.5)) * TAU * 2;
+        fl[5] += (1 - seg(q, 0, 0.5)) * TAU;
+        const tw = seg(q, 0.56, 0.78);
+        fl[3] -= tw * TAU; fl[1] += Math.sin(Math.PI * tw) * 0.04; fl[0] += Math.sin(Math.PI * tw) * 0.02;
+        fl[3] += settle(0.5, 0.12, 50, 16) + settle(0.78, 0.08, 50, 16);
+        boltBack = Math.max(boltBack, seg(q, 0.86, 0.9) * (1 - seg(q, 0.91, 0.97)));
+        shine = q > 0.78 ? seg(q, 0.78, 1) : -1;
       } else if (style === 'smg') {
-        // flipped end over end into your hand
-        const up = seg(q, 0, 0.5);
-        fl[1] += -0.3 * (1 - up) + Math.sin(Math.PI * up) * 0.07;
-        fl[3] += (1 - seg(q, 0, 0.68)) * Math.PI * 2;           // full forward flip
-        fl[2] += (1 - up) * 0.1;
-        fl[1] += settle(0.68, 0.02, 50, 15);
-        fl[5] += settle(0.68, 0.12, 40, 12);
+        // lobbed in with a double front flip, caught, turned to show it off, mag slapped
+        const up = seg(q, 0, 0.47);
+        fl[1] += -0.34 * (1 - up) + Math.sin(Math.PI * up) * 0.12;
+        fl[0] -= (1 - up) * 0.12;
+        fl[3] += (1 - up) * TAU * 2;
+        fl[2] += (1 - up) * 0.08;
+        const show = seg(q, 0.5, 0.6) * (1 - seg(q, 0.74, 0.86));
+        fl[4] -= show * 0.75; fl[5] -= show * 0.55; fl[0] -= show * 0.06; fl[1] += show * 0.03; fl[2] -= show * 0.04;
+        const slap = seg(q, 0.56, 0.62) * (1 - seg(q, 0.64, 0.74));
+        handT = Math.max(handT, slap);
+        if (slap > 0) handTarget = add3(d.magPos, [0, -0.06, 0]);
+        fl[1] += seg(q, 0.61, 0.63) * (1 - seg(q, 0.63, 0.7)) * 0.025;
+        fl[5] += settle(0.47, 0.18, 45, 14) + settle(0.86, 0.08);
+        shine = q > 0.58 ? seg(q, 0.58, 0.84) : -1;
       } else if (style === 'ar') {
-        // swung in from the right, then racked with a counter-roll
-        const swing = seg(q, 0, 0.4);
-        fl[0] += (1 - swing) * 0.3;
-        fl[1] -= (1 - swing) * 0.2;
-        fl[4] += (1 - swing) * 1.1;
-        fl[5] += (1 - swing) * 0.7;
-        const rack = seg(q, 0.42, 0.55) * (1 - seg(q, 0.7, 0.85));
-        fl[5] -= rack * 0.55; fl[3] += rack * 0.12;
+        // tossed in from the bottom right with a full barrel roll, caught, racked, shown off, snapped to ready
+        const toss = seg(q, 0, 0.35);
+        fl[0] += (1 - toss) * 0.3;
+        fl[1] += -(1 - toss) * 0.32 + Math.sin(Math.PI * toss) * 0.1;
+        fl[4] += (1 - toss) * 1.2;
+        fl[5] += (1 - toss) * TAU;
+        fl[3] += settle(0.35, 0.14, 45, 14);
+        const rack = seg(q, 0.38, 0.45) * (1 - seg(q, 0.52, 0.6));
+        fl[5] -= rack * 0.6; fl[3] += rack * 0.1;
         handT = Math.max(handT, rack);
         if (rack > 0) handTarget = add3(d.bolt, [0.035, 0, 0.02]);
-        boltBack = Math.max(boltBack, seg(q, 0.56, 0.63) * (1 - seg(q, 0.64, 0.7)));
-        fl[3] += seg(q, 0.64, 0.67) * (1 - seg(q, 0.67, 0.78)) * 0.12;
-        fl[5] += settle(0.8, 0.08);
+        boltBack = Math.max(boltBack, seg(q, 0.45, 0.49) * (1 - seg(q, 0.5, 0.54)));
+        const show = seg(q, 0.57, 0.66) * (1 - seg(q, 0.8, 0.88));
+        fl[4] -= show * 0.95; fl[5] -= show * 0.45; fl[3] += show * 0.12; fl[0] -= show * 0.07; fl[1] += show * 0.04; fl[2] -= show * 0.05;
+        fl[5] += settle(0.88, 0.1);
+        shine = q > 0.6 ? seg(q, 0.6, 0.86) : -1;
       } else if (style === 'shotgun') {
-        // brought up from low and racked with a big whip
-        const up = seg(q, 0, 0.4);
-        fl[1] -= (1 - up) * 0.3; fl[3] -= (1 - up) * 0.7; fl[5] += (1 - up) * 0.4;
-        pumpBack = Math.max(pumpBack, seg(q, 0.48, 0.58) * (1 - seg(q, 0.62, 0.74)));
-        const whip = seg(q, 0.45, 0.56) * (1 - seg(q, 0.62, 0.8));
-        fl[3] += whip * 0.45; fl[1] += whip * 0.05; fl[5] -= whip * 0.3;
-        fl[3] += settle(0.78, 0.07);
+        // brought up from low, spun over the hand (spin-cock), slammed, racked again, rested muzzle-up for a beat
+        const up = seg(q, 0, 0.3);
+        fl[1] -= (1 - up) * 0.32; fl[3] -= (1 - up) * 0.7; fl[5] += (1 - up) * 0.4;
+        const sc = seg(q, 0.3, 0.6);
+        fl[3] += sc * TAU; fl[1] += Math.sin(Math.PI * sc) * 0.1; fl[2] -= Math.sin(Math.PI * sc) * 0.05;
+        pumpBack = Math.max(pumpBack, seg(q, 0.4, 0.46) * (1 - seg(q, 0.5, 0.56)), seg(q, 0.64, 0.68) * (1 - seg(q, 0.7, 0.76)));
+        const whip = seg(q, 0.62, 0.68) * (1 - seg(q, 0.72, 0.8));
+        fl[3] += whip * 0.4; fl[1] += whip * 0.05; fl[5] -= whip * 0.25;
+        const rest = seg(q, 0.76, 0.84) * (1 - seg(q, 0.9, 0.97));
+        fl[3] += rest * 0.65; fl[1] += rest * 0.05; fl[5] += rest * 0.3;
+        fl[3] += settle(0.6, 0.12, 45, 14) + settle(0.97, 0.06);
+        shine = q > 0.74 ? seg(q, 0.74, 0.95) : -1;
       } else if (style === 'sniper') {
-        // shouldered from low, bolt worked, a quick look down the glass
-        const up = seg(q, 0, 0.4);
-        fl[1] -= (1 - up) * 0.28; fl[3] -= (1 - up) * 0.5; fl[5] -= (1 - up) * 0.5;
-        const work = seg(q, 0.42, 0.52) * (1 - seg(q, 0.78, 0.9));
+        // thrown up spinning around the barrel, caught, bolt worked with a big roll, tilted up so the glass glints
+        const toss = seg(q, 0, 0.36);
+        fl[1] += -0.32 * (1 - toss) + Math.sin(Math.PI * toss) * 0.11;
+        fl[3] -= (1 - toss) * 0.5;
+        fl[5] += (1 - toss) * TAU;
+        fl[3] += settle(0.36, 0.12, 40, 13);
+        const work = seg(q, 0.4, 0.46) * (1 - seg(q, 0.58, 0.66));
         handT = Math.max(handT, work);
         if (work > 0) handTarget = add3(d.bolt, [0.035, 0, 0.02]);
-        boltBack = Math.max(boltBack, seg(q, 0.52, 0.62) * (1 - seg(q, 0.66, 0.76)));
-        fl[5] += work * 0.35;
-        fl[5] += settle(0.86, 0.06);
+        boltBack = Math.max(boltBack, seg(q, 0.46, 0.52) * (1 - seg(q, 0.54, 0.6)));
+        fl[5] += work * 0.5;
+        const look = seg(q, 0.64, 0.72) * (1 - seg(q, 0.84, 0.92));
+        fl[3] += look * 0.3; fl[4] -= look * 0.35; fl[1] += look * 0.03;
+        fl[5] += settle(0.92, 0.07);
+        shine = q > 0.66 ? seg(q, 0.66, 0.9) : -1;
       } else {
-        // LMG: heaved up from the left and dropped into place with a thud
-        const heave = seg(q, 0, 0.5);
-        fl[0] -= (1 - heave) * 0.2; fl[1] -= (1 - heave) * 0.35 - Math.sin(Math.PI * heave) * 0.06;
-        fl[4] -= (1 - heave) * 0.6; fl[5] -= (1 - heave) * 0.5;
-        const thud = seg(q, 0.5, 0.55) * (1 - seg(q, 0.55, 0.75));
-        fl[1] -= thud * 0.04; fl[3] -= thud * 0.1;
-        fl[3] += settle(0.6, 0.06, 35, 10);
+        // LMG: heaved up and dropped with a thud, feed cover slapped, then a heavy swagger bounce
+        const heave = seg(q, 0, 0.4);
+        fl[0] -= (1 - heave) * 0.22; fl[1] -= (1 - heave) * 0.38 - Math.sin(Math.PI * heave) * 0.08;
+        fl[4] -= (1 - heave) * 0.7; fl[5] -= (1 - heave) * 0.6;
+        const thud = seg(q, 0.4, 0.43) * (1 - seg(q, 0.43, 0.56));
+        fl[1] -= thud * 0.05; fl[3] -= thud * 0.14;
+        const slap = seg(q, 0.46, 0.53) * (1 - seg(q, 0.57, 0.66));
+        handT = Math.max(handT, slap);
+        if (slap > 0) handTarget = [0, 0.09, 0.02];
+        fl[1] -= seg(q, 0.54, 0.56) * (1 - seg(q, 0.56, 0.64)) * 0.03;
+        const sw = seg(q, 0.66, 0.9);
+        fl[5] += Math.sin(sw * Math.PI * 2) * 0.3 * (1 - sw * 0.5); fl[1] += Math.sin(sw * Math.PI) * 0.04; fl[4] += Math.sin(sw * Math.PI) * 0.25;
+        fl[3] += settle(0.43, 0.08, 35, 10) + settle(0.9, 0.05, 35, 10);
+        shine = q > 0.66 ? seg(q, 0.66, 0.92) : -1;
       }
     }
 
@@ -527,6 +589,16 @@ export class Weapon {
         mul(p.local, this.magFrame, this.tmp);
       } else compose(p.local, c, [rx, ry, rz], p.s);
       mul(p.model, this.root, p.local);
+      if (shine >= 0) {
+        const zS = this.zBack + (this.zFront - this.zBack) * shine;
+        const k = Math.exp(-(((p.c[2] - zS) / 0.06) ** 2)) * Math.sin(Math.PI * shine);
+        if (k > 0.02) {
+          const col = p.shineCol || (p.shineCol = [0, 0, 0]);
+          for (let n = 0; n < 3; n++) col[n] = p.col[n] + (1 - p.col[n]) * k * 0.7;
+          out.push({ model: p.model, scale: p.s, color: col, emissive: Math.max(p.em || 0, k * 0.55), shape: p.shape, mat: p.m });
+          continue;
+        }
+      }
       out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape, mat: p.m });
     }
     if (shellVisible) {

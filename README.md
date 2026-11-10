@@ -85,6 +85,18 @@ Characters are built from smooth shapes: tapered capsules for limbs, ellipsoids 
 - **Bots:** sleek red robots with dark frames, armour shells, a glowing chest core and a faceless helmet with a glowing visor band.
 - **Dummies:** mannequins with a chest target plate and a visor band.
 
+## Draws and reloads (build 0.15)
+
+Every gun has a show-off entrance, and a highlight sweeps along the gun during the flourishes. Shooting or aiming cuts any flourish short, so it never slows you down.
+- **Pistol:** flipped up from the hip with two flips and a roll, caught, then a gunslinger twirl and a press check.
+- **SMG:** lobbed in with a double front flip, turned to show it off, then the mag gets a slap.
+- **Assault rifle:** tossed in with a full barrel roll, caught, racked, then turned to show its side.
+- **Shotgun:** spun over the hand while pumping (a spin-cock), slammed, racked again, then rested muzzle-up for a beat.
+- **Sniper:** thrown up spinning, caught, then the bolt is worked and the scope tilts up to catch the light.
+- **LMG:** heaved up and dropped with a thud, then the feed cover gets a slap and the gun gives a heavy swagger.
+
+Reloads: the new mag tumbles end over end on its way in, and every reload ends with a barrel-roll finisher. The LMG does a heavy bounce instead, and the pistol does a twirl plus a gunslinger spin. Shotgun reloads end with a spin-cock when empty and a barrel roll when topped up. New spin and catch sounds go with each move.
+
 ## Main menu
 
 The game opens on a **Home** screen with your character standing in a lit showroom. The lights take your class colour. On the Home screen:
