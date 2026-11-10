@@ -14,7 +14,7 @@ export function basisFrom(up, back) {
 }
 
 export class Builder {
-  constructor() { this.models = []; this.out = []; this.i = 0; }
+  constructor() { this.models = []; this.out = []; this.i = 0; this.mat = undefined; }
   reset() { this.out = []; this.i = 0; return this; }
   M() { if (this.i >= this.models.length) this.models.push(mat4()); return this.models[this.i++]; }
 
@@ -35,19 +35,19 @@ export class Builder {
     const scale = [2 * rm, 2 * rm, L + 2 * rm];
     const m = this.M();
     compose(m, [(A[0] + C[0]) / 2, (A[1] + C[1]) / 2, (A[2] + C[2]) / 2], anglesFor(L > 1e-5 ? d : [0, 0, 1]), scale);
-    this.out.push({ model: m, scale, color, emissive: em, shape: { cap: [r2, r1] } });   // mesh -z end lies toward C (anglesFor maps -z to d)
+    this.out.push({ model: m, scale, color, emissive: em, shape: { cap: [r2, r1] }, mat: this.mat });   // mesh -z end lies toward C (anglesFor maps -z to d)
   }
 
   ellipsoid(pos, b, size, color, em = 0) {
-    this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: 'sphere' });
+    this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: 'sphere', mat: this.mat });
   }
 
   rbox(pos, b, size, r, color, em = 0) {
-    this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: r });
+    this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: r, mat: this.mat });
   }
 
   cyl(pos, b, size, color, em = 0) {   // cylinder along the basis' back axis
-    this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: 'cyl' });
+    this.out.push({ model: this.basisModel(pos, b, size), scale: size, color, emissive: em, shape: 'cyl', mat: this.mat });
   }
 }
 

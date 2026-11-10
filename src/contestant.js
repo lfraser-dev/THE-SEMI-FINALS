@@ -64,11 +64,15 @@ function standLegs(p, spread = 0.15, stagger = 0) {
 }
 export const POSES = {
   lobby(t) {
-    const sway = Math.sin(t * 0.9), look = Math.sin(t * 0.37);
-    const p = { pelvis: [sway * 0.025, 0.95 + Math.sin(t * 1.8) * 0.006, 0], lean: 0.03, twist: 0.32 + sway * 0.03, head: [-0.28 + look * 0.22, 0.02 + Math.sin(t * 0.53) * 0.04] };
-    p.feet = [[-0.2, 0.05, 0.08], [0.19, 0.05, -0.12]];
-    p.gun = { c: [0.1, 1.08, -0.32], rx: -0.28, ry: 0.32 + sway * 0.03 };
-    p.hands = [[-0.04, 1.0, -0.5], [0.16, 1.05, -0.14]];
+    // relaxed menu stance: rifle resting across the shoulders, right hand on the grip, left arm loose
+    const sway = Math.sin(t * 0.8), look = Math.sin(t * 0.31);
+    const br = Math.sin(t * 1.7);
+    const p = { pelvis: [0.015 + sway * 0.012, 1.02 + br * 0.004, 0], lean: -0.015, twist: 0.06 + sway * 0.015,
+      head: [-0.06 + look * 0.1, 0.03 + Math.sin(t * 0.47) * 0.025] };
+    p.feet = [[-0.14, 0.05, 0.02], [0.15, 0.05, -0.05]];
+    p.gun = { c: [0.1, 1.68 + br * 0.004, 0.14], rx: 0.08, ry: Math.PI / 2 };
+    p.hands = [[-0.25, 0.93 + sway * 0.01, 0.03], [0.2, 1.598 + br * 0.004, 0.14]];
+    p.armHint = [[-1, -0.3, 0.4], [1, 0.1, -0.45]];
     p.breath = t;
     return p;
   },
@@ -162,6 +166,7 @@ export class Contestant {
     const S = this.skin, b = S.build || 1;
     const P = POSES[this.pose](this.t, this.talk);
     const bd = (this.bd = this.bd || new Builder()).reset();
+    bd.mat = 'cloth';
     const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
     const Wd = (v) => [cy * v[0] + sy * v[2], v[1], -sy * v[0] + cy * v[2]];
     const W = (v) => { const d = Wd(v); return [this.pos[0] + d[0], this.pos[1] + d[1], this.pos[2] + d[2]]; };
@@ -186,8 +191,8 @@ export class Contestant {
       const knee = ik(hip, foot, L, L, P.kneeHint || [0, 0.2, -1]);
       const ankle = add3(foot, [0, 0.07, 0.02]);
       const shinTop = lerp3(knee, ankle, 0.04);
-      bd.capsule(W(hip), W(knee), 0.1 * b, 0.072 * b, low);
-      bd.capsule(W(shinTop), W(lerp3(knee, ankle, 0.8)), 0.07 * b, 0.064 * b, low);
+      bd.capsule(W(hip), W(knee), 0.092 * b, 0.066 * b, low);
+      bd.capsule(W(shinTop), W(lerp3(knee, ankle, 0.8)), 0.062 * b, 0.056 * b, low);
       // side cargo pocket on the outside of the thigh
       const tmid = lerp3(hip, knee, 0.55);
       bd.capsule(W(add3(tmid, [side * 0.07 * b, 0.05, 0])), W(add3(tmid, [side * 0.07 * b, -0.06, 0])), 0.045, 0.045, shade(low, 0.82));
@@ -196,7 +201,6 @@ export class Contestant {
       const kf = norm3([-kd[2] * 0 + 0, 0, -1]);
       const KB = basisFrom(Wd(norm3(sub3(hip, ankle))), Wd([-kf[0], -kf[1], -kf[2]]));
       bd.rbox(W(add3(knee, [0, 0.0, -0.06])), KB, [0.11 * b, 0.12, 0.05], 0.022, S.kneeCol || [0.16, 0.16, 0.17]);
-      bd.rbox(W(add3(knee, [0, 0.0, -0.085])), KB, [0.06 * b, 0.025, 0.012], 0.006, S.accent);
       // boot: shaft, foot, toe cap, sole
       const FB = HB0;
       bd.capsule(W([foot[0], 0.11, foot[2] + 0.01]), W(lerp3(knee, ankle, 0.72)), 0.07 * b, 0.072 * b, S.shoes);
@@ -208,10 +212,12 @@ export class Contestant {
 
     // ---- hips, belt, torso
     bd.rbox(T([0, -0.02, 0]), TB, [0.31 * b, 0.2, 0.21 * b], 0.085, low);
-    bd.rbox(T([0, 0.09, 0]), TB, [0.33 * b, 0.055, 0.225 * b], 0.025, [0.13, 0.11, 0.09]);
-    bd.rbox(T([0, 0.09, -0.112 * b]), TB, [0.065, 0.042, 0.02], 0.008, [0.72, 0.68, 0.52]);                       // buckle
+    if (!S.zip) {
+      bd.rbox(T([0, 0.085, 0]), TB, [0.315 * b, 0.045, 0.215 * b], 0.02, [0.1, 0.09, 0.08]);
+      bd.rbox(T([0, 0.09, -0.112 * b]), TB, [0.065, 0.042, 0.02], 0.008, [0.72, 0.68, 0.52]);                       // buckle
+    }
     bd.capsule(T([0, 0.16, 0.0]), T([0, 0.3, 0.0]), 0.125 * b, 0.145 * b, top);                                  // abdomen
-    bd.rbox(T([0, 0.43 + breathe, 0.005]), TB, [0.4 * b, 0.27, 0.235 * b], 0.1, top);                           // ribcage
+    bd.rbox(T([0, 0.43 + breathe, 0.005]), TB, [0.37 * b, 0.27, 0.22 * b], 0.1, top);                           // ribcage
     for (const sx of [-1, 1]) bd.ellipsoid(T([sx * 0.205 * b, 0.515, 0]), TB, [0.135 * b, 0.125, 0.145 * b], S.jacket || top);   // deltoids
     if (S.jacket) {
       const jk = S.jacket;
@@ -230,8 +236,22 @@ export class Contestant {
         bd.rbox(T([sx * 0.1 * b, 0.3, -0.142 * b]), TB, [0.09, 0.11, 0.05], 0.018, shade(vs, 0.78));             // pouches
       }
       bd.rbox(T([0, 0.47, -0.138 * b]), TB, [0.12, 0.055, 0.012], 0.006, S.accent, 0.15);                      // patch
-    } else if (!S.jacket) {
+    } else if (!S.jacket && !S.zip) {
       bd.rbox(T([0, 0.47, -0.118 * b]), TB, [0.2 * b, 0.03, 0.01], 0.004, S.accent);                           // chest stripe
+    }
+    if (S.zip && !S.jacket) {
+      const zc = shade(top, 0.8);
+      bd.rbox(T([0, 0.6, 0.015]), TB, [0.17 * b, 0.075, 0.15 * b], 0.035, top);                                   // stand-up collar
+      bd.rbox(T([0, 0.53, -0.108 * b]), TB, [0.008, 0.16, 0.008], 0.003, zc);                                     // zip
+      bd.rbox(T([0, 0.58, -0.114 * b]), TB, [0.012, 0.024, 0.008], 0.004, [0.7, 0.7, 0.72]);                     // zip pull
+    }
+    if (S.logo) {   // chest emblem: a chevron on the left chest
+      const lc = T([-0.085 * b, 0.5, -0.113 * b]);
+      for (const sx of [-1, 1]) {
+        const a = sx * 0.62, ca = Math.cos(a), sa = Math.sin(a);
+        const LB = { R: TB.R.map((v, k) => v * ca + TB.U[k] * sa), U: TB.U.map((v, k) => v * ca - TB.R[k] * sa), B: TB.B };
+        bd.rbox(at(lc, TB, [sx * 0.011, 0, 0]), LB, [0.012, 0.042, 0.008], 0.003, S.logo, 0.35);
+      }
     }
     if (S.scarf) bd.capsule(T([-0.1, 0.62, -0.02]), T([0.1, 0.62, -0.02]), 0.07, 0.07, S.scarf);
 
@@ -248,8 +268,8 @@ export class Contestant {
     HB = pitchBasis(HB, hp + lean * 0.6);
     const H = (v) => at(headC, HB, v);
     bd.ellipsoid(H([0, 0.01, 0.005]), HB, [0.19, 0.225, 0.215], skin);                    // skull
-    bd.rbox(H([0, -0.06, -0.02]), HB, [0.15, 0.11, 0.16], 0.055, skin);                     // jaw
-    bd.ellipsoid(H([0, -0.095, -0.058]), HB, [0.075, 0.05, 0.06], skin);                   // chin
+    bd.rbox(H([0, -0.058, -0.006]), HB, [0.13, 0.1, 0.15], 0.05, skin);                     // jaw
+    bd.ellipsoid(H([0, -0.088, -0.05]), HB, [0.05, 0.034, 0.04], skin);                    // chin
     const masked = S.head === 'mask', visored = S.head === 'helmet';
     if (!masked) for (const sx of [-1, 1]) bd.ellipsoid(H([sx * 0.096, 0.0, 0.012]), HB, [0.03, 0.055, 0.04], shade(skin, 0.93));   // ears
     if (!masked) {
@@ -258,7 +278,7 @@ export class Contestant {
         bd.ellipsoid(H([sx * 0.038, 0.018, -0.094]), HB, [0.028, 0.017, 0.012], [0.07, 0.05, 0.045]);          // eyes
         bd.rbox(H([sx * 0.04, 0.045, -0.096]), HB, [0.045, 0.011, 0.012], 0.005, S.hair || [0.12, 0.08, 0.06]);  // brows
       }
-      bd.ellipsoid(H([0, -0.012, -0.106]), HB, [0.03, 0.045, 0.035], shade(skin, 0.96));                         // nose
+      bd.ellipsoid(H([0, -0.01, -0.104]), HB, [0.022, 0.04, 0.028], shade(skin, 0.97));                         // nose
       bd.rbox(H([0, -0.058, -0.094]), HB, [0.05, 0.008 + 0.025 * talk, 0.01], 0.004, shade(skin, 0.6));         // mouth
     }
     const hair = S.hair || [0.1, 0.07, 0.05];
@@ -296,11 +316,11 @@ export class Contestant {
       const sh = up([side * 0.22 * b, 0.52, 0]);
       const hand = P.hands[i];
       const out_ = P.elbowOut || 0.8;
-      const elbow = ik(sh, hand, UA, FA, [side * out_, -0.7, 0.35]);
+      const elbow = ik(sh, hand, UA, FA, P.armHint ? P.armHint[i] : [side * out_, -0.7, 0.35]);
       const sleeve = S.jacket || top;
       const wrist = lerp3(elbow, hand, 0.84);
-      bd.capsule(W(sh), W(elbow), 0.062 * b, 0.05 * b, sleeve);
-      bd.capsule(W(elbow), W(wrist), 0.05 * b, 0.038 * b, S.jacket ? S.jacket : skin);
+      bd.capsule(W(sh), W(elbow), 0.056 * b, 0.046 * b, sleeve);
+      bd.capsule(W(elbow), W(wrist), 0.046 * b, 0.034 * b, S.sleeves === 'short' ? skin : sleeve);
       if (S.jacket) bd.capsule(W(lerp3(elbow, hand, 0.68)), W(lerp3(elbow, hand, 0.8)), 0.047 * b, 0.044 * b, shade(S.jacket, 0.82));   // cuff
       // glove: oriented along the forearm
       const fd = [hand[0] - elbow[0], hand[1] - elbow[1], hand[2] - elbow[2]];

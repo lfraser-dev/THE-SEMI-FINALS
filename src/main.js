@@ -949,7 +949,7 @@ function setShowroomClass() {
   showroomCls = cls;
   const sp = map.showroom.spot;
   const keepT = showroomChar ? showroomChar.t : 0;
-  showroomChar = new Contestant({ ...buildOutfit(cosmetics, cls, tryOn), name: c.name }, sp, 0.5);   // 3/4 turn so the gun faces you
+  showroomChar = new Contestant({ ...buildOutfit(cosmetics, cls, tryOn), name: c.name }, sp, 0.18);   // nearly square to the camera
   showroomChar.t = keepT;
   showroomChar.pose = 'lobby';
   showroomChar.realGun = true;
@@ -972,22 +972,35 @@ function drawShowroom(aspect) {
   const look = [cam.look[0] - 0.88 * camBlend, cam.look[1] + 0.05 * camBlend, cam.look[2]];
   const eye = [cam.eye[0] - 0.25 * camBlend + Math.sin(time * 0.2) * 0.12, cam.eye[1] + Math.sin(time * 0.31) * 0.03 + 0.05 * camBlend, cam.eye[2] - 0.5 * camBlend];
   const fwd = norm([look[0] - eye[0], look[1] - eye[1], look[2] - eye[2]]);
-  perspective(projS, (aspect < 1 ? 62 : 44) * Math.PI / 180, aspect, 0.05, 200);
+  perspective(projS, (aspect < 1 ? 62 : 40) * Math.PI / 180, aspect, 0.05, 1000);
   lookDir(viewS, eye, fwd, [0, 1, 0], 0);
   renderer.begin();
-  renderer.setCamera(projS, viewS, 0.0095, eye, true);
+  // seamless photo-studio backdrop in the class colour, one soft key light from the upper left
+  const rc = CLASSES[skinClassShown()].color;
+  renderer.setStudio(rc, fwd, [0.55, 0.78, -0.5]);
+  renderer.setCamera(projS, viewS, 0.075, eye, false);
   renderer.setBlend(false);
-  const near = (b) => b.max[0] > 280 && b.min[2] > 315;   // only the showroom set
-  for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden && near(b)) renderer.drawBox(b);
+  renderer.drawSky(eye);
+  const sp = map.showroom.spot;
+  compose(studioFloorM, [sp[0], sp[1] - 0.05, sp[2]], [0, 0, 0], [80, 0.1, 80]);
+  renderer.draw(studioFloorM, [80, 0.1, 80], rc.map((v) => v * 0.62), 0, 0, 0, 1, undefined, 'poly');
   if (showroomChar) {
     showroomChar.t = time;
-    const rc = CLASSES[skinClassShown()].color;
-    renderer.setRim(rc.map((v) => v * 0.35));
+    // soft contact shadow under the feet
+    renderer.setBlend(true);
+    compose(studioShadowM, [sp[0], sp[1] + 0.004, sp[2]], [0, 0, 0], [0.95, 0.01, 0.7]);
+    renderer.draw(studioShadowM, [0.95, 0.01, 0.7], [0, 0, 0], 0, 0, 0, 0.38, 'sphere');
+    compose(studioShadowM2, [sp[0], sp[1] + 0.006, sp[2]], [0, 0, 0], [0.55, 0.01, 0.42]);
+    renderer.draw(studioShadowM2, [0.55, 0.01, 0.42], [0, 0, 0], 0, 0, 0, 0.35, 'sphere');
+    renderer.setBlend(false);
+    renderer.setRim(rc.map((v) => v * 0.55));
     for (const p of showroomChar.parts()) renderer.drawPart(p);
     for (const p of Weapon.worldParts(showroomChar.gunDef, showroomChar.gunMatrix)) renderer.drawPart(p);
     renderer.setRim(null);
   }
+  renderer.setStudio(null);
 }
+const studioFloorM = mat4(), studioShadowM = mat4(), studioShadowM2 = mat4();
 showTab('home');
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement === canvas) {

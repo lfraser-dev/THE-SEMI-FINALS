@@ -76,6 +76,7 @@ export class Weapon {
     this.events = [];
     this.root = mat4();
     this.tmp = mat4();
+    this.magFrame = mat4();
     this.parts = def.parts.map((p) => ({ ...p, shape: partShape(p), model: mat4(), local: mat4() }));
     this.handModels = Array.from({ length: 9 }, () => mat4());
   }
@@ -511,20 +512,22 @@ export class Weapon {
     compose(this.root, pos, rot, [1, 1, 1]);
 
     const out = [];
+    // the magazine (all its parts) moves and spins as one piece around its own centre
+    const mp = d.magPos;
+    compose(this.magFrame, add3(mp, magOff), [magRot, 0, magSpin], [1, 1, 1]);
     for (const p of this.parts) {
       if (p.hidden) continue;
-      let c = p.c, rx = p.rx || 0, rz = 0;
-      if (p.mag) {
-        if (!magVisible) continue;
-        c = add3(c, magOff);
-        rx += magRot;
-        rz = magSpin;
-      }
+      let c = p.c;
+      const rx = p.rx || 0, ry = p.ry || 0, rz = p.rz || 0;
       if (p.bolt) c = add3(c, [0, 0, (d.slide ? 0.04 : 0.05) * boltBack]);
       if (p.pump) c = add3(c, [0, 0, 0.09 * pumpBack]);
-      compose(p.local, c, [rx, 0, rz], p.s);
+      if (p.mag) {
+        if (!magVisible) continue;
+        compose(this.tmp, [c[0] - mp[0], c[1] - mp[1], c[2] - mp[2]], [rx, ry, rz], p.s);
+        mul(p.local, this.magFrame, this.tmp);
+      } else compose(p.local, c, [rx, ry, rz], p.s);
       mul(p.model, this.root, p.local);
-      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape });
+      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape, mat: p.m });
     }
     if (shellVisible) {
       const s = [0.024, 0.024, 0.06];
@@ -657,10 +660,10 @@ export class Weapon {
   static worldParts(def, matrix) {
     const local = mat4();
     return def.parts.filter((p) => !p.hidden).map((p) => {
-      compose(local, p.c, [p.rx || 0, 0, 0], p.s);
+      compose(local, p.c, [p.rx || 0, p.ry || 0, p.rz || 0], p.s);
       const m = mat4();
       mul(m, matrix, local);
-      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: partShape(p) };
+      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: partShape(p), mat: p.m };
     });
   }
 }

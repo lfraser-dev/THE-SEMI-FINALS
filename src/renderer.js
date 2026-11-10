@@ -32,6 +32,8 @@ in float vViewZ;
 uniform vec3 uColor, uScale, uFogColor, uSunDir, uCamPos, uSkyTop;
 uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky, uViewUnder, uAO;
 uniform vec3 uRim;
+uniform vec2 uMat;          // x = metalness, y = roughness (< 0: automatic from colour)
+uniform vec3 uStudio, uStudioFwd, uStudioKey;   // menu studio: backdrop colour (zero = off), camera forward, key light dir
 uniform sampler2DShadow uShadowMap;
 out vec4 outColor;
 const float UNDER_Y = -1.2;     // below this, you're in the underground arena: lamp light, no sun
@@ -73,7 +75,24 @@ float shadow() {
   return s / 12.0;
 }
 
+// seamless studio backdrop: brighter behind the subject, a soft diagonal light shaft, darker toward the top and edges
+vec3 studioBg(vec3 d) {
+  vec3 c = uStudio;
+  vec3 f = normalize(uStudioFwd);
+  vec3 r = normalize(cross(f, vec3(0.0, 1.0, 0.0)));        // screen right
+  float x = dot(d, r), y = d.y, z = max(dot(d, f), 0.0);
+  float glow = pow(z, 5.0);
+  float shaft = smoothstep(-0.03, 0.16, x + 0.62 * y - 0.1) * (1.0 - smoothstep(0.45, 0.95, x + 0.2 * y));
+  vec3 col = c * (0.5 + 0.42 * glow);
+  col = mix(col, mix(c, vec3(1.0, 0.82, 0.85), 0.22) * 1.08, shaft * 0.32);
+  col *= mix(1.0, 0.5, smoothstep(0.08, 0.75, y));
+  col *= mix(1.0, 0.62, smoothstep(0.35, 0.95, abs(x)));
+  col *= mix(1.0, 0.8, smoothstep(-0.05, -0.5, y));
+  return col;
+}
+
 vec3 skyColor(vec3 d) {
+  if (dot(uStudio, uStudio) > 0.0) return studioBg(d);
   float t = clamp(d.y, 0.0, 1.0);
   vec3 horizon = uFogColor;
   vec3 zenith = uSkyTop;
@@ -135,7 +154,9 @@ void main() {
   vec3 albedo = toLin(base) * (world ? 0.82 : 1.0);   // real-world whites are greyer than paper
   vec3 V = normalize(uCamPos - vWorld);
   bool indoor = world ? vWorld.y < UNDER_Y : uViewUnder > 0.5;
-  vec3 L = indoor ? normalize(vec3(0.25, 1.0, 0.2)) : uSunDir;
+  bool studio = dot(uStudio, uStudio) > 0.0;
+  if (studio) indoor = false;
+  vec3 L = studio ? normalize(uStudioKey) : indoor ? normalize(vec3(0.25, 1.0, 0.2)) : uSunDir;
   float ndl = max(dot(n, L), 0.0);
   float sh = (world && !indoor && ndl > 0.0) ? shadow() : 1.0;
 
@@ -145,6 +166,12 @@ void main() {
   vec3 groundCol = vec3(0.2, 0.19, 0.18);
   vec3 hemi = mix(groundCol, skyCol, n.y * 0.5 + 0.5);
   float pool = 0.6;
+  if (studio) {
+    vec3 sc = toLin(uStudio);
+    sunCol = vec3(1.0, 0.95, 0.92) * 1.7;
+    skyCol = sc * 0.55 + vec3(0.04);
+    hemi = mix(sc * 0.3, sc * 0.2 + vec3(0.07), n.y * 0.5 + 0.5);    // red floor bounce from below, softer from above
+  }
   if (indoor) {
     // ceiling lamps every 8 m (at x, z = 8k + 4): warm pools of light on the floor
     vec2 g = (fract(vWorld.xz / 8.0) - 0.5) * 8.0;
@@ -156,17 +183,24 @@ void main() {
     hemi += vec3(0.2, 0.17, 0.13) * (1.0 - abs(n.y)) * (0.22 + pool * 0.7);   // light washing down the walls
   }
 
-  // glossier when dark (metal, rubber), rougher when light (paint, concrete)
-  float rough = mix(0.32, 0.82, smoothstep(0.02, 0.45, lum0));
+  // glossier when dark (metal, rubber), rougher when light (paint, concrete) -- unless the part has a material
+  float rough = uMat.y >= 0.0 ? uMat.y : mix(0.32, 0.82, smoothstep(0.02, 0.45, lum0));
+  float metal = uMat.x;
   float specPow = 2.0 / max(rough * rough * rough * rough, 0.002) - 2.0;
   vec3 H = normalize(L + V);
-  float ndh = max(dot(n, H), 0.0), vdh = max(dot(V, H), 0.0);
-  float F = 0.04 + 0.96 * pow(1.0 - vdh, 5.0);
-  float spec = pow(ndh, specPow) * (specPow + 8.0) / 25.13 * F;
-  float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
+  float ndh = max(dot(n, H), 0.0), vdh = max(dot(V, H), 0.0), ndv = max(dot(n, V), 0.0);
+  vec3 F0 = mix(vec3(0.04), albedo * 1.6 + 0.03, metal);
+  vec3 Fh = F0 + (1.0 - F0) * pow(1.0 - vdh, 5.0);
+  vec3 spec = pow(ndh, specPow) * (specPow + 8.0) / 25.13 * Fh;
+  vec3 Fv = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0);
+  // reflected environment: ground below, sky above, with a bright soft band like a studio light
+  vec3 Rv = reflect(-V, n);
+  vec3 env = studio ? toLin(studioBg(Rv)) * 1.3 : mix(groundCol * 0.8, skyCol * 1.5, smoothstep(-0.25, 0.5, Rv.y));
+  env += vec3(1.0, 0.97, 0.92) * smoothstep(0.55, 0.8, Rv.y) * (1.0 - smoothstep(0.86, 0.98, Rv.y)) * (indoor ? 0.35 : 1.1);
+  float gloss = (1.0 - rough) * (1.0 - rough);
 
-  vec3 col = albedo * (hemi * ao + sunCol * ndl * sh) + sunCol * spec * ndl * sh * (1.0 - edge * 0.5)
-           + skyCol * fres * (1.0 - rough) * 0.2 * ao;
+  vec3 col = albedo * (1.0 - metal * 0.88) * (hemi * ao + sunCol * ndl * sh) + sunCol * spec * ndl * sh * (1.0 - edge * 0.5)
+           + env * Fv * mix(0.25, 1.0, metal) * mix(0.08, 1.0, gloss) * ao;
   // rim light (used for characters in the showroom / arena)
   col += toLin(uRim) * pow(1.0 - max(dot(n, V), 0.0), 3.0) * 1.6;
   col = mix(col, toLin(uColor) * 2.2, uEmissive);
@@ -177,6 +211,7 @@ void main() {
   float f = 1.0 - exp(-pow(uFogDensity * vViewZ, 2.0));
   vec3 vd = -V;
   vec3 fogCol = uFogColor + vec3(0.06, 0.04, 0.0) * pow(max(dot(vd, L), 0.0), 8.0);
+  if (studio) fogCol = studioBg(vd);
   if (indoor) {
     fogCol = vec3(0.045, 0.05, 0.065);
     f = 1.0 - exp(-pow(uFogDensity * 1.7 * vViewZ, 2.0));
@@ -309,6 +344,21 @@ function capsuleGeometry(L, r1, r2, seg = 22, ringsPerCap = 7) {
   return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
 }
 
+// surface materials: [metalness, roughness]; roughness < 0 = pick it from the colour
+const MATS = {
+  auto: [0, -1],
+  metal: [0.55, 0.36],     // anodised / cerakoted metal
+  steel: [1, 0.22],        // polished bits: bolts, triggers, pins
+  paint: [0.15, 0.42],     // painted metal (white guns)
+  poly: [0, 0.6],          // polymer furniture
+  rubber: [0, 0.88],
+  cloth: [0, 0.82],       // fabric: no shine
+  skin: [0, 0.55],
+  wood: [0, 0.5],
+  brass: [1, 0.28],
+  glass: [0.3, 0.05],
+};
+
 function compile(gl, vs, fs) {
   const prog = gl.createProgram();
   for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
@@ -336,7 +386,7 @@ export class Renderer {
     this.shadowProg = compile(gl, SHADOW_VERT, SHADOW_FRAG);
     this.u = {};
     for (const name of ['uProj', 'uView', 'uModel', 'uScale', 'uColor', 'uFogColor', 'uSunDir', 'uCamPos',
-      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim']) {
+      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim', 'uMat', 'uStudio', 'uStudioFwd', 'uStudioKey']) {
       this.u[name] = gl.getUniformLocation(this.prog, name);
     }
     this.su = {
@@ -485,6 +535,7 @@ export class Renderer {
   begin() {
     const gl = this.gl;
     this.boundMesh = null;
+    this.lastMat = null;
     gl.viewport(0, 0, this.size[0], this.size[1]);
     gl.clearColor(...this.fogColor, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -530,8 +581,10 @@ export class Renderer {
     if (on) { gl.enable(gl.BLEND); gl.depthMask(false); } else { gl.disable(gl.BLEND); gl.depthMask(true); }
   }
 
-  draw(model, scl, color, grid = 0, edges = 1, emissive = 0, alpha = 1, shape) {
+  draw(model, scl, color, grid = 0, edges = 1, emissive = 0, alpha = 1, shape, mat) {
     const gl = this.gl, u = this.u;
+    const mt = mat ? (MATS[mat] || mat) : MATS.auto;
+    if (mt !== this.lastMat) { gl.uniform2fv(u.uMat, mt); this.lastMat = mt; }
     const m = this.meshFor(shape, scl);
     this.bindMesh(m);
     if (shape != null) edges = 0;
@@ -547,11 +600,18 @@ export class Renderer {
     this.drawCalls++;
   }
 
+  // the menu's studio look: backdrop colour (null = off), camera forward and key light direction
+  setStudio(col, fwd = [0, 0, 1], key = [0.5, 0.8, -0.6]) {
+    const gl = this.gl;
+    gl.uniform3fv(this.u.uStudio, col || [0, 0, 0]);
+    gl.uniform3fv(this.u.uStudioFwd, fwd);
+    gl.uniform3fv(this.u.uStudioKey, key);
+  }
   setRim(c) { this.gl.uniform3fv(this.u.uRim, c || [0, 0, 0]); }
 
   // draw a part object { model, scale, color, emissive, shape, alpha }
   drawPart(p, edges = 1) {
-    this.draw(p.model, p.scale, p.color, 0, edges, p.emissive || 0, p.alpha ?? 1, p.shape);
+    this.draw(p.model, p.scale, p.color, 0, edges, p.emissive || 0, p.alpha ?? 1, p.shape, p.mat);
   }
 
   drawBox(b) {

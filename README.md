@@ -73,10 +73,17 @@ Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Set
 
 ## Look
 
-Characters are built from smooth shapes: tapered capsules for limbs (thick at one end, thin at the other), ellipsoids and rounded boxes. Guns use cylinders and bevelled parts. The menu showroom adds a soft class-coloured rim light.
-- **Contestants (build 0.12):** human proportions with a smaller head and short neck. The face is simple and stylised. Trousers have cargo pockets and knee pads, and the boots have shafts, toe caps and soles. Jackets, vests, straps and pouches sit on the body. Light wears a cap and hoodie. Medium wears a helmet with a wraparound visor. Heavy wears a balaclava with glowing goggles.
-- **Bots:** sleek red robots. They have dark mechanical frames under red armour shells, joint balls, shoulder plates, a glowing chest core and back vents, and a faceless helmet with a glowing visor band. Their rifles have a glowing optic and light strip.
-- **Dummies:** mannequins with separate legs and arms, a chest target plate and a visor band. The hitboxes match the body.
+Characters are built from smooth shapes: tapered capsules for limbs, ellipsoids and rounded boxes. Surfaces have materials (matte fabric, skin, polymer, anodised metal, polished steel, wood, brass and glass), and metal reflects its surroundings.
+- **Menu studio (build 0.13):** a seamless backdrop in the class colour with a soft light shaft, a vignette, one key light and a contact shadow. Your contestant stands relaxed with the rifle resting across the shoulders.
+- **Contestants:** realistic proportions and slim, matte athletic outfits. Light wears a charcoal quarter-zip with a blue cap and white trainers. Medium wears a navy quarter-zip with a gold chest chevron. Heavy wears a yellow plate carrier and a balaclava with goggles. Faces are simple and stylised, and the hands are bare.
+- **Guns (build 0.13):** each gun has 30 to 100 parts, including rails with teeth, ejection ports, charging handles, triggers, selectors, pins, slotted handguards, flash-hider slots and mag base plates.
+  - The shotgun has a wooden pump and stock, plus a side saddle with shells.
+  - The sniper has a fluted barrel, scope turrets and a folded bipod.
+  - The LMG has a perforated heat shroud, a carry handle and an ammo box with a feeding belt.
+  - The pistol has slide serrations.
+  - Attachments hide or move the matching details.
+- **Bots:** sleek red robots with dark frames, armour shells, a glowing chest core and a faceless helmet with a glowing visor band.
+- **Dummies:** mannequins with a chest target plate and a visor band.
 
 ## Main menu
 

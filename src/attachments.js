@@ -118,6 +118,7 @@ export function buildDef(base, loadout = {}) {
   };
   const part = (name) => def.parts.find((p) => p.name === name);
   const hide = (names) => names.forEach((n) => { const p = part(n); if (p) p.hidden = true; });
+  const hideGrp = (g) => def.parts.forEach((p) => { if (p.grp === g) p.hidden = true; });
   const add = (...ps) => def.parts.push(...ps);
 
   // stat multipliers
@@ -139,6 +140,7 @@ export function buildDef(base, loadout = {}) {
     barrel.c[2] = rear - newLen / 2;
     const shift = newLen - oldLen;
     for (const n of [...m.muzzle, ...(m.shiftAlso || [])]) { const p = part(n); if (p) p.c[2] -= shift; }
+    for (const p of def.parts) if (p.grp === 'muzzle') p.c[2] -= shift;
     def.muzzle[2] -= shift;
     if (barrelA.barrel.add) add(P('gasblock', [0, barrel.c[1] + 0.004, rear - newLen * 0.45], [0.036, 0.04, 0.03], DARK));
   }
@@ -147,6 +149,7 @@ export function buildDef(base, loadout = {}) {
   const muz = loadout.muzzle;
   if (ATTACHMENTS[muz]?.slot === 'muzzle') {
     hide(m.muzzle);
+    hideGrp('muzzle');
     const b = part('barrel');
     const front = b ? b.c[2] - b.s[2] / 2 : (m.barrelFront ?? def.muzzle[2] + 0.02);
     const y = def.muzzle[1];
@@ -169,6 +172,7 @@ export function buildDef(base, loadout = {}) {
   const optA = ATTACHMENTS[loadout.optic];
   if (optA?.slot === 'optic') {
     hide(m.sight);
+    hideGrp('sight');
     const o = optA.optic, ry = m.railY, rz = m.railZ;
     const h = ry + o.h;
     def.sightY = h;
@@ -225,6 +229,7 @@ export function buildDef(base, loadout = {}) {
   } else if ((ub === 'vgrip' || ub === 'agrip') && m.under) {
     const u = m.under;
     if (u.hide) hide(u.hide);
+    hideGrp('under');
     if (ub === 'vgrip') {
       add(P('vgrip', [0, u.y - 0.043, u.z], [0.03, 0.086, 0.032], BLACK));
       def.foreGrip = [0, u.y - 0.05, u.z];
@@ -237,6 +242,7 @@ export function buildDef(base, loadout = {}) {
   // ---- magazine ----
   const mag = part('mag');
   const mg = loadout.magazine;
+  if (mg === 'extmag' || mg === 'drum') hideGrp('mag');
   if (mg === 'extmag') {
     if (id === 'shotgun') {
       def.mag = base.mag + 2;
@@ -261,6 +267,7 @@ export function buildDef(base, loadout = {}) {
 
   // ---- stock ----
   const st = loadout.stock;
+  if (st === 'nostock' || st === 'lightstock' || st === 'heavystock') hideGrp('stock');
   if (st === 'nostock') {
     hide(m.stock);
     const s0 = part(m.stock[0]);

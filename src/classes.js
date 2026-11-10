@@ -14,8 +14,8 @@ export const CLASSES = {
     hp: 150, speed: 1.12, build: 0.88,
     weapons: ['smg', 'sniper', 'pistol'], abilities: ['dash', 'grapple'],
     color: [0.15, 0.55, 1],
-    skin: { skin: [0.78, 0.57, 0.42], top: [0.12, 0.13, 0.16], jacket: [0.15, 0.55, 1], bottom: [0.1, 0.1, 0.12], shoes: [0.95, 0.95, 0.97],
-      gloves: [0.1, 0.1, 0.12], accent: [0.6, 0.85, 1], head: 'cap', headCol: [0.15, 0.55, 1], hair: [0.08, 0.06, 0.05] },
+    skin: { skin: [0.78, 0.57, 0.42], top: [0.13, 0.14, 0.17], zip: true, logo: [0.25, 0.65, 1], bottom: [0.07, 0.07, 0.085], shoes: [0.92, 0.92, 0.94],
+      gloves: [0.78, 0.57, 0.42], accent: [0.25, 0.65, 1], kneeCol: [0.1, 0.1, 0.11], head: 'cap', headCol: [0.15, 0.5, 0.95], hair: [0.08, 0.06, 0.05] },
   },
   medium: {
     name: 'MEDIUM', tag: 'BALANCED · VERSATILE',
@@ -23,8 +23,8 @@ export const CLASSES = {
     hp: 250, speed: 1, build: 1,
     weapons: ['ar', 'shotgun', 'pistol'], abilities: ['grapple', 'dash'],
     color: [0.92, 0.1, 0.08],
-    skin: { skin: [0.55, 0.37, 0.25], top: [0.92, 0.92, 0.94], vest: [0.92, 0.1, 0.08], bottom: [0.16, 0.16, 0.18], shoes: [0.92, 0.1, 0.08],
-      gloves: [0.12, 0.12, 0.13], accent: [1, 1, 1], head: 'helmet', headCol: [0.94, 0.94, 0.96], visor: [0.95, 0.2, 0.12] },
+    skin: { skin: [0.86, 0.66, 0.54], top: [0.12, 0.14, 0.21], zip: true, logo: [1, 0.72, 0.12], bottom: [0.06, 0.06, 0.075], shoes: [0.07, 0.07, 0.08],
+      gloves: [0.86, 0.66, 0.54], accent: [0.92, 0.1, 0.08], kneeCol: [0.08, 0.08, 0.1], head: 'hair', hair: [0.22, 0.14, 0.08] },
   },
   heavy: {
     name: 'HEAVY', tag: 'TOUGH · SLOW · LOUD',
@@ -32,8 +32,8 @@ export const CLASSES = {
     hp: 350, speed: 0.86, build: 1.28,
     weapons: ['lmg', 'shotgun'], abilities: ['slam', 'dash'],
     color: [1, 0.68, 0.08],
-    skin: { skin: [0.93, 0.76, 0.64], top: [0.2, 0.2, 0.22], vest: [1, 0.68, 0.08], bottom: [0.2, 0.2, 0.22], shoes: [0.12, 0.12, 0.13],
-      gloves: [0.12, 0.12, 0.13], accent: [1, 0.68, 0.08], head: 'mask', headCol: [0.15, 0.15, 0.16], visor: [1, 0.68, 0.08], scarf: [0.12, 0.12, 0.13] },
+    skin: { skin: [0.93, 0.76, 0.64], top: [0.1, 0.1, 0.11], vest: [0.95, 0.66, 0.1], bottom: [0.11, 0.11, 0.12], shoes: [0.08, 0.08, 0.09],
+      gloves: [0.1, 0.1, 0.11], accent: [1, 0.68, 0.08], kneeCol: [0.12, 0.12, 0.13], head: 'mask', headCol: [0.1, 0.1, 0.11], visor: [1, 0.68, 0.08], scarf: [0.1, 0.1, 0.11] },
   },
 };
 export const CLASS_ORDER = ['light', 'medium', 'heavy'];
