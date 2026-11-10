@@ -160,6 +160,17 @@ The semi-finals map is one enormous container freighter, about 300 m long, ploug
 - **The sea** is animated, with a rolling swell, glints, whitecaps, a bow wave and a wake. Fall in and you're out ("OVERBOARD"). Drops of more than 18 m kill you; 9 m and over hurts.
 - **Grapple** works normally again (aim and fire). Nothing auto-targets containers.
 
+## Performance (build 0.25)
+
+- Scenery that never moves (container stacks, hull, deck clutter, rails) is grouped into 28 m chunks and drawn with
+  instanced draw calls (`src/batch.js`): roughly 130 draws instead of ~1,700. Anything that later moves, changes colour
+  or is broken drops out of its batch automatically and is drawn on its own.
+- Characters and props far from the camera use low-poly spheres, capsules and rounded boxes, and the shadow map always
+  uses the low-poly versions. Off-screen character parts are culled, and only those within ~32 m cast shadows. This cut
+  the vertices per frame from ~7 million to under 0.5 million.
+- Dynamic resolution: if frames take longer than 1/50 s, the render scale drops (down to 55%) and comes back up when
+  there's headroom. Pixel density is capped at 1.5×.
+
 ## Cashout (builds 0.21–0.24)
 
 PLAY → matchmaking → loadout → team intro → a cashout match on the Container Ship. You and two AI teammates take on three AI teams of three.
@@ -285,6 +296,7 @@ Lighting is done in linear space with ACES tone mapping. It has sun, sky and gro
 index.html            HUD, menu, styles
 src/main.js           game loop, shooting, HUD updates
 src/renderer.js       WebGL2 renderer + grid/edge shader (everything is a box)
+src/batch.js          static scenery batching (instanced draws per chunk)
 src/world.js          box list, spatial grid, collision queries, raycasts
 src/player.js         movement, vault/mantle/ledge grab/wall run, collision, camera springs
 src/course.js         parkour time trial: gates, checkpoints, hazards, best times

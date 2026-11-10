@@ -22,6 +22,7 @@ import { BotManager } from './bots.js';
 import { Matchmaking } from './matchmaking.js';
 import { Lift } from './lift.js';
 import { Cashout, cashBoxParts } from './cashout.js';
+import { StaticBatches } from './batch.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -43,6 +44,12 @@ const saveSettings = () => { try { localStorage.setItem('semifinals.settings', J
 
 // ---------- game objects ----------
 const world = new World();
+const batches = new StaticBatches(renderer);      // static scenery batches, made on the first frame
+// is a box in the match arena (true) or the practice range (false)?
+const inArea = (b) => {
+  const c = b.center, SA = stadium.area;
+  return c[0] > SA.min[0] && c[0] < SA.max[0] && c[1] > SA.min[1] && c[1] < SA.max[1] && c[2] > SA.min[2] && c[2] < SA.max[2];
+};
 const effects = new Effects(world);
 const input = new Input(canvas);
 const sounds = new Sounds();
@@ -1021,6 +1028,7 @@ function setTeamsHud(m) {
 }
 // ---------- cashout match: start / end, events, HUD ----------
 function startMatch(m) {
+  batches.world = null;     // re-batch once the match props are set up
   resetGlass();
   walls.forEach((w) => w.reset());
   cashout.start(m, player, classLo.cls);
@@ -1525,12 +1533,24 @@ const vmBoxM = Array.from({ length: 6 }, () => mat4());
 let last = performance.now(), time = 0, fovKick = 0, timeScale = 1;
 const weaponCtx = { fire, sounds };
 
+let perfT = 0, perfN = 0, perfLast = 0;
 function frame(now) {
   const rdt = Math.min((now - last) / 1000, 0.05);
   if (slowmo > 0) slowmo -= rdt;
   const dt = rdt * timeScale * (slowmo > 0 ? 0.3 : 1);
   last = now;
   time += dt;
+  // dynamic resolution: drop the render scale when frames take too long, raise it again when there's headroom
+  if (playing && document.visibilityState === 'visible') {
+    perfT += Math.min((now - perfLast) / 1000, 0.25); perfN++;
+    if (perfT > 1.5) {
+      const avg = perfT / perfN;
+      if (avg > 1 / 50) renderer.resScale = Math.max(0.55, (renderer.resScale || 1) - 0.1);
+      else if (avg < 1 / 58) renderer.resScale = Math.min(1, (renderer.resScale || 1) + 0.05);
+      perfT = 0; perfN = 0;
+    }
+  }
+  perfLast = now;
 
   if (playing && !bench.open && (cutscene || pressSeq || player.dead)) {
     // the player isn't in control right now
@@ -1623,10 +1643,7 @@ function frame(now) {
   // keep the sun's shadow map centred on the player so the annex gets shadows too
   // only draw the place you're in (the range or the stadium), and only what the camera can see
   const st = inStadium(), SA = stadium.area;
-  const zoneOk = (b) => {
-    const c = b.center;
-    return (c[0] > SA.min[0] && c[0] < SA.max[0] && c[1] > SA.min[1] && c[1] < SA.max[1] && c[2] > SA.min[2] && c[2] < SA.max[2]) === st;
-  };
+  const zoneOk = (b) => inArea(b) === st;
   const shadowHalf = st ? stadium.shadowHalf : 50;
   const sc = [Math.round(player.pos[0] / 8) * 8, Math.round(player.pos[1] / 8) * 8, Math.round(player.pos[2] / 8) * 8];
   renderer.setShadowArea(sc, shadowHalf);
@@ -1648,12 +1665,39 @@ function frame(now) {
     if (Math.sqrt(Math.max(0, d2 - al * al)) > al * kf + r * kr) return false;
     return !!b.tag || r > 0.0022 * Math.sqrt(d2);     // skip tiny props far away (never targets)
   };
-  const live = world.boxes.filter((b) => !b.hidden && zoneOk(b));
+  // static scenery is drawn in instanced batches; only boxes that move or change are drawn one by one
+  if (!batches.world) batches.build(world, inArea);
+  batches.sync();
+  const live = world.boxes.filter((b) => !b.hidden && !b.batched && zoneOk(b));
+  const sphereShadow = (c, r) => {
+    const dx = c[0] - sc[0], dy = c[1] - sc[1], dz = c[2] - sc[2], lim = shadowHalf * 1.5 + r;
+    return dx * dx + dy * dy + dz * dz < lim * lim;
+  };
+  const sphereView = (c, r) => {
+    const dx = c[0] - camEye[0], dy = c[1] - camEye[1], dz = c[2] - camEye[2];
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > (farCull + r) * (farCull + r)) return false;
+    const al = dx * camFwd[0] + dy * camFwd[1] + dz * camFwd[2];
+    if (al < -r) return false;
+    return Math.sqrt(Math.max(0, d2 - al * al)) <= al * kf + r * kr;
+  };
+  // character / prop parts: cull each against the view, and only nearby ones cast shadows
+  const pc = [0, 0, 0];
+  const partR = (p) => 0.5 * Math.hypot(p.scale[0], p.scale[1], p.scale[2]);
+  const partAt = (p) => { pc[0] = p.model[12]; pc[1] = p.model[13]; pc[2] = p.model[14]; return pc; };
+  const partView = (p) => sphereView(partAt(p), partR(p));
+  const shadowNear = Math.min(shadowHalf, 32);
+  const partShadow = (p) => {
+    const c = partAt(p), dx = c[0] - player.pos[0], dy = c[1] - player.pos[1], dz = c[2] - player.pos[2];
+    return dx * dx + dy * dy + dz * dz < shadowNear * shadowNear;
+  };
+  const caseVis = caseParts.filter(partView), botVis = botParts.filter(partView);
   renderer.beginShadow();
+  batches.drawShadows(st, sphereShadow);
   for (const b of live) if (!b.noShadow && nearShadow(b)) renderer.shadowDraw(b.model, b.shape, b.scale);
-  for (const p of caseParts) renderer.shadowDraw(p.model, p.shape, p.scale);
+  for (const p of caseParts) if (partShadow(p)) renderer.shadowDraw(p.model, p.shape, p.scale);
   effects.drawShadows(renderer);
-  for (const p of botParts) renderer.shadowDraw(p.model, p.shape, p.scale);
+  for (const p of botParts) if (partShadow(p)) renderer.shadowDraw(p.model, p.shape, p.scale);
   renderer.endShadow();
 
   // world
@@ -1661,11 +1705,12 @@ function frame(now) {
   renderer.setCamera(proj, view, fogD, camEye, true);
   renderer.drawSky(camEye);
   renderer.setBlend(false);
+  batches.draw(st, sphereView);
   const vis = live.filter(inView);
   for (const b of vis) if (b.alpha >= 1) renderer.drawBox(b);
-  for (const p of caseParts) renderer.drawPart(p);
+  for (const p of caseVis) renderer.drawPart(p);
   effects.drawOpaque(renderer);
-  for (const p of botParts) renderer.drawPart(p);
+  for (const p of botVis) renderer.drawPart(p);
   renderer.setBlend(true);
   for (const b of vis) if (b.alpha < 1) renderer.drawBox(b);
   effects.drawTransparent(renderer);
@@ -1696,4 +1741,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { map, stadium, lifts, cashout, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { batches, renderer, map, stadium, lifts, cashout, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

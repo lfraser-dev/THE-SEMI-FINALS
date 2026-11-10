@@ -6,17 +6,37 @@ import { mat4, ortho, lookDir, mul } from './math.js';
 const VERT = `#version 300 es
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNormal;
+// per-instance data for batched static scenery (uInst = 1): model matrix, scale + AO, colour + alpha, grid/edges/emissive, material
+layout(location=2) in vec4 iM0;
+layout(location=3) in vec4 iM1;
+layout(location=4) in vec4 iM2;
+layout(location=5) in vec4 iM3;
+layout(location=6) in vec4 iS;
+layout(location=7) in vec4 iC;
+layout(location=8) in vec4 iP;
+layout(location=9) in vec4 iMt;
 uniform mat4 uProj, uView, uModel, uLightVP;
-uniform vec3 uScale;
+uniform vec3 uScale, uColor;
+uniform float uGrid, uEdges, uEmissive, uAlpha, uAO, uInst;
+uniform vec2 uMat;
 out vec3 vWorld, vNormal, vLocal, vLocalN;
 out vec4 vLightPos;
 out float vViewZ;
+flat out vec3 fColor, fScale, fMat;
+flat out vec4 fP;
 void main() {
-  vec4 w = uModel * vec4(aPos, 1.0);
+  bool inst = uInst > 0.5;
+  mat4 M = inst ? mat4(iM0, iM1, iM2, iM3) : uModel;
+  vec3 sc = inst ? iS.xyz : uScale;
+  fScale = sc;
+  fColor = inst ? iC.rgb : uColor;
+  fP = inst ? vec4(iP.xyz, iC.a) : vec4(uGrid, uEdges, uEmissive, uAlpha);
+  fMat = inst ? vec3(iMt.xy, iS.w) : vec3(uMat, uAO);
+  vec4 w = M * vec4(aPos, 1.0);
   vWorld = w.xyz;
   vLocal = aPos;
   vLocalN = aNormal;
-  vNormal = normalize(mat3(uModel) * (aNormal / uScale));
+  vNormal = normalize(mat3(M) * (aNormal / sc));
   vLightPos = uLightVP * vec4(w.xyz + vNormal * 0.035, 1.0); // normal offset vs. acne
   vec4 v = uView * w;
   vViewZ = -v.z;
@@ -29,10 +49,20 @@ precision highp sampler2DShadow;
 in vec3 vWorld, vNormal, vLocal, vLocalN;
 in vec4 vLightPos;
 in float vViewZ;
-uniform vec3 uColor, uScale, uFogColor, uSunDir, uCamPos, uSkyTop;
-uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky, uViewUnder, uAO, uTime;
+uniform vec3 uFogColor, uSunDir, uCamPos, uSkyTop;
+uniform float uFogDensity, uShadowOn, uSky, uViewUnder, uTime;
 uniform vec3 uRim;
-uniform vec2 uMat;          // x = metalness, y = roughness (< 0: automatic from colour)
+// per-draw values arrive from the vertex shader (uniforms for single draws, instance data for batches)
+flat in vec3 fColor, fScale, fMat;   // fMat: x = metalness, y = roughness (< 0: automatic from colour), z = AO
+flat in vec4 fP;                     // grid / material, edges, emissive, alpha
+#define uColor fColor
+#define uScale fScale
+#define uGrid fP.x
+#define uEdges fP.y
+#define uEmissive fP.z
+#define uAlpha fP.w
+#define uMat fMat.xy
+#define uAO fMat.z
 uniform vec3 uStudio, uStudioFwd, uStudioKey;   // menu studio: backdrop colour (zero = off), camera forward, key light dir
 uniform sampler2DShadow uShadowMap;
 out vec4 outColor;
@@ -424,8 +454,13 @@ void main() {
 
 const SHADOW_VERT = `#version 300 es
 layout(location=0) in vec3 aPos;
+layout(location=2) in vec4 iM0;
+layout(location=3) in vec4 iM1;
+layout(location=4) in vec4 iM2;
+layout(location=5) in vec4 iM3;
 uniform mat4 uLightVP, uModel;
-void main() { gl_Position = uLightVP * uModel * vec4(aPos, 1.0); }`;
+uniform float uInst;
+void main() { mat4 M = uInst > 0.5 ? mat4(iM0, iM1, iM2, iM3) : uModel; gl_Position = uLightVP * M * vec4(aPos, 1.0); }`;
 const SHADOW_FRAG = `#version 300 es
 precision mediump float;
 void main() {}`;
@@ -483,9 +518,8 @@ function cylinderGeometry(seg = 28) {
 }
 
 // box with real (physical) rounded edges of radius r, for a box of size D; returned in unit space
-function roundedBoxGeometry(D, r) {
+function roundedBoxGeometry(D, r, steps = 4) {
   r = Math.max(0.0005, Math.min(r, Math.min(...D) * 0.48));
-  const steps = 4;
   const axisVals = (h) => {
     const a = [];
     for (let k = 0; k <= steps; k++) a.push(-h + r * (1 - Math.cos((k / steps) * Math.PI / 2)));
@@ -547,6 +581,7 @@ function capsuleGeometry(L, r1, r2, seg = 32, ringsPerCap = 10) {
 }
 
 // surface materials: [metalness, roughness]; roughness < 0 = pick it from the colour
+export const INST_FLOATS = 32;
 const MATS = {
   auto: [0, -1],
   metal: [0.55, 0.36],     // anodised / cerakoted metal
@@ -588,19 +623,24 @@ export class Renderer {
     this.shadowProg = compile(gl, SHADOW_VERT, SHADOW_FRAG);
     this.u = {};
     for (const name of ['uProj', 'uView', 'uModel', 'uScale', 'uColor', 'uFogColor', 'uSunDir', 'uCamPos',
-      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim', 'uMat', 'uStudio', 'uStudioFwd', 'uStudioKey', 'uTime']) {
+      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim', 'uMat', 'uStudio', 'uStudioFwd', 'uStudioKey', 'uTime', 'uInst']) {
       this.u[name] = gl.getUniformLocation(this.prog, name);
     }
     this.su = {
       uLightVP: gl.getUniformLocation(this.shadowProg, 'uLightVP'),
       uModel: gl.getUniformLocation(this.shadowProg, 'uModel'),
+      uInst: gl.getUniformLocation(this.shadowProg, 'uInst'),
     };
+    this.meshIds = 0;
 
     const cube = this.makeMesh(cubeGeometry());
     this.vao = cube.vao;
     this.indexCount = cube.count;
     this.cube = cube;
     this.meshes = { sphere: this.makeMesh(sphereGeometry()), cyl: this.makeMesh(cylinderGeometry()) };
+    this.meshesLo = { sphere: this.makeMesh(sphereGeometry(14, 9)), cyl: this.makeMesh(cylinderGeometry(12)) };
+    this.camPos = [0, 0, 0];
+    this.lodDist = 11;      // past this, curved parts use the low-poly meshes
     this.rounded = new Map();
     gl.bindVertexArray(this.vao);
 
@@ -653,33 +693,32 @@ export class Renderer {
     const ib = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-    return { vao, count: indices.length };
+    gl.bindVertexArray(null);
+    this.boundMesh = null;
+    return { vao, vb, ib, count: indices.length, id: ++this.meshIds };
   }
 
   // shape: undefined = plain box, 'sphere', 'cyl' (along Z), or a number = box with rounded edges of that radius (m)
-  meshFor(shape, scl) {
+  // lo = a low-poly version for things far from the camera and for the shadow map
+  meshFor(shape, scl, lo = false) {
     if (shape == null) return this.cube;
-    if (typeof shape === 'string') return this.meshes[shape] || this.cube;
+    if (typeof shape === 'string') return (lo ? this.meshesLo[shape] : this.meshes[shape]) || this.cube;
+    const q = (x) => Math.max(1, Math.round(Math.abs(x) * 500));      // 2 mm buckets
+    let key, make;
     if (typeof shape === 'object') {
       // { cap: [r1, r2] } with scl = [2rm, 2rm, L + 2rm]
-      const q = (x) => Math.max(1, Math.round(Math.abs(x) * 500));
       const [r1, r2] = shape.cap, rm = Math.max(r1, r2);
       const L = Math.max(0.002, scl[2] - 2 * rm);
-      const key = `c${q(L)}_${q(r1)}_${q(r2)}`;
-      let m = this.rounded.get(key);
-      if (!m) {
-        if (this.rounded.size > 4000) this.rounded.clear();
-        m = this.makeMesh(capsuleGeometry(q(L) / 500, q(r1) / 500, q(r2) / 500));
-        this.rounded.set(key, m);
-      }
-      return m;
+      key = `c${q(L)}_${q(r1)}_${q(r2)}${lo ? 'l' : ''}`;
+      make = () => capsuleGeometry(q(L) / 500, q(r1) / 500, q(r2) / 500, lo ? 12 : 32, lo ? 3 : 10);
+    } else {
+      key = `${q(scl[0])}_${q(scl[1])}_${q(scl[2])}_${q(shape)}${lo ? 'l' : ''}`;
+      make = () => roundedBoxGeometry([q(scl[0]) / 500, q(scl[1]) / 500, q(scl[2]) / 500], q(shape) / 500, lo ? 1 : 4);
     }
-    const q = (x) => Math.max(1, Math.round(Math.abs(x) * 500));      // 2 mm buckets
-    const key = `${q(scl[0])}_${q(scl[1])}_${q(scl[2])}_${q(shape)}`;
     let m = this.rounded.get(key);
     if (!m) {
       if (this.rounded.size > 4000) this.rounded.clear();
-      m = this.makeMesh(roundedBoxGeometry([q(scl[0]) / 500, q(scl[1]) / 500, q(scl[2]) / 500], q(shape) / 500));
+      m = this.makeMesh(make());
       this.rounded.set(key, m);
     }
     return m;
@@ -687,6 +726,79 @@ export class Renderer {
 
   bindMesh(m) {
     if (this.boundMesh !== m) { this.gl.bindVertexArray(m.vao); this.boundMesh = m; }
+  }
+
+  // ---- instanced batches (static scenery: one draw per mesh per chunk instead of one per box) ----
+  // data: Float32Array of INST_FLOATS per instance (see instanceData)
+  makeBatch(mesh) {
+    const gl = this.gl;
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vb);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ib);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    for (let i = 0; i < 8; i++) {
+      gl.enableVertexAttribArray(2 + i);
+      gl.vertexAttribPointer(2 + i, 4, gl.FLOAT, false, INST_FLOATS * 4, i * 16);
+      gl.vertexAttribDivisor(2 + i, 1);
+    }
+    gl.bindVertexArray(null);
+    this.boundMesh = null;
+    return { vao, buf, mesh, count: 0, casters: 0 };
+  }
+
+  fillBatch(batch, data, count, casters) {
+    const gl = this.gl;
+    gl.bindBuffer(gl.ARRAY_BUFFER, batch.buf);
+    gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, count * INST_FLOATS), gl.STATIC_DRAW);
+    batch.count = count; batch.casters = casters;
+  }
+
+  freeBatch(batch) {
+    const gl = this.gl;
+    gl.deleteBuffer(batch.buf);
+    gl.deleteVertexArray(batch.vao);
+    if (this.boundMesh) this.boundMesh = null;
+  }
+
+  // write one box's instance into data at slot i
+  instanceData(data, i, b) {
+    const o = i * INST_FLOATS, m = b.model, s = b.scale, c = b.color;
+    for (let k = 0; k < 16; k++) data[o + k] = m[k];
+    const shaped = b.shape != null;
+    const mt = b.mat ? (MATS[b.mat] || b.mat) : MATS.auto;
+    data[o + 16] = s[0]; data[o + 17] = s[1]; data[o + 18] = s[2]; data[o + 19] = shaped ? 0 : 1;
+    data[o + 20] = c[0]; data[o + 21] = c[1]; data[o + 22] = c[2]; data[o + 23] = b.alpha ?? 1;
+    data[o + 24] = b.tex || (b.grid ? 1 : 0); data[o + 25] = shaped ? 0 : (b.edges ? 1 : 0); data[o + 26] = b.emissive || 0; data[o + 27] = 0;
+    data[o + 28] = mt[0]; data[o + 29] = mt[1]; data[o + 30] = 0; data[o + 31] = 0;
+  }
+
+  drawBatch(batch) {
+    const gl = this.gl;
+    if (!batch.count) return;
+    if (!this.instOn) { gl.uniform1f(this.u.uInst, 1); this.instOn = true; }
+    gl.bindVertexArray(batch.vao); this.boundMesh = null;
+    gl.drawElementsInstanced(gl.TRIANGLES, batch.mesh.count, gl.UNSIGNED_SHORT, 0, batch.count);
+    this.drawCalls++;
+  }
+
+  endBatches() {
+    if (this.instOn) { this.gl.uniform1f(this.u.uInst, 0); this.instOn = false; }
+    this.gl.bindVertexArray(null); this.boundMesh = null;
+  }
+
+  shadowBatch(batch) {
+    const gl = this.gl;
+    if (!batch.casters) return;
+    gl.uniform1f(this.su.uInst, 1);
+    gl.bindVertexArray(batch.vao); this.boundMesh = null;
+    gl.drawElementsInstanced(gl.TRIANGLES, batch.mesh.count, gl.UNSIGNED_SHORT, 0, batch.casters);
+    gl.uniform1f(this.su.uInst, 0);
   }
 
   // Orthographic sun camera covering a square area around `center`.
@@ -698,7 +810,8 @@ export class Renderer {
   }
 
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // resScale is lowered automatically when frames run slow (see main.js), so the game stays smooth
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5) * (this.resScale || 1);
     const w = Math.floor(this.canvas.clientWidth * dpr), h = Math.floor(this.canvas.clientHeight * dpr);
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
@@ -720,7 +833,7 @@ export class Renderer {
   }
 
   shadowDraw(model, shape, scl) {
-    const m = this.meshFor(shape, scl);
+    const m = this.meshFor(shape, scl, true);
     this.bindMesh(m);
     this.gl.uniformMatrix4fv(this.su.uModel, false, model);
     this.gl.drawElements(this.gl.TRIANGLES, m.count, this.gl.UNSIGNED_SHORT, 0);
@@ -738,10 +851,12 @@ export class Renderer {
     const gl = this.gl;
     this.boundMesh = null;
     this.lastMat = null;
+    this.instOn = false;
     gl.viewport(0, 0, this.size[0], this.size[1]);
     gl.clearColor(...this.fogColor, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.prog);
+    gl.uniform1f(this.u.uInst, 0);
     if (this.u.uTime) gl.uniform1f(this.u.uTime, (performance.now() / 1000) % 3600);
     this.drawCalls = 0;
   }
@@ -757,6 +872,7 @@ export class Renderer {
     gl.uniformMatrix4fv(this.u.uView, false, view);
     gl.uniform1f(this.u.uFogDensity, fogDensity);
     gl.uniform3fv(this.u.uCamPos, camPos);
+    this.camPos = camPos;
     gl.uniform1f(this.u.uShadowOn, shadows ? 1 : 0);
     gl.uniformMatrix4fv(this.u.uLightVP, false, this.lightVP);
   }
@@ -788,7 +904,12 @@ export class Renderer {
     const gl = this.gl, u = this.u;
     const mt = mat ? (MATS[mat] || mat) : MATS.auto;
     if (mt !== this.lastMat) { gl.uniform2fv(u.uMat, mt); this.lastMat = mt; }
-    const m = this.meshFor(shape, scl);
+    let lo = false;
+    if (shape != null) {
+      const c = this.camPos, dx = model[12] - c[0], dy = model[13] - c[1], dz = model[14] - c[2];
+      lo = dx * dx + dy * dy + dz * dz > this.lodDist * this.lodDist;
+    }
+    const m = this.meshFor(shape, scl, lo);
     this.bindMesh(m);
     if (shape != null) edges = 0;
     gl.uniform1f(u.uAO, shape != null ? 0 : 1);
