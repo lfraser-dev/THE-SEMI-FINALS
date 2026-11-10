@@ -15,6 +15,7 @@ import { Thumbs } from './thumbs.js';
 import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
 import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
+import stadium from './maps/fortuneStadium.js';
 import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager } from './bots.js';
@@ -48,8 +49,9 @@ sounds.setVolume(settings.volume);
 const player = new Player(world);
 const map = testRange;
 map.build(world);
-const dummies = map.dummies.map((d) => new Dummy(world, effects, d.pos, d.move));
-const walls = map.walls.map((w) => new DestructibleWall(world, effects, w.origin, w));
+stadium.build(world);    // the semi-finals arena, far away and high up (PLAY on the home screen)
+const dummies = [...map.dummies, ...stadium.dummies].map((d) => new Dummy(world, effects, d.pos, d.move));
+const walls = [...map.walls, ...stadium.walls].map((w) => new DestructibleWall(world, effects, w.origin, w));
 // attachments: one saved loadout per weapon
 const classLo = loadLoadout();
 let loadouts = {};
@@ -62,6 +64,11 @@ const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
 const elevator = new Elevator(world, map.elevator);
+const towerLift = new Elevator(world, stadium.lift);   // glass-free cage lift up the tower in sector 3
+towerLift.dur = 7;
+let where = 'range';       // 'range' or 'stadium'
+const inStadium = () => where === 'stadium';
+let padCd = 0, voidT = 0;
 const botMgr = new BotManager(world, map.deck, map.deckRefs);
 // player health (the player object only knows movement)
 Object.assign(player, { hp: 150, maxHp: 150, dead: false, hurtT: 9, invuln: 0, press: null });
@@ -356,7 +363,7 @@ function die(name) {
 function respawnPlayer() {
   const A = map.deck.area, P = player.pos;
   const onDeck = botMgr.running || (P[0] > A.min[0] && P[0] < A.max[0] && P[1] > A.min[1] && P[1] < A.max[1] && P[2] > A.min[2] && P[2] < A.max[2]);
-  const r = onDeck ? map.deck.respawn : { pos: map.spawn.pos, yaw: map.spawn.yaw };
+  const r = onDeck ? map.deck.respawn : { pos: player.spawnPoint, yaw: player.spawnYaw };
   player.teleport(r.pos, r.yaw);
   Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5 });
   slots.forEach((w) => { w.ammo = w.def.mag; w.reload = null; });
@@ -638,7 +645,7 @@ function updateHud(dt, fovRad) {
       hud.flash.lastChild.textContent = f.sub;
     }
   } else hud.flash.style.opacity = 0;
-  hud.fade.style.opacity = course.failT > 0 ? course.failT / 0.35 : 0;
+  hud.fade.style.opacity = course.failT > 0 ? course.failT / 0.35 : voidT > 0 ? 1 - voidT / 0.35 : 0;
 
   // health
   const hpk = player.hp / player.maxHp;
@@ -743,6 +750,12 @@ function start() {
 // ---------- main menu ----------
 let sessionStarted = false;
 function enterRange() {
+  if (where !== 'range') {
+    where = 'range';
+    player.spawn(map.spawn.pos, map.spawn.yaw);
+    $('mapname').lastChild.textContent = map.name;
+    effects.clear();
+  }
   if (!sessionStarted || classDirty) {
     applyClass();
     resetRange();
@@ -752,6 +765,25 @@ function enterRange() {
   }
   start();
 }
+// PLAY: the semi-finals arena
+function enterStadium() {
+  const arriving = where !== 'stadium';
+  if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
+  if (arriving) {
+    where = 'stadium';
+    botMgr.stop();
+    course.reset();
+    cutscene = null; pressSeq = null;
+    effects.clear();
+    player.spawn(stadium.spawn.pos, stadium.spawn.yaw);
+    Object.assign(player, { hp: player.maxHp, dead: false, press: null });
+    slots.forEach((w) => { w.ammo = w.def.mag; w.reload = null; });
+    banner('FORTUNE STADIUM', 'SEMI-FINALS', '', 2.4);
+    $('mapname').lastChild.textContent = stadium.name;
+  }
+  start();
+}
+const resume = () => (inStadium() ? enterStadium() : enterRange());
 $('play').addEventListener('click', enterRange);
 let menuTab = 'home';
 function showTab(tab) {
@@ -889,12 +921,7 @@ function refreshGuns() {
   cases.forEach((c) => { c.def = defFor(c.def.id); });
   showroomKey = '';
 }
-$('mm-play').addEventListener('click', () => {
-  const el = $('mm-play');
-  el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
-  $('mm-locknote').classList.add('on');
-  sounds.dry?.();
-});
+$('mm-play').addEventListener('click', enterStadium);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const rgb = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
 function renderMenu() {
@@ -906,7 +933,8 @@ function renderMenu() {
   if (menuTab === 'custom') renderCustom();
   if (menuTab === 'shop') renderShop();
   $('mm-name').replaceChildren(el('b', null, c.name), el('span', null, `${WEAPONS[sel.weapon].name} · ${ABILITIES[sel.ability].short}`));
-  $('mm-range-sub').textContent = sessionStarted && !classDirty ? 'RESUME YOUR SESSION' : 'GUNS · MOVEMENT · PARKOUR · BOTS';
+  $('mm-range-sub').textContent = sessionStarted && !classDirty && !inStadium() ? 'RESUME YOUR SESSION' : 'GUNS · MOVEMENT · PARKOUR · BOTS';
+  $('mm-play-sub').textContent = inStadium() && !classDirty ? 'RESUME · FORTUNE STADIUM' : 'SEMI-FINALS · FORTUNE STADIUM';
   // play page summary
   const sum = $('mm-sum');
   const cell = (k, v) => { const d = el('div'); d.append(el('small', null, k), el('b', null, v)); return d; };
@@ -1039,7 +1067,7 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (playing && !locked && (e.code === 'Escape' || e.code === 'KeyP')) setPlaying(false);
-  else if (!playing && e.code === 'Enter') enterRange();
+  else if (!playing && e.code === 'Enter') resume();
 });
 
 // ---------- workbench ----------
@@ -1182,6 +1210,43 @@ function worldBeams(w) {
   return out;
 }
 
+// ---------- stadium: launch pads and the void ----------
+function launch(pad) {
+  // aim the arc so it lands on the pad's target: pick the upward speed, solve for the flight time
+  const g = 21, from = player.pos, to = pad.to;
+  const dy = to[1] - from[1], vy = Math.max(pad.vy, Math.sqrt(Math.max(0, 2 * g * dy)) + 1);
+  const T = (vy + Math.sqrt(vy * vy - 2 * g * dy)) / g;
+  player.cancelAbilities?.();
+  Object.assign(player, { sliding: false, grounded: false, trav: null, wallRun: null });
+  player.vel = [(to[0] - from[0]) / T, vy, (to[2] - from[2]) / T];
+  player.shake = Math.max(player.shake || 0, 0.15);
+  player.camPitchV -= 0.6;
+  sounds.launch?.();
+  effects.dust(player.pos, 6, [0, 6, 0]);
+  padCd = 0.6;
+}
+function updateStadium(dt) {
+  padCd -= dt;
+  if (padCd <= 0 && player.grounded) {
+    for (const p of stadium.pads) {
+      if (Math.abs(player.pos[0] - p.at[0]) < 1.1 && Math.abs(player.pos[2] - p.at[2]) < 1.1 && Math.abs(player.pos[1] - (p.at[1] + 0.25)) < 0.3) { launch(p); break; }
+    }
+  }
+  // fell into the void: out, back to the spawn
+  if (player.pos[1] < stadium.voidY && voidT <= 0) {
+    voidT = 0.35;
+    sounds.fail?.();
+    banner('OUT', 'FELL INTO THE VOID', 'bad', 1.3);
+  }
+  if (voidT > 0) {
+    voidT -= dt;
+    if (voidT <= 0) {
+      player.respawn();
+      Object.assign(player, { hp: player.maxHp, invuln: 1 });
+    }
+  }
+}
+
 // ---------- main loop ----------
 const proj = mat4(), view = mat4(), vmProj = mat4(), identity = mat4();
 let last = performance.now(), time = 0, fovKick = 0, timeScale = 1;
@@ -1227,7 +1292,9 @@ function frame(now) {
       slam: equippedAbility === 'slam' && input.hit(settings.slamKey),
     };
     elevator.update(dt, player, sounds);
+    towerLift.update(dt, player, sounds);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
+    if (inStadium()) updateStadium(dt);
     updateCombat(dt);
     course.update(dt, player, input);
     handlePlayerEvents();
@@ -1267,9 +1334,17 @@ function frame(now) {
 
   // shadow pass
   // keep the sun's shadow map centred on the player so the annex gets shadows too
-  renderer.setShadowArea([Math.round(player.pos[0] / 8) * 8, 0, Math.round(player.pos[2] / 8) * 8], 50);
+  const sc = [Math.round(player.pos[0] / 8) * 8, Math.round(player.pos[1] / 8) * 8, Math.round(player.pos[2] / 8) * 8];
+  renderer.setShadowArea(sc, 50);
+  const fogD = inStadium() ? stadium.fog : 0.0095;
+  const farCull = 2.4 / fogD;           // past this the fog has swallowed everything
+  const far = (b, c, lim) => {
+    const dx = b.center[0] - c[0], dy = b.center[1] - c[1], dz = b.center[2] - c[2];
+    const r = 0.5 * Math.hypot(b.scale[0], b.scale[1], b.scale[2]);
+    return dx * dx + dy * dy + dz * dz > (lim + r) * (lim + r);
+  };
   renderer.beginShadow();
-  for (const b of world.boxes) if (!b.noShadow && !b.hidden) renderer.shadowDraw(b.model, b.shape, b.scale);
+  for (const b of world.boxes) if (!b.noShadow && !b.hidden && !far(b, sc, 80)) renderer.shadowDraw(b.model, b.shape, b.scale);
   for (const p of caseParts) renderer.shadowDraw(p.model, p.shape, p.scale);
   effects.drawShadows(renderer);
   for (const p of botParts) renderer.shadowDraw(p.model, p.shape, p.scale);
@@ -1277,15 +1352,16 @@ function frame(now) {
 
   // world
   renderer.begin();
-  renderer.setCamera(proj, view, 0.0095, camEye, true);
+  renderer.setCamera(proj, view, fogD, camEye, true);
   renderer.drawSky(camEye);
   renderer.setBlend(false);
-  for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden) renderer.drawBox(b);
+  const vis = world.boxes.filter((b) => !b.hidden && !far(b, camEye, farCull));
+  for (const b of vis) if (b.alpha >= 1) renderer.drawBox(b);
   for (const p of caseParts) renderer.drawPart(p);
   effects.drawOpaque(renderer);
   for (const p of botParts) renderer.drawPart(p);
   renderer.setBlend(true);
-  for (const b of world.boxes) if (b.alpha < 1 && !b.hidden) renderer.drawBox(b);
+  for (const b of vis) if (b.alpha < 1) renderer.drawBox(b);
   effects.drawTransparent(renderer);
   for (const b of beams) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
   for (const b of botMgr.beams()) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
@@ -1310,4 +1386,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { map, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { map, stadium, towerLift, enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

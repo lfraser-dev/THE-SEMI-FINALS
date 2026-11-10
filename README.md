@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.11: Home screen with Armoury, Customization and Shop; Test Range, Parkour Course and underground bot arena.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.18: the first tournament arena is open. PLAY drops you into Fortune Stadium, the semi-finals map.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
 
 ## Run it
 
@@ -115,8 +115,9 @@ Reloads: the new mag tumbles end over end on its way in, and every reload ends w
 ## Main menu
 
 The game opens on a **Home** screen with your character standing in a lit showroom. The lights take your class colour. On the Home screen:
-- the big **PLAY** button is for the first tournament arena, and it's locked (Coming Soon)
+- the big **PLAY** button takes you to the semi-finals arena, Fortune Stadium (it resumes if you were already there)
 - **TEST RANGE** takes you into the range, and resumes your session if you have one
+- Enter resumes wherever you were last
 - your loadout summary sits in the corner
 
 The top row opens the other screens, and each one has a **Back** button (Esc works too):
@@ -134,6 +135,25 @@ Weapon skins (Crimson, Arctic, Desert Ops, Toxic, 24 Karat) recolour your guns e
 | Heavy | 350 | 86% | M60-X LMG, SG-12 shotgun | Ground Slam, Evasive Dash |
 
 Your class sets your health, movement speed and starting guns in the test range. You get your chosen primary plus the pistol as a sidearm, or another class weapon if the pistol is your primary. Only your equipped specialisation works, and it's the only one shown on the HUD.
+
+## Fortune Stadium (build 0.18)
+
+The semi-finals arena. Six floating sectors hang over the void inside a stadium bowl, joined by bridges and launch pads. You spawn on a raised platform behind the arena, looking in, with the tower on your right.
+
+| Sector | Colour | What's there |
+| --- | --- | --- |
+| 1 | Orange | A two-floor court building wrapped round an open-air court with hoops. Stairs up to the upper floor and the roof, a raised rooftop in the corner you can mantle up to, and a destructible wall on the far side |
+| 2 | Yellow | An open two-floor deck on pillars in front of the electric building (transformers, generators, a mezzanine and a destructible back wall) |
+| 3 | Teal | **The tower**: 48 m tall, with a lobby, glowing crown, balconies to grapple, and a cage lift up the outside to a rooftop helipad with an antenna. Beside it is a courtyard with planters, a fountain and a kiosk |
+| 4 | Magenta | The giant building: two floors round an open atrium, with a launch pad in the atrium that throws you onto the roof |
+| 5 | Blue | The vault: a steel strongroom with the cashout station inside (its light beam goes up through the roof), surrounded by open ground and cover |
+| 6 | Purple | The maze: one massive storey of tight corridors and small rooms, a destructible wall, and stairs up to the roof |
+
+**Getting around.** Bridges join 1–2, 2–3, 2–5, 5–4, 5–6 and 1–6, and a stair bridge runs from spawn into sector 2. Launch pads glow in their sector colour. Step on one and it throws you in an arc that lands on its target: spawn to the sector 1 rooftop, spawn to the tower courtyard, the tower to the sector 4 rooftop, and the sector 4 atrium to its roof. To ride the tower lift, stand by the bottom gate and it comes down, then step in.
+
+**The void.** Fall off a sector and you're out: the screen fades and you're back at the spawn.
+
+**The stadium.** Tiered stands with a crowd in sector colours, LED ribbon boards, a roof canopy with floodlight strips, floodlight masts in the corners, a centre-hung scoreboard, and a giant hologram trophy floating between the rows. There are target dummies on every sector. Bots come later.
 
 ## Underground arena
 
@@ -254,14 +274,16 @@ src/weapons.js        weapon stats + box models (add new guns here)
 src/effects.js        debris, tracers, decals
 src/props.js          dummies, destructible walls, weapon cases, 7-seg signs
 src/audio.js          procedural sound effects
-src/maps/testRange.js the map (data + build function), incl. the parkour annex
+src/maps/testRange.js the test range (data + build function), incl. the parkour annex
+src/maps/fortuneStadium.js the semi-finals arena: six floating sectors, the tower, the stadium bowl
 ```
 
-To add a map, copy `src/maps/testRange.js` and change the boxes. Each map defines `spawn`, `build(world)`, `dummies` and `walls`.
+To add a map, copy `src/maps/fortuneStadium.js` and change the boxes. Each map defines `spawn`, `build(world)`, `dummies` and `walls`. Arenas live far from the range (Fortune Stadium is 700 m away and 60 m up), and boxes beyond the fog are skipped when drawing.
 
 ## Roadmap
 
 - [ ] Online multiplayer
-- [ ] Real maps
+- [x] First real map (Fortune Stadium)
+- [ ] Bots and objectives (cashout) in Fortune Stadium
 - [ ] More weapons and classes (light / medium / heavy)
 - [ ] Enemies / players
