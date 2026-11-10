@@ -47,7 +47,7 @@ export const ATTACHMENTS = {
   holo: { slot: 'optic', name: 'HOLO SIGHT', desc: 'Wide window with a ring reticle.', for: ['ar', 'smg', 'shotgun', 'lmg', 'sniper'],
     optic: { h: 0.032, zoom: 0.82 }, mods: { adsSpeed: 0.95 } },
   prism2x: { slot: 'optic', name: '2× PRISM', desc: 'Mid-range magnification.', for: ['ar', 'smg', 'lmg', 'sniper'],
-    optic: { h: 0.034, zoom: 0.52, eye: 0.2 }, mods: { adsSpeed: 0.82, adsSpread: 0.85 } },
+    optic: { h: 0.034, zoom: 0.52, eye: 0.17 }, mods: { adsSpeed: 0.82, adsSpread: 0.85 } },
   scope4x: { slot: 'optic', name: '4× SCOPE', desc: 'Long-range scope with a full overlay.', for: ['ar', 'lmg', 'sniper'],
     optic: { h: 0.048, zoom: 0.3, scope: true }, mods: { adsSpeed: 0.7, adsSpread: 0.7 } },
   // muzzle
@@ -197,17 +197,22 @@ export function buildDef(base, loadout = {}) {
         add(P('hoRing', [dx, h + dy, rz - 0.02], [sx, sy, 0.001], RED, { em: 1 }));
       }
     } else if (name === 'prism2x') {
-      // a hollow tube so you can actually look through it
-      const L = 0.1;
-      add(P('prBase', [0, ry + 0.005, rz], [0.036, 0.01, 0.07], BLACK),
-        P('prL', [-0.021, h, rz], [0.006, 0.046, L], DARK),
-        P('prR', [0.021, h, rz], [0.006, 0.046, L], DARK),
-        P('prTop', [0, h + 0.021, rz], [0.048, 0.006, L], DARK),
-        P('prBot', [0, h - 0.021, rz], [0.048, 0.006, L], DARK),
-        P('prHood', [0, h, rz - L / 2 - 0.01], [0.052, 0.052, 0.012], BLACK),
-        P('prChev', [0, h - 0.002, rz - 0.03], [0.004, 0.004, 0.001], RED, { em: 1 }),
-        P('prChevL', [-0.003, h - 0.004, rz - 0.03], [0.003, 0.0015, 0.001], RED, { em: 1 }),
-        P('prChevR', [0.003, h - 0.004, rz - 0.03], [0.003, 0.0015, 0.001], RED, { em: 1 }));
+      // short prism housing with a wide, open window: thin side walls, a rim at each end, chevron reticle
+      const L = 0.06, hw = 0.03, hh = 0.027;
+      add(P('prBase', [0, ry + 0.005, rz], [0.036, 0.01, 0.07], BLACK, { m: 'metal' }),
+        P('prL', [-hw - 0.003, h, rz], [0.006, hh * 2 + 0.006, L], DARK, { m: 'metal' }),
+        P('prR', [hw + 0.003, h, rz], [0.006, hh * 2 + 0.006, L], DARK, { m: 'metal' }),
+        P('prTop', [0, h + hh + 0.003, rz], [hw * 2 + 0.012, 0.006, L], DARK, { m: 'metal' }),
+        P('prBot', [0, h - hh - 0.003, rz], [hw * 2 + 0.012, 0.006, L * 0.6], DARK, { m: 'metal' }),
+        P('prBlock', [0, (ry + h - hh) / 2 + 0.003, rz + 0.01], [0.03, Math.max(0.004, h - hh - ry - 0.004), 0.04], BLACK, { m: 'metal' }),
+        P('prKnob', [hw + 0.01, h, rz + 0.01], [0.014, 0.014, 0.01], BLACK, { m: 'steel', shape: 'cyl', ry: Math.PI / 2 }),
+        P('prRimF', [0, h + hh + 0.004, rz - L / 2], [hw * 2 + 0.016, 0.008, 0.008], BLACK, { m: 'rubber' }),
+        P('prRimFL', [-hw - 0.004, h, rz - L / 2], [0.008, hh * 2 + 0.008, 0.008], BLACK, { m: 'rubber' }),
+        P('prRimFR', [hw + 0.004, h, rz - L / 2], [0.008, hh * 2 + 0.008, 0.008], BLACK, { m: 'rubber' }),
+        P('prChev', [0, h - 0.002, rz - 0.02], [0.004, 0.004, 0.001], RED, { em: 1 }),
+        P('prChevL', [-0.003, h - 0.004, rz - 0.02], [0.003, 0.0015, 0.001], RED, { em: 1 }),
+        P('prChevR', [0.003, h - 0.004, rz - 0.02], [0.003, 0.0015, 0.001], RED, { em: 1 }),
+        P('prStadia', [0, h - 0.012, rz - 0.02], [0.0008, 0.008, 0.001], RED, { em: 0.8 }));
     } else if (name === 'scope4x') {
       add(P('scBody', [0, h, rz], [0.04, 0.04, 0.24], BLACK),
         P('scBell', [0, h, rz - 0.13], [0.056, 0.056, 0.05], BLACK),

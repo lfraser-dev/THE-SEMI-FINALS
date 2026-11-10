@@ -85,9 +85,9 @@ Characters are built from smooth shapes: tapered capsules for limbs, ellipsoids 
 - **Bots:** sleek red robots with dark frames, armour shells, a glowing chest core and a faceless helmet with a glowing visor band.
 - **Dummies:** mannequins with a chest target plate and a visor band.
 
-## Cosmetics (build 0.16)
+## Cosmetics (builds 0.16–0.17)
 
-Every item is its own 3D model, not just a colour change. Each card in Customization and the Shop shows a live 3D portrait of the item: worn by your contestant and framed on the right body part, or the skinned gun on its own, against a backdrop in the item's rarity colour.
+Every item is its own 3D model, not just a colour change. Build 0.17 improves the fit: neckwear lies on the outermost layer (so chains and scarves sit on puffers and vests), the puffer shell fully covers the body, the hoodie pocket sits flush, shoulders flow into the arms through a tapered shoulder cap, and the waist blends into the hips. Each card in Customization and the Shop shows a live 3D portrait of the item: worn by your contestant and framed on the right body part, or the skinned gun on its own, against a backdrop in the item's rarity colour.
 - **Neck:** the gold chain is a real curb chain of alternating links lying on your clothes, with a medallion and a ruby. The bandana has a rolled band, a front triangle with paisley dots and a knot at the back. The scarf is a chunky knit loop with striped, fringed tails.
 - **Head:** the beanie has a ribbed cuff and a pom-pom. The bucket hat has a crown, a band and a wide brim. The Neon Dye Job is spiky hair. The masks are smooth performer face plates with eye slits (the Finalist's eyes glow). The gold helmet is real metal.
 - **Tops:** tees have a crew neck, short sleeves and chest prints. The hoodie has a hood, drawstrings and a kangaroo pocket. Class tops are quarter-zips.
@@ -95,6 +95,10 @@ Every item is its own 3D model, not just a colour change. Each card in Customiza
 - **Legs:** cargos with flap pockets, woodland camo, chinos with rolled hems, and trackies with side stripes.
 - **Shoes:** combat boots with lugged soles, Clean Kicks trainers, Volt runners with neon soles, and Golden Soles in polished gold.
 - **Gloves:** tactical gloves with knuckle guards, boxing tape wraps, and white host gloves with flared cuffs.
+
+## Optics
+
+The 2× prism is a short housing with a wide, open window and a rubber rim, so you can actually aim through it. It has a chevron and stadia reticle. Fitting an optic folds the LMG's front post away.
 
 ## Draws and reloads (build 0.15)
 

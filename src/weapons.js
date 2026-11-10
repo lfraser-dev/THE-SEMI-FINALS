@@ -286,7 +286,7 @@ export const WEAPONS = {
       ...[-0.27, -0.32, -0.37, -0.42, -0.47].flatMap((z) => [CX('shHole', [0, 0.02, z], 0.026, 0.066, PORT), CY('shHoleT', [0, 0.01, z], 0.022, 0.076, PORT)]),
       C('barrel', [0, 0.02, -0.58], 0.034, 0.24, BLACK, { m: 'metal' }),
       C('flash', [0, 0.02, -0.705], 0.044, 0.03, DARK2, { m: 'metal', grp: 'muzzle' }),
-      P('frontPost', [0, 0.065, -0.49], [0.006, 0.04, 0.012], BLACK, { m: 'metal' }),
+      P('frontPost', [0, 0.065, -0.49], [0.006, 0.04, 0.012], BLACK, { m: 'metal', grp: 'sight' }),
       // carry handle
       P('handle', [0, 0.11, -0.12], [0.02, 0.016, 0.14], BLACK, { m: 'poly' }),
       ...[-1, 1].map((sz) => P('handlePost', [0, 0.085, -0.12 + sz * 0.06], [0.016, 0.04, 0.014], DARK2, { m: 'metal' })),
