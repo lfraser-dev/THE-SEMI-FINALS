@@ -13,7 +13,7 @@ export class Nav {
     const hk = (ix, iz, l) => `${ix},${iz},${l}`;
     const excluded = (x, z) => exclude.some(([a, b, c, d]) => x > a && x < c && z > b && z < d);
     const clear = (x, y, z) => !w.firstOverlap([x - 0.32, y + 0.42, z - 0.32], [x + 0.32, y + 1.8, z + 0.32]);
-    const floor = (x, y, z) => !!w.pointInside([x, y - 0.06, z]);
+    const floor = (x, y, z) => !!w.firstOverlap([x - 0.08, y - 0.12, z - 0.08], [x + 0.08, y - 0.03, z + 0.08]);   // a small patch, so seams between slabs count
     const ok = (x, y, z) => !excluded(x, z) && floor(x, y, z) && clear(x, y, z);
     const addNode = (x, y, z) => { X.push(x); Y.push(y); Z.push(z); adj.push([]); return X.length - 1; };
     const link = (a, b) => { if (a !== b && !adj[a].includes(b)) { adj[a].push(b); adj[b].push(a); } };

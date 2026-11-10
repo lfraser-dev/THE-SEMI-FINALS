@@ -22,22 +22,22 @@ const C = {
 const L = (x, y, z) => [OX + x, Y0 + y, OZ + z];
 
 // ---- the tower's shape (local metres; +z is the front, toward the main spawn)
-const TOP = 28;                                     // storeys; the wing roofs are at 126 m
-const POD = { x0: -36, x1: 36, z0: 20, z1: 44 };    // the lobby podium in front, 3 storeys
-const SHAFTS = [[-6.5, -3.6, -3.1, -0.4], [3.1, -3.6, 6.5, -0.4]];
-const LIFT_STOPS = [0, 1, 2, 3, 5, 8, 11, 14, 17, 21];
-const backZ = (k) => (k < 10 ? -20 : k < 18 ? -12 : -8);       // the back steps in as it rises
-// footprint(s) of storey k: one block, or two wings at the top
-function footprint(k) {
-  const z0 = backZ(k);
-  if (k < 22) return [[-24, z0, 24, 20]];
-  const o = k < 25 ? 24 : 21;
-  return [[-o, z0, -5, 20], [5, z0, o, 20]];
-}
+// Narrow at the foot, bulging out through the middle and drawing back in to a point: each storey's footprint
+// follows a curve, so the facade steps out and back in like the sketch. A giant arch is cut into the front of
+// the base, with the lobby's glass entrance set back inside it.
+const TOP = 30;                                                  // storeys; the roof is at 135 m
+const HW = (k) => { const t = Math.min(k, TOP - 1) / (TOP - 1); return Math.round((20 + 63.15 * t - 75.15 * t * t) * 2) / 2; };
+const HD = (k) => Math.round(HW(k) * 0.7 * 2) / 2;
+const ARCH_H = 6;                                                // the arch rises through storeys 0-5
+const ARCH = (k) => (k >= ARCH_H ? 0 : Math.round(14 * Math.sqrt(1 - ((k + 0.5) / ARCH_H) ** 2) * 2) / 2);
+const LOBBY_Z = 8;                                               // the lobby's glass front, set back inside the arch
+const SHAFTS = [[-6.5, -8, -3.1, -4.8], [3.1, -8, 6.5, -4.8]];
+const LIFT_STOPS = [0, 1, 2, 3, 5, 6, 9, 13, 17, 21];
+const ATRIUM = [-12, -1, 12, LOBBY_Z];                           // open through storeys 1-3
 
 // cashout stations and vault (cash box) spots
-const STATIONS = [[-60, 0, 30], [60, 0, 30], [-26, 9, 34], [0, 0, -55]];
-const VAULTS = [[0, 0, 14], [26, 4.5, 34], [50, 0, -45], [22, 13.5, 32]];
+const STATIONS = [[-60, 0, 30], [60, 0, 30], [0, 0, -55], [-18, 9, -8]];
+const VAULTS = [[0, 0, 3], [-18, 4.5, 2], [50, 0, -45], [18, 9, -11]];
 const NAV_CHAINS = [];
 const GLASS = [];
 
@@ -56,19 +56,16 @@ export default {
   shadowHalf: 70,
   pads: [],
   lifts: [
-    { x: OX - 4.8, z: OZ - 2.0, w: 3, d: 2.8, doorZ: OZ, stops: LIFT_STOPS.map((k) => Y0 + k * FH), panelSide: 1 },
-    { x: OX + 4.8, z: OZ - 2.0, w: 3, d: 2.8, doorZ: OZ, stops: LIFT_STOPS.map((k) => Y0 + k * FH), panelSide: -1 },
+    { x: OX - 4.8, z: OZ - 6.4, w: 3, d: 2.8, doorZ: OZ - 4.4, stops: LIFT_STOPS.map((k) => Y0 + k * FH), panelSide: 1 },
+    { x: OX + 4.8, z: OZ - 6.4, w: 3, d: 2.8, doorZ: OZ - 4.4, stops: LIFT_STOPS.map((k) => Y0 + k * FH), panelSide: -1 },
   ],
   stations: STATIONS.map((p) => L(...p)),
   vaults: VAULTS.map((p) => L(...p)),
   dummies: [],
   walls: [
-    { origin: L(-24.2, 4.5, 24), cols: 12, rows: 6, axis: 2, color: [0.88, 0.87, 0.84] },
-    { origin: L(23.8, 4.5, 36), cols: 12, rows: 6, axis: 2, color: [0.88, 0.87, 0.84] },
-    { origin: L(-30, 9, 31.6), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
-    { origin: L(24, 9, 26), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
-    { origin: L(-30, 0, 30), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
-    { origin: L(24, 0, 35.5), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
+    { origin: L(-19, 0, -8), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
+    { origin: L(-15, 4.5, -12), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
+    { origin: L(9, 9, -14), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
     { origin: L(-50, 0, -30), cols: 12, rows: 6, axis: 0 }, { origin: L(44, 0, -30), cols: 12, rows: 6, axis: 0 },
     { origin: L(-56, 0, 60), cols: 12, rows: 6, axis: 2 }, { origin: L(56, 0, 52), cols: 12, rows: 6, axis: 2 },
   ],
@@ -76,16 +73,15 @@ export default {
   nav: {
     levels: [
       { y: Y0, rects: [[OX - 88, OZ - 78, OX + 88, OZ + 98]] },
-      { y: Y0 + 4.5, rects: [[OX - 36, OZ + 20, OX + 36, OZ + 44], [OX - 24, OZ - 20, OX + 24, OZ + 20]] },
-      { y: Y0 + 9, rects: [[OX - 36, OZ + 20, OX + 36, OZ + 44], [OX - 24, OZ - 20, OX + 24, OZ + 20]] },
-      { y: Y0 + 13.5, rects: [[OX - 36, OZ + 20, OX + 36, OZ + 44]] },
+      { y: Y0 + 4.5, rects: [[OX - HW(1), OZ - HD(1), OX + HW(1), OZ + HD(1)]] },
+      { y: Y0 + 9, rects: [[OX - HW(2), OZ - HD(2), OX + HW(2), OZ + HD(2)]] },
     ],
     chains: [],
     exclude: SHAFTS.map(([a, b, c, d]) => [OX + a - 0.4, OZ + b, OX + c + 0.4, OZ + d + 1.2]),
   },
   build(world) {
     this.refs = buildTower(world);
-    this.nav.chains = NAV_CHAINS.filter((ch) => ch[0][1] < 13.6).map((ch) => ch.map((p) => L(...p)));
+    this.nav.chains = NAV_CHAINS.filter((ch) => ch[0][1] < 9.1 && ch[ch.length - 1][1] < 9.1 + 0.01).map((ch) => ch.map((p) => L(...p)));
     this.glassBoxes = this.spawnGlass(world);
   },
   // (re)create every glass pane; returns the boxes
@@ -171,32 +167,61 @@ function slab(x0, z0, x1, z1, y0, y1, holes = [], o = {}) {
 // the lanes sit side by side toward +z (for x runs) or +x (for z runs).
 // Returns the hole [x0, z0, x1, z1] each slab above must leave open.
 function stairCore(ax, az, dir, y0, floors, fh = FH) {
+  // wide, gentle switchback stairs: 2.2 m lanes, 0.28 m steps, roomy landings, a low wall between the lanes
   const s = dir[0] === '+' ? 1 : -1, alongX = dir[1] === 'x';
-  const LW = 1.6, LA = 1.5, RUN = 3, LB = 1.6;
+  const LW = 2.2, LA = 1.8, RUN = 3.6, LB = 2.2;
   const P = (u, v) => (alongX ? [ax + s * u, az + v] : [ax + v, az + s * u]);
   const rect = (u0, u1, v0, v1, yb, yt, o) => { const a = P(u0, v0), b = P(u1, v1); box(a[0], yb, a[1], b[0], yt, b[1], o); };
-  const half = fh / 2, n = Math.max(1, Math.round(half / 0.45)), rise = half / n, run = RUN / n;
-  const step = { color: C.concDark, tex: TX.CONC };
-  const rail = { color: C.dark, mat: 'metal' };
+  const half = fh / 2, n = Math.max(1, Math.round(half / 0.28)), rise = half / n, run = RUN / n;
+  const step = { color: [0.82, 0.82, 0.8], tex: TX.CONC };
+  const nose = { color: C.dark, solid: false, noShadow: true };
+  const rail = { color: C.steel, mat: 'steel' };
+  const glassR = { color: [0.7, 0.85, 0.9], alpha: 0.25, mat: [0.6, 0.05], noShadow: true };
   for (let k = 0; k < floors; k++) {
     const yb = y0 + k * fh, yt = yb + fh;
-    for (let i = 0; i < n; i++) rect(LA + i * run, LA + (i + 1) * run, 0, LW, yb, yb + (i + 1) * rise, step);
+    for (let i = 0; i < n; i++) {
+      const h = yb + (i + 1) * rise;
+      rect(LA + i * run, LA + (i + 1) * run, 0, LW, yb, h, step);
+      rect(LA + i * run, LA + i * run + 0.04, 0.05, LW - 0.05, h - 0.01, h + 0.005, nose);           // dark step nosing
+      const h2 = yb + half + (i + 1) * rise;
+      rect(LA + RUN - (i + 1) * run, LA + RUN - i * run, LW, 2 * LW, yb + half, h2, step);
+      rect(LA + RUN - i * run - 0.04, LA + RUN - i * run, LW + 0.05, 2 * LW - 0.05, h2 - 0.01, h2 + 0.005, nose);
+    }
     rect(LA + RUN, LA + RUN + LB, 0, 2 * LW, yb + half - 0.3, yb + half, step);
-    for (let i = 0; i < n; i++) rect(LA + RUN - (i + 1) * run, LA + RUN - i * run, LW, 2 * LW, yb + half, yb + half + (i + 1) * rise, step);
-    // railings round the stairwell on the floor above
-    rect(LA, LA + RUN + LB, -0.08, 0, yt, yt + 1.05, rail);
-    rect(LA, LA + RUN + LB, 2 * LW, 2 * LW + 0.08, yt, yt + 1.05, rail);
-    rect(LA + RUN + LB, LA + RUN + LB + 0.08, -0.08, 2 * LW + 0.08, yt, yt + 1.05, rail);
+    // the stairwell's walls: both sides and the far end, open only at the landing end
+    const SW = { color: [0.9, 0.9, 0.88], tex: TX.PLASTER };
+    rect(LA - 0.2, LA + RUN + LB + 0.2, -0.2, 0, yb, yt, SW);
+    rect(LA - 0.2, LA + RUN + LB + 0.2, 2 * LW, 2 * LW + 0.2, yb, yt, SW);
+    rect(LA + RUN + LB, LA + RUN + LB + 0.2, -0.2, 2 * LW + 0.2, yb, yt, SW);
+    glow(...P(LA + RUN + LB - 0.02, 0.4).flatMap((v, i) => (i === 0 ? [v, yb + half + 2.6] : [v])), ...P(LA + RUN + LB, 2 * LW - 0.4).flatMap((v, i) => (i === 0 ? [v, yb + half + 2.7] : [v])), C.light, 0.9);
+    // glass balustrade round the stairwell at the top
+    if (k === floors - 1) for (const [u0, u1, v0, v1] of [[LA, LA + RUN + LB, -0.05, 0], [LA, LA + RUN + LB, 2 * LW, 2 * LW + 0.05], [LA + RUN + LB, LA + RUN + LB + 0.05, -0.05, 2 * LW + 0.05]]) {
+      rect(u0, u1, v0, v1, yt, yt + 1.0, glassR);
+      rect(u0, u1, v0 - 0.03, v1 + 0.03, yt + 1.0, yt + 1.06, rail);
+    }
+    // the wall between the lanes rises with the flights, topped with a handrail
+    rect(LA, LA + RUN, LW - 0.08, LW + 0.08, yb, yb + half + 1.0, { color: [0.86, 0.86, 0.85], tex: TX.CONC });
+    rect(LA, LA + RUN, LW - 0.1, LW + 0.1, yb + half + 1.0, yb + half + 1.06, rail);
   }
-  rect(LA, LA + RUN, LW - 0.06, LW + 0.06, y0, y0 + floors * fh + 1.05, rail);   // the divider between the lanes
   // the walking route up each flight, for the bots
   for (let k = 0; k < floors; k++) {
     const yb = y0 + k * fh;
-    NAV_CHAINS.push([[0.6, LW / 2, yb], [LA, LW / 2, yb], [LA + RUN, LW / 2, yb + half], [LA + RUN + LB / 2, LW, yb + half],
-      [LA + RUN, LW * 1.5, yb + half], [LA, LW * 1.5, yb + fh], [0.6, LW * 1.5, yb + fh]].map(([u, v, y]) => { const q = P(u, v); return [q[0], y, q[1]]; }));
+    NAV_CHAINS.push([[0.8, LW / 2, yb], [LA, LW / 2, yb], [LA + RUN, LW / 2, yb + half], [LA + RUN + LB / 2, LW, yb + half],
+      [LA + RUN, LW * 1.5, yb + half], [LA, LW * 1.5, yb + fh], [0.8, LW * 1.5, yb + fh]].map(([u, v, y]) => { const q = P(u, v); return [q[0], y, q[1]]; }));
   }
   const a = P(LA, 0), b = P(LA + RUN + LB, 2 * LW);
   return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
+}
+
+// straight stairs with small steps (rise ~0.3, run 0.45), from (x, z) climbing in `dir`, `width` across
+function grandStairs(x, z, dir, width, y0, y1, o = { color: C.tower, tex: TX.CONC }) {
+  const n = Math.round((y1 - y0) / 0.3), s = dir[0] === '+' ? 1 : -1, rise = (y1 - y0) / n;
+  for (let i = 0; i < n; i++) {
+    const a = i * 0.45 * s, b = (i + 1) * 0.45 * s, top = y0 + (i + 1) * rise;
+    if (dir[1] === 'x') box(x + a, y0, z - width / 2, x + b, top, z + width / 2, o);
+    else box(x - width / 2, y0, z + a, x + width / 2, top, z + b, o);
+  }
+  return n * 0.45;
 }
 
 // straight outdoor stairs: rise 0.5, run 0.6, from (x, z) climbing in `dir`, `width` across
@@ -473,21 +498,32 @@ function plaza() {
 
 // ---------------------------------------------------------------- the tower
 function glassWall(axis, a0, a1, c, k0, k1, openings = [], bay = 4) {
-  // a curtain wall of real glass panes between white mullions, with a white spandrel at each slab
+  // a curtain wall of real glass panes between white mullions, with a white band at each slab.
+  // openings: [s0, s1, k] — any pane whose centre falls in s0..s1 on storey k is left out (a doorway)
   const y0 = k0 * FH, y1 = (k1 + 1) * FH;
   const along = (s0, s1, yb, yt, t0, t1, o) => (axis === 'x' ? box(s0, yb, t0, s1, yt, t1, o) : box(t0, yb, s0, t1, yt, s1, o));
   const M = { color: C.tower, tex: TX.CONC };
-  for (let s = a0; s <= a1 + 1e-6; s += bay) along(s - 0.16, s + 0.16, y0, y1, c - 0.22, c + 0.22, M);
+  const n = Math.max(1, Math.round((a1 - a0) / bay)), b = (a1 - a0) / n;
+  for (let i = 0; i <= n; i++) along(a0 + i * b - 0.16, a0 + i * b + 0.16, y0, y1, c - 0.22, c + 0.22, M);
   for (let k = k0; k <= k1; k++) {
-    along(a0, a1, (k + 1) * FH - 0.3, (k + 1) * FH, c - 0.25, c + 0.25, M);
-    for (let s = a0; s < a1 - 1e-6; s += bay) {
-      if (openings.some(([o0, o1, ok]) => ok === k && s >= o0 - 1e-6 && s + bay <= o1 + 1e-6)) continue;
-      const yb = k * FH + (k === 0 ? 0 : 0), yt = (k + 1) * FH - 0.3;
-      const mn = axis === 'x' ? [s + 0.16, yb, c - 0.03] : [c - 0.03, yb, s + 0.16];
-      const mx = axis === 'x' ? [s + bay - 0.16, yt, c + 0.03] : [c + 0.03, yt, s + bay - 0.16];
+    along(a0 - 0.2, a1 + 0.2, (k + 1) * FH - 0.9, (k + 1) * FH, c - 0.45, c + 0.45, M);       // deep white band
+    for (let i = 0; i < n; i++) {
+      const s0 = a0 + i * b, mid = s0 + b / 2;
+      if (openings.some(([o0, o1, ok]) => ok === k && mid >= o0 && mid <= o1)) continue;
+      const yb = k * FH, yt = (k + 1) * FH - 0.9;
+      const mn = axis === 'x' ? [s0 + 0.16, yb, c - 0.03] : [c - 0.03, yb, s0 + 0.16];
+      const mx = axis === 'x' ? [s0 + b - 0.16, yt, c + 0.03] : [c + 0.03, yt, s0 + b - 0.16];
       GLASS.push([[OX + mn[0], Y0 + mn[1], OZ + mn[2]], [OX + mx[0], Y0 + mx[1], OZ + mx[2]]]);
     }
   }
+}
+// an opaque glass curtain storey (upper floors): tinted glass with a white band
+function curtain(axis, a0, a1, c, k, holes = []) {
+  const y = k * FH;
+  const along = (s0, s1, yb, yt, t0, t1, o) => (axis === 'x' ? box(s0, yb, t0, s1, yt, t1, o) : box(t0, yb, s0, t1, yt, s1, o));
+  if (axis === 'x') wallX(a0, a1, c, 0.3, y, y + FH - 0.9, holes, { color: [0.55, 0.68, 0.76], tex: TX.GLASS });
+  else wallZ(a0, a1, c, 0.3, y, y + FH - 0.9, holes, { color: [0.55, 0.68, 0.76], tex: TX.GLASS });
+  along(a0 - 0.2, a1 + 0.2, y + FH - 0.9, y + FH, c - 0.45, c + 0.45, { color: C.tower, tex: TX.CONC });
 }
 function rail(axis, a0, a1, c, y, holes = []) {
   const r = { color: [0.7, 0.85, 0.9], alpha: 0.25, mat: [0.6, 0.05], noShadow: true };
@@ -497,154 +533,169 @@ function rail(axis, a0, a1, c, y, holes = []) {
 }
 
 function tower() {
-  const WT = { color: C.tower, tex: TX.OFFICE };
-  const stairHole = stairCore(-20.6, 5, '+z', 0, TOP);
-  const podW = stairCore(-33.2, 22, '+z', 0, 3), podE = stairCore(30, 22, '+z', 0, 3);
-  const atrT = [-16, 4, 16, 20], atrP = [-16, 20, 16, 44];
+  const WHITE = { color: C.tower, tex: TX.CONC };
+  // stairs: a wide stair core on the east side up to storey 20, then a central one to the roof
+  const stairLow = stairCore(16, -6, '+z', 0, 20);
+  const stairHigh = stairCore(-2.2, -3.6, '+z', 20 * FH, TOP - 21);      // up to the top storey (the spire sits on the roof)
+  const grandHoles = [[12.2, 0.85, 15.8, LOBBY_Z - 0.3], [-15.8, 0.85, -12.2, LOBBY_Z - 0.3]];
 
-  // ---- facades: real glass on storeys 0-6 (and the podium), white ribbon-window facade above
-  glassWall('z', -20, 20, -24, 0, 6, [[12, 16, 0]]);
-  glassWall('z', -20, 20, 24, 0, 6, [[12, 16, 0]]);
-  glassWall('x', -24, 24, -20, 0, 6, [[-4, 4, 0]]);
-  glassWall('x', -24, 24, 20, 3, 6, [[-8, -4, 3], [4, 8, 3]]);
-  glassWall('x', -36, 36, 44, 0, 2, [[-4, 4, 0], [-28, -24, 0], [24, 28, 0]]);
-  glassWall('z', 20, 44, -36, 0, 2, [[28, 32, 0]]);
-  glassWall('z', 20, 44, 36, 0, 2, [[28, 32, 0]]);
-  glassWall('x', -36, -24, 20, 0, 2); glassWall('x', 24, 36, 20, 0, 2);     // podium back corners, beside the tower
-  // the solid upper facade, section by section
-  const sections = [[7, 9], [10, 17], [18, 21], [22, 24], [25, TOP - 1]];
-  for (const [k0, k1] of sections) {
-    const y0 = k0 * FH, y1 = (k1 + 1) * FH;
-    for (const [x0, z0, x1, z1] of footprint(k0)) {
-      const doorBack = k0 === 10 || k0 === 18 ? [door((x0 + x1) / 2, 2.4, y0, 2.8)] : [];
-      const inner = k0 >= 22 ? [22, 23, 25, 27].filter((k) => k >= k0 && k <= k1).map((k) => [4.5, 6.5, k * FH, k * FH + 2.7]) : [];
-      walls4(x0, z0, x1, z1, y0, y1, {
-        n: doorBack,
-        e: x1 === -5 ? inner : [], w: x0 === 5 ? inner : [],
-      }, WT);
+  // ---- the facade, storey by storey
+  for (let k = 0; k < TOP; k++) {
+    const hw = HW(k), hd = HD(k), y = k * FH, a = ARCH(k), low = k <= 8;
+    const sideOpen = k === 0 ? [[-2.5, 2.5, 0]] : [];
+    if (low) {
+      glassWall('z', -hd, hd, -hw, k, k, sideOpen);
+      glassWall('z', -hd, hd, hw, k, k, sideOpen);
+      glassWall('x', -hw, hw, -hd, k, k, k === 0 ? [[-2.5, 2.5, 0]] : []);
+    } else {
+      curtain('z', -hd, hd, -hw, k); curtain('z', -hd, hd, hw, k); curtain('x', -hw, hw, -hd, k);
+    }
+    if (a > 0) {
+      // the front either side of the arch, the arch's side walls, and the lobby glass set back inside it
+      for (const sg of [-1, 1]) {
+        const x0 = sg < 0 ? -hw : a, x1 = sg < 0 ? -a : hw;
+        glassWall('x', x0, x1, hd, k, k);
+        box(sg * a - 0.3, y, LOBBY_Z, sg * a + 0.3, y + FH, hd + 0.45, WHITE);
+      }
+      glassWall('x', -a, a, LOBBY_Z, k, k, k === 0 ? [[-6, 6, 0]] : []);
+    } else {
+      const doors = k === 6 ? [[-2.5, 2.5, 6]] : k === 13 ? [[-10, -6, 13], [-2, 2, 13], [6, 10, 13]] : [];
+      if (low) glassWall('x', -hw, hw, hd, k, k, doors);
+      else curtain('x', -hw, hw, hd, k, doors.map(([o0, o1]) => [o0, o1, y, y + 2.9]));
     }
   }
-  // ---- floor slabs (each covers the storey below it, so set-backs become terraces)
+  // ---- floor slabs: each one covers the wider of the storeys above and below, so the curve steps in and out
   for (let k = 1; k <= TOP; k++) {
-    const y = k * FH;
-    for (const fp of footprint(k - 1)) {
-      const [x0, z0, x1, z1] = fp;
-      const holes = [];
-      if (k <= 21) holes.push(...SHAFTS);
-      holes.push(stairHole);
-      if (k <= 2) holes.push(atrT);
-      slab(x0 + 0.4, z0 + 0.4, x1 - 0.4, Math.min(z1, 20), y - 0.3, y, holes.filter((h) => h[0] < x1 && h[2] > x0), { color: C.floor, tex: k === TOP ? TX.CONC : TX.TILE });
+    const hw = Math.max(HW(k - 1), HW(Math.min(k, TOP - 1))), hd = Math.max(HD(k - 1), HD(Math.min(k, TOP - 1)));
+    const holes = [];
+    if (k <= 21) holes.push(...SHAFTS);
+    if (k <= 20) holes.push(stairLow);
+    if (k > 20 && k < TOP) holes.push(stairHigh);
+    if (k <= 3) holes.push(ATRIUM);
+    if (k === 1) holes.push(...grandHoles);
+    if (k < ARCH_H) holes.push([-ARCH(k) + 0.3, LOBBY_Z + 0.3, ARCH(k) - 0.3, hd + 1]);
+    const zf = k < ARCH_H ? hd : (k === TOP ? HD(TOP - 1) : hd);
+    slab(-hw + 0.3, -hd + 0.3, hw - 0.3, zf - 0.3, k * FH - 0.3, k * FH, holes, { color: C.floor, tex: k === TOP ? TX.CONC : TX.TILE });
+  }
+  // the underside of the arch: white soffits closing each step of the curve
+  for (let k = 0; k < ARCH_H; k++) {
+    const a = ARCH(k), an = ARCH(k + 1), hd = Math.max(HD(k), HD(k + 1));
+    if (a > an) for (const sg of [-1, 1]) box(Math.min(sg * a, sg * an), (k + 1) * FH - 0.6, LOBBY_Z, Math.max(sg * a, sg * an), (k + 1) * FH, hd + 0.45, WHITE);
+    glow(-a + 0.4, (k + 1) * FH - 0.62, hd - 0.4, a - 0.4, (k + 1) * FH - 0.6, hd, C.light, 0.8);
+  }
+
+  // ---- the band across the front above the arch: a walkway with a door in the middle
+  {
+    const k = 6, y = k * FH, hw = HW(k), hd = HD(k);
+    box(-hw - 1, y - 0.4, hd, hw + 1, y, hd + 3.2, WHITE);
+    rail('x', -hw - 1, hw + 1, hd + 3.15, y);
+    rail('z', hd, hd + 3.2, -hw - 0.95, y); rail('z', hd, hd + 3.2, hw + 0.95, y);
+    box(-3.2, y + 2.9, hd, 3.2, y + 3.3, hd + 2.2, WHITE);
+    glow(-3, y + 2.88, hd + 0.2, 3, y + 2.9, hd + 2, C.light, 0.9);
+  }
+  // ---- the big curved balcony higher up, with planters and three doors
+  {
+    const k = 13, y = k * FH, hd = HD(k), R = 15;
+    for (let x = -R; x < R - 1e-6; x += 2) {
+      const xc = x + 1, d = 9 * Math.sqrt(Math.max(0, 1 - (xc / (R + 0.5)) ** 2));
+      box(x, y - 0.5, hd, x + 2, y, hd + d, WHITE);
+      box(x, y, hd + d - 0.06, x + 2, y + 1.0, hd + d, { color: [0.7, 0.85, 0.9], alpha: 0.25, mat: [0.6, 0.05], noShadow: true });
+      box(x, y + 1.0, hd + d - 0.1, x + 2, y + 1.06, hd + d + 0.04, { color: C.steel, mat: 'steel' });
+      glow(x, y - 0.55, hd + d - 0.3, x + 2, y - 0.5, hd + d, C.light, 0.7);
     }
+    box(-R - 0.06, y, hd, -R, y + 1.0, hd + 1, { color: [0.7, 0.85, 0.9], alpha: 0.25, noShadow: true });
+    box(R, y, hd, R + 0.06, y + 1.0, hd + 1, { color: [0.7, 0.85, 0.9], alpha: 0.25, noShadow: true });
+    for (const x of [-8, 0, 8]) prop('planter', x + 4, y, hd + 4.5);
+    prop('tree', -4, y, hd + 3); prop('tree', 4, y, hd + 3);
   }
-  // podium floors (1, 2) and roof (3), the atrium open through them
-  for (let k = 1; k <= 3; k++) {
-    const y = k * FH;
-    const holes = [podW, podE, k < 3 ? atrP : [-16.01, 20, 16.01, 44]];
-    slab(-35.6, 20, 35.6, 43.6, y - 0.3, y, holes, { color: C.floor, tex: k === 3 ? TX.CONC : TX.TILE });
+  // ---- the crown: a ring of tall white fins, then a stepped spire with a beacon
+  for (let k = 24; k < TOP; k++) {
+    const hw = HW(k), hd = HD(k), y = k * FH;
+    for (let x = -hw; x <= hw + 1e-6; x += 2.4) { box(x - 0.15, y, hd, x + 0.15, y + FH, hd + 0.8, WHITE); box(x - 0.15, y, -hd - 0.8, x + 0.15, y + FH, -hd, WHITE); }
+    for (let z = -hd; z <= hd + 1e-6; z += 2.4) { box(hw, y, z - 0.15, hw + 0.8, y + FH, z + 0.15, WHITE); box(-hw - 0.8, y, z - 0.15, -hw, y + FH, z + 0.15, WHITE); }
   }
-  // parapets on the podium roof and the terraces, the wing roofs and the crown
-  walls4(-36, 20, 36, 44, 13.5, 14.6, { n: [[-8, -4, 13.5, 15], [4, 8, 13.5, 15]] }, { color: C.tower, tex: TX.CONC }, 0.3);
-  wallX(-24, 24, -19.85, 0.3, 45, 46.1, [], { color: C.tower }); wallX(-24, 24, -11.85, 0.3, 81, 82.1, [], { color: C.tower });
-  wallZ(-20, -12, -23.85, 0.3, 45, 46.1, [], { color: C.tower }); wallZ(-20, -12, 23.85, 0.3, 45, 46.1, [], { color: C.tower });
-  wallZ(-12, -8, -23.85, 0.3, 81, 82.1, [], { color: C.tower }); wallZ(-12, -8, 23.85, 0.3, 81, 82.1, [], { color: C.tower });
-  for (const [x0, , x1] of footprint(TOP - 1)) walls4(x0, -8, x1, 20, TOP * FH, TOP * FH + 1.1, { e: x1 === -5 ? [[4, 7, 0, 999]] : [], w: x0 === 5 ? [[4, 7, 0, 999]] : [] }, { color: C.tower, tex: TX.CONC }, 0.3);
-  // the terrace between the wings at storey 22, and catwalks across the gap
-  rail('x', -5, 5, 19.8, 22 * FH); rail('x', -5, 5, -7.8, 22 * FH);
-  for (const k of [23, 25, 27, TOP]) {
-    const y = k * FH;
-    box(-5, y - 0.3, 4, 5, y, 7, { color: C.steel, tex: TX.METAL });
-    rail('x', -5, 5, 4.05, y); rail('x', -5, 5, 6.95, y);
-    glow(-5, y - 0.35, 3.9, 5, y - 0.3, 4.1, [0.6, 0.85, 1], 0.9); glow(-5, y - 0.35, 6.9, 5, y - 0.3, 7.1, [0.6, 0.85, 1], 0.9);
+  {
+    const y = TOP * FH;
+    walls4(-HW(TOP - 1), -HD(TOP - 1), HW(TOP - 1), HD(TOP - 1), y, y + 1.1, {}, WHITE, 0.3);
+    let h = y;
+    for (const [w, d, t] of [[6, 4.2, 4], [4.4, 3, 5], [3, 2, 6], [1.6, 1.1, 8], [0.5, 0.5, 12]]) { box(-w, h, -d, w, h + t, d, WHITE); h += t; }
+    glow(-0.6, h, -0.6, 0.6, h + 0.8, 0.6, [1, 0.15, 0.1], 1);
+    for (const yy of [y + 4, y + 9]) glow(-6.05, yy - 0.3, -4.25, 6.05, yy, 4.25, [0.6, 0.85, 1], 0.9);
   }
-  // the crown: on each wing, fins stepping back in toward the middle, a beacon on top
-  for (const s of [-1, 1]) {
-    const o = 21;
-    const fin = (a, b, y0, y1, z0, z1) => box(Math.min(s * a, s * b), y0, z0, Math.max(s * a, s * b), y1, z1, { color: C.tower, tex: TX.CONC });
-    fin(o, o - 1.2, TOP * FH, TOP * FH + 12, -8, 20);
-    fin(o - 2.4, o - 3.6, TOP * FH + 12, TOP * FH + 20, -4, 16);
-    fin(o - 5, o - 6.2, TOP * FH + 20, TOP * FH + 26, 0, 12);
-    fin(o - 7.8, o - 9, TOP * FH + 26, TOP * FH + 30, 3, 9);
-    glow(s * (o - 8.4) - 0.3, TOP * FH + 30, 5.7, s * (o - 8.4) + 0.3, TOP * FH + 30.6, 6.3, [1, 0.15, 0.1], 1);
-    for (const y of [TOP * FH + 6, TOP * FH + 16]) glow(Math.min(s * o, s * (o - 1.25)), y, -8.05, Math.max(s * o, s * (o - 1.25)), y + 0.3, 20.05, [0.6, 0.85, 1], 0.9);
-  }
-  // ---- the core (two lift shafts with landing doors at every stop)
+
+  // ---- the lift core (two shafts, landing doors at every stop) and floor numbers
   const CORE = { color: [0.86, 0.86, 0.85], tex: TX.CONC };
   const coreTop = 22 * FH;
-  box(-7.6, 0, -7.6, 7.6, coreTop, -3.6, CORE);
-  box(-7.6, 0, -3.6, -6.5, coreTop, 0, CORE); box(-3.1, 0, -3.6, 3.1, coreTop, 0, CORE); box(6.5, 0, -3.6, 7.6, coreTop, 0, CORE);
-  for (const cx of [-4.8, 4.8]) wallX(cx - 1.7, cx + 1.7, -0.2, 0.4, 0, coreTop, LIFT_STOPS.map((k) => [cx - 0.9, cx + 0.9, k * FH, k * FH + 2.6]), CORE);
-  // floor numbers over the lift lobby at each stop
-  for (const k of LIFT_STOPS) digitBoxes(String(k), OX - 0.45 * (String(k).length > 1 ? 1.4 : 0.5), Y0 + k * FH + 3.0, OZ + 0.05, 0.8, 1, [0.2, 0.22, 0.25], 0).forEach((b) => W.add(b));
+  box(-7.6, 0, -12, 7.6, coreTop, -8, CORE);
+  box(-7.6, 0, -8, -6.5, coreTop, -4.4, CORE); box(-3.1, 0, -8, 3.1, coreTop, -4.4, CORE); box(6.5, 0, -8, 7.6, coreTop, -4.4, CORE);
+  for (const cx of [-4.8, 4.8]) wallX(cx - 1.7, cx + 1.7, -4.6, 0.4, 0, coreTop, LIFT_STOPS.map((k) => [cx - 0.9, cx + 0.9, k * FH, k * FH + 2.6]), CORE);
+  for (const k of LIFT_STOPS) digitBoxes(String(k), OX - 0.45 * (String(k).length > 1 ? 1.4 : 0.5), Y0 + k * FH + 3.0, OZ - 4.35, 0.8, 1, [0.2, 0.22, 0.25], 0).forEach((b) => W.add(b));
 
-  // ---- fitting out the office floors
-  for (let k = 0; k < TOP; k++) {
-    const y = k * FH;
-    for (const [x0, z0, x1] of footprint(k)) {
-      const cx = (x0 + x1) / 2;
-      if (k >= 3) {
-        const kinds = ['office', 'office', 'meeting', 'lounge', 'library', 'servers', 'kitchen', 'storage'];
-        const spots = k < 22 ? [[-15, z0 + 3.2], [15, z0 + 3.2], [-13, 14], [13, 14], [0, 13]] : [[cx, z0 + 3.4], [cx, 14]];
-        for (const [x, z] of spots) if (rnd() < 0.8) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, false);
-        // a row of offices along the back with doors
-        if (k < 22) {
-          wallX(-23.6, -8, z0 + 7, 0.2, y, y + FH - 0.3, [door(-12, 1.8, y), door(-19, 1.8, y)], { color: C.plaster, tex: TX.PLASTER });
-          wallX(8, 23.6, z0 + 7, 0.2, y, y + FH - 0.3, [door(12, 1.8, y), door(19, 1.8, y)], { color: C.plaster, tex: TX.PLASTER });
-        }
-      }
-      if (k >= 3) ceilingLight(cx - 8, 10, cx + 8, 10.6, y + FH);
-      if (k < 22) ceilingLight(-20, z0 + 3.5, 20, z0 + 4.1, y + FH);
+  // ---- the office floors above the lobby
+  for (let k = 4; k < TOP; k++) {
+    const y = k * FH, hw = HW(k), hd = HD(k);
+    if (hw < 12) continue;
+    const kinds = ['office', 'office', 'meeting', 'lounge', 'library', 'servers', 'kitchen', 'storage'];
+    const xs = hw > 20 ? [-(hw - 6), hw - 6] : [-(hw - 5)];
+    for (const x of xs) for (const z of [hd - 4, -(hd - 4)]) {
+      if (k <= 20 && x > 13 && z > -8 && z < 4) continue;          // keep the stairs clear
+      if (rnd() < 0.8) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, false);
     }
+    ceilingLight(-hw + 3, -0.3, hw - 3, 0.3, y + FH);
   }
 }
 
-// ---------------------------------------------------------------- the lobby: atrium, catwalks, grand stairs
+// ---------------------------------------------------------------- the lobby: atrium, grand stairs, catwalk
 function lobby() {
-  // L1 catwalk across the atrium, the grand stairs up to it, the L2 catwalk at the front
-  box(-16, 4.2, 28, 16, 4.5, 31.6, { color: C.steel, tex: TX.METAL });
-  box(-16, 8.7, 38, 16, 9, 41, { color: C.steel, tex: TX.METAL });
-  for (const x of [-13, 13]) {
-    stairs(x, 36.6, '-z', 3, 0, 4.5, { color: C.tower, tex: TX.CONC });
-    NAV_CHAINS.push([[x, 0, 38], [x, 0, 37], [x, 4.5, 31.2], [x, 4.5, 30]]);
+  // grand stairs up both sides of the atrium to the first floor
+  for (const sx of [-1, 1]) {
+    const x = sx * 14;
+    grandStairs(x, LOBBY_Z - 0.4, '-z', 3.6, 0, 4.5);
+    NAV_CHAINS.push([[x, 0, LOBBY_Z + 0.6], [x, 0, LOBBY_Z - 0.2], [x, 4.5, LOBBY_Z - 0.4 - 6.75], [x, 4.5, LOBBY_Z - 8]]);
+    rail('z', LOBBY_Z - 7.15, LOBBY_Z - 0.3, sx * 15.9, 4.5);
   }
-  rail('x', -16, 16, 28.05, 4.5);
-  rail('x', -16, 16, 31.55, 4.5, [[-14.5, -11.5], [11.5, 14.5]]);
-  rail('x', -16, 16, 38.05, 9); rail('x', -16, 16, 40.95, 9);
-  // railings along the atrium edges on L1 and L2 (gaps where the catwalks join)
-  for (const [y, gaps] of [[4.5, [[28, 31.6]]], [9, [[38, 41]]]]) {
-    rail('z', 4, 44, -16, y, gaps); rail('z', 4, 44, 16, y, gaps);
-    rail('x', -16, 16, 4, y);
+  // railings round the atrium on storeys 1-3 (gaps where the stairs and catwalk come in)
+  for (const k of [1, 2, 3]) {
+    const y = k * FH;
+    rail('x', -12, 12, ATRIUM[1], y);
+    rail('z', ATRIUM[1], LOBBY_Z, -12, y, k === 2 ? [[2, 5]] : []);
+    rail('z', ATRIUM[1], LOBBY_Z, 12, y, k === 2 ? [[2, 5]] : []);
   }
-  // atrium ceiling over the tower part, skylight of breakable glass over the podium part
-  for (let x = -16; x < 16; x += 8) for (let z = 20; z < 44; z += 8) {
-    GLASS.push([[OX + x + 0.1, Y0 + 13.38, OZ + z + 0.1], [OX + x + 7.9, Y0 + 13.46, OZ + z + 7.9]]);
+  // a catwalk across the atrium on storey 2
+  box(-12, 8.7, 2, 12, 9, 5, { color: C.steel, tex: TX.METAL });
+  rail('x', -12, 12, 2.05, 9); rail('x', -12, 12, 4.95, 9);
+  glow(-12, 8.65, 1.9, 12, 8.7, 2.1, [0.6, 0.85, 1], 0.9); glow(-12, 8.65, 4.9, 12, 8.7, 5.1, [0.6, 0.85, 1], 0.9);
+  // reception, seating, planters, a hanging light sculpture
+  prop('counter', -6, 0, 5.2); prop('counter', 6, 0, 5.2);
+  for (const [x, z] of [[-9, -3], [9, -3]]) prop('planter', x, 0, z);
+  for (const [x, z] of [[-17, 4], [17, 9]]) prop('lounge', x, 0, z);
+  for (const [r, y] of [[5.5, 12.4], [4, 10.6], [2.6, 9.6]]) {
+    const z = 3.5;
+    glow(-r, y, z - r * 0.5, r, y + 0.12, z - r * 0.5 + 0.12, [0.6, 0.85, 1], 0.9);
+    glow(-r, y, z + r * 0.5 - 0.12, r, y + 0.12, z + r * 0.5, [0.6, 0.85, 1], 0.9);
+    glow(-r, y, z - r * 0.5, -r + 0.12, y + 0.12, z + r * 0.5, [0.6, 0.85, 1], 0.9);
+    glow(r - 0.12, y, z - r * 0.5, r, y + 0.12, z + r * 0.5, [0.6, 0.85, 1], 0.9);
   }
-  for (const x of [-16, -8, 0, 8, 16]) box(x - 0.15, 13.0, 20, x + 0.15, 13.5, 44, { color: C.tower, tex: TX.CONC });
-  for (const z of [20, 28, 36, 44]) box(-16, 13.0, z - 0.15, 16, 13.5, z + 0.15, { color: C.tower, tex: TX.CONC });
-  // reception, seating, planters with trees, a hanging light sculpture, an LED wall
-  prop('counter', -1.6, 0, 36.6); prop('counter', 1.6, 0, 36.6);
-  glow(-3.2, 1.0, 36.95, 3.2, 1.25, 37.0, [0.55, 0.85, 1], 0.9);
-  for (const [x, z] of [[-8, 24], [8, 24], [-8, 42], [8, 42]]) prop('planter', x, 0, z);
-  for (const [x, z] of [[-26, 40], [26, 40]]) prop('lounge', x, 0, z);
-  for (const [x, z, r] of [[-26, 24, false], [26, 24, false]]) prop('office', x, 0, z, r);
-  for (const [s, y, r] of [[1, 10.5, 5], [-1, 8.5, 3.6], [1, 6.8, 2.4]]) {
-    const z = 30;
-    glow(-r, y, z - r, r, y + 0.12, z - r + 0.12, [0.6, 0.85, 1], 0.9);
-    glow(-r, y, z + r - 0.12, r, y + 0.12, z + r, [0.6, 0.85, 1], 0.9);
-    glow(-r, y, z - r, -r + 0.12, y + 0.12, z + r, [0.6, 0.85, 1], 0.9);
-    glow(r - 0.12, y, z - r, r, y + 0.12, z + r, [0.6, 0.85, 1], 0.9);
-    void s;
-  }
-  deco(-10, 9.6, 4.25, 10, 13.0, 4.35, { color: [0.95, 0.3, 0.2], tex: TX.LED, emissive: 0.5 });
-  // mezzanine offices in the podium wings and the tower part of L1 and L2
+  // first and second floor offices round the atrium
   for (const y of [4.5, 9]) {
-    for (const [x, z] of [[-25, 26], [28, 40], [-18, -14], [18, -14], [-14, -2], [14, -2]]) if (rnd() < 0.85) prop(['office', 'meeting', 'lounge', 'library'][Math.floor(rnd() * 4)], x, y, z);
-    ceilingLight(-34, 30, -18, 30.6, y + FH); ceilingLight(18, 30, 34, 30.6, y + FH);
+    for (const [x, z] of [[-18, -12], [12, -15], [-20, 10], [20, 12]]) if (rnd() < 0.85) prop(['office', 'meeting', 'lounge', 'library'][Math.floor(rnd() * 4)], x, y, z);
+    ceilingLight(-20, -14, 20, -13.4, y + FH);
   }
-  ceilingLight(-34, 30, -18, 30.6, 4.5); ceilingLight(18, 30, 34, 30.6, 4.5);
-  ceilingLight(-12, 12, 12, 12.6, 13.5); ceilingLight(-20, -12, 20, -11.4, 4.5);
-  // entrance canopy and big letters on the podium
-  box(-8, 4.6, 44, 8, 5.0, 49, { color: C.tower, tex: TX.CONC });
-  glow(-8, 4.55, 44, 8, 4.6, 49, C.light, 0.7);
+  ceilingLight(-10, -3, 10, -2.4, 4.5); ceilingLight(-18, -14, 18, -13.4, 4.5);
+  // the entrance: a dark plinth and steps up into the arch, revolving-door drums, a glowing name band
+  const hd0 = HD(0);
+  box(-14, 0, LOBBY_Z, 14, 0.04, hd0 + 3, { color: [0.3, 0.31, 0.34], tex: TX.PAVE, solid: false });
+  for (const x of [-4, 0, 4]) {
+    for (const [a, b] of [[-1.6, -1.5], [1.5, 1.6]]) box(x + a, 0, LOBBY_Z - 1.4, x + b, 3.2, LOBBY_Z + 1.4, { color: C.dark, mat: 'metal' });
+    box(x - 1.6, 3.2, LOBBY_Z - 1.4, x + 1.6, 3.5, LOBBY_Z + 1.4, { color: C.dark, mat: 'metal', shape: 0.1 });
+    deco(x - 0.04, 0, LOBBY_Z - 1.2, x + 0.04, 3.2, LOBBY_Z + 1.2, { color: [0.7, 0.85, 0.9], alpha: 0.3 });
+  }
+  glow(-10, 4.0, LOBBY_Z + 0.5, 10, 4.3, LOBBY_Z + 0.55, [0.6, 0.85, 1], 1);
+  // light strips up the inside edges of the arch
+  for (const sg of [-1, 1]) for (let k = 0; k < ARCH_H; k++) {
+    const a = ARCH(k);
+    glow(sg * (a - 0.32) - 0.03, k * FH, HD(k) - 0.6, sg * (a - 0.32) + 0.03, (k + 1) * FH - 0.6, HD(k) - 0.4, [0.6, 0.85, 1], 0.9);
+  }
 }
 
 // ---------------------------------------------------------------- cashout stations and vault spots

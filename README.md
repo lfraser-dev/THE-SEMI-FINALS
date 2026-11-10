@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.21: Fortune Stadium is now one big white tower, with a glass lobby, catwalks, real lifts with call buttons and breakable windows. PLAY gives you a full cashout match with AI teammates and enemies, first to $2,000.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
+**Build 0.22: the tower now curves in at the foot and out through the middle, with a giant arched entrance, balconies, a finned crown and a spire, plus wide, easy stairs. PLAY gives you a full cashout match with AI teammates and enemies, first to $2,000.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
 
 ## Run it
 
@@ -150,29 +150,31 @@ PLAY runs a match lobby before you drop in:
 
 After that, PLAY resumes your match until you change your loadout.
 
-## Fortune Stadium: the tower (build 0.21)
+## Fortune Stadium: the tower (build 0.22)
 
-The semi-finals map is now a single white tower standing on a big test-range style plaza (the white grid floor and walls from the range), with grid-block cover dotted around.
+The semi-finals map is a single white tower standing on a big test-range style plaza (the range's white grid floor and walls), with grid-block cover dotted around.
 
-- **The lobby.** A three-storey glass podium at the front. Inside is a tall atrium with a reception desk, planters and a hanging light sculpture. A catwalk crosses the atrium at the first floor, reached by grand stairs, and another runs along the front at the second floor. Glass railings and catwalks overlook the lobby from every side, with offices in the wings.
-- **The business building.** Above the lobby are floors of offices, meeting rooms, server rooms, libraries, kitchens and back offices. Storeys 0–6 (and the whole lobby) have real glass: you can see through it, and shooting it smashes it into shards. Above that the facade is white with ribbon windows.
-- **The shape.** The back of the tower steps in as it rises (with terraces at storeys 10 and 18). At storey 22 it splits into two wings joined by catwalks at storeys 23, 25 and 27 and a bridge across the roofs. Each wing is crowned with white fins that step back in toward the middle, with a beacon on top. The wing roofs are at 126 m.
-- **Lifts.** Two passenger lifts run up the core from the lobby (stops: 0, 1, 2, 3, 5, 8, 11, 14, 17, 21). Each landing has steel sliding doors, a floor number and a call panel. Look at ▲ or ▼ and press E. Inside the car there's a panel too: each press of ▲ or ▼ takes the trip one more stop. The doors stay open while you're standing in the doorway. Switchback stairs also run all the way to the roofs.
-- **Destruction.** Every lobby and lower-floor window breaks: from bullets (yours or the bots'), and ground slams blow out the windows around you. The skylight over the atrium is glass too, so you can drop through it. There are destructible walls in the lobby wings, on the mezzanines and out on the plaza. Debris and glass shards bounce on the floor.
+- **The shape.** The tower goes in on itself: narrow at the foot, bulging out through the middle, then drawing back in to a crown and spire. Every storey's footprint follows the curve, so the facade steps out and back in. It has 30 storeys, with the roof at 135 m.
+- **The entrance.** A giant arch is cut into the front of the base, rising through the first six storeys. Its stepped white soffits are lit along the edges. The lobby's glass front is set back inside the arch, and you walk in through three revolving-door drums under a glowing band.
+- **Above the arch,** a walkway band runs right across the front at storey 6, with a door in the middle. Higher up, at storey 13, a big curved balcony swings out from the front, with planters, trees and three doors. At the top, a ring of tall white fins wraps the crown, then a stepped spire with a red beacon.
+- **The lobby.** A three-storey atrium behind the arch, with a reception desk, planters and a hanging light sculpture. Grand stairs (small 0.3 m steps) run up both sides to the first floor, and a catwalk crosses the atrium on the second. Glass railings overlook the lobby from every floor, and the lifts open onto a ledge facing it.
+- **Stairs.** The stair cores are wide and easy to climb: 2.2 m lanes, 0.28 m steps with dark nosings, roomy half landings, and walls round each flight so you can't walk off the side. One core runs up the east side to storey 20, then a central one carries on to the top storey.
+- **Lifts.** Two passenger lifts in the core (stops 0, 1, 2, 3, 5, 6, 9, 13, 17, 21), with sliding doors, floor numbers, call panels with ▲ ▼ on every landing and a panel in the car.
+- **Glass and destruction.** Storeys 0–8 and the lobby front are real glass: see-through, and it smashes into shards when shot or slammed. Above that is tinted curtain glass. There are destructible walls in the lobby, on the mezzanines and on the plaza.
 
 ## Cashout (build 0.21)
 
 PLAY → matchmaking → loadout → team intro → a cashout match in the tower. You and two AI teammates take on three AI teams of three.
 
-1. **The vault.** A cash box spawns in one of four vaults (the lobby floor, a first-floor wing, the plaza, the podium roof), **locked for 30 seconds**. A ◆ marker shows where it is and counts down.
+1. **The vault.** A cash box spawns in one of four vaults (the lobby floor, the first floor, the second floor, the plaza), **locked for 30 seconds**. A ◆ marker shows where it is and counts down.
 2. **Grab it.** Press E at the vault once it opens. You can keep shooting while you carry it (it sits in your left hand), but you move about 10% slower. If the carrier dies, the box drops where they fell for anyone to pick up.
-3. **Cash it out.** Two of the four cashout stations (⬢ markers: plaza west, plaza east, plaza back, and the second-floor west wing) open each round. Press E at one to deposit the box, and a 45-second countdown starts.
+3. **Cash it out.** Two of the four cashout stations (⬢ markers: plaza west, plaza east, plaza back, and the tower's second floor) open each round. Press E at one to deposit the box, and a 45-second countdown starts.
 4. **Steals.** Any other team can steal a cashout by standing on the station for 4 seconds (you hold E). The bots do this too, and fight over the station. The team holding the station when the timer hits zero banks **$1,000**.
 5. **First to $2,000 wins.** Then the next round starts with a new vault, and so on. The top two teams advance to the final.
 
 On the HUD: team cash along the top, the objective (vault timer, who has the box, cashout countdown, steal progress bar), markers for the vault, stations and the box carrier, pinned to the edge of the screen when they're off screen, with distances. Teammates always have their name and health shown in their team colour; enemies only when you can see them. Bots wear their team's colour, there's no friendly fire, and kills between bots show in the kill feed. You respawn at your team's corner of the plaza; dead bots come back after 8 seconds.
 
-**The bots** find their way around with a walking grid built over the plaza, the lobby, both mezzanines and the podium roof, linked by the stairs. They queue round the locked vault, race for the box, escort their carrier, hunt enemy carriers, defend their station, and go after anyone else's. In a fight they strafe and shoot in bursts. They don't use the lifts or go above the podium roof.
+**The bots** find their way around with a walking grid built over the plaza, the lobby, both mezzanines and the podium roof, linked by the stairs. They queue round the locked vault, race for the box, escort their carrier, hunt enemy carriers, defend their station, and go after anyone else's. In a fight they strafe and shoot in bursts. They don't use the lifts or go above the second floor.
 
 ## Underground arena
 
