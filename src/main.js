@@ -19,6 +19,7 @@ import stadium from './maps/fortuneStadium.js';
 import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager } from './bots.js';
+import { Matchmaking } from './matchmaking.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -754,6 +755,7 @@ function enterRange() {
     where = 'range';
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
+    document.body.classList.remove('stadium');
     effects.clear();
   }
   if (!sessionStarted || classDirty) {
@@ -779,6 +781,7 @@ function enterStadium() {
     Object.assign(player, { hp: player.maxHp, dead: false, press: null });
     slots.forEach((w) => { w.ammo = w.def.mag; w.reload = null; });
     banner('FORTUNE STADIUM', 'SEMI-FINALS', '', 2.4);
+    document.body.classList.add('stadium');
     $('mapname').lastChild.textContent = stadium.name;
   }
   start();
@@ -921,7 +924,41 @@ function refreshGuns() {
   cases.forEach((c) => { c.def = defFor(c.def.id); });
   showroomKey = '';
 }
-$('mm-play').addEventListener('click', enterStadium);
+// PLAY: matchmaking → loadout (30 s) → team intro → Fortune Stadium. Once you're in a match, PLAY resumes it.
+let match = null;
+const mmk = new Matchmaking({
+  root: $('mmk'), classLo, sounds,
+  onChange: () => { classDirty = true; renderMenu(); },
+  onCancel: () => { menu.classList.remove('hidden'); renderMenu(); },
+  onDone: (m) => {
+    match = m;
+    setTeamsHud(m);
+    where = 'none';            // arrive fresh
+    classDirty = true;
+    enterStadium();
+  },
+});
+function setTeamsHud(m) {
+  $('teams').replaceChildren(...m.teams.map((t) => {
+    const d = document.createElement('div');
+    d.className = `tm${t.mine ? ' mine' : ''}`;
+    d.style.setProperty('--t', t.col);
+    const b = document.createElement('b'); b.textContent = t.name;
+    const c = document.createElement('span'); c.textContent = '$0';
+    d.append(b, c);
+    return d;
+  }));
+}
+$('mm-play').addEventListener('click', () => {
+  if (match && inStadium() && !classDirty) { enterStadium(); return; }
+  sounds.unlock();
+  menu.classList.add('hidden');
+  mmk.start();
+  renderMenu();
+});
+addEventListener('keydown', (e) => {
+  if (mmk.active && mmk.key(e)) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const rgb = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
 function renderMenu() {
@@ -934,7 +971,7 @@ function renderMenu() {
   if (menuTab === 'shop') renderShop();
   $('mm-name').replaceChildren(el('b', null, c.name), el('span', null, `${WEAPONS[sel.weapon].name} · ${ABILITIES[sel.ability].short}`));
   $('mm-range-sub').textContent = sessionStarted && !classDirty && !inStadium() ? 'RESUME YOUR SESSION' : 'GUNS · MOVEMENT · PARKOUR · BOTS';
-  $('mm-play-sub').textContent = inStadium() && !classDirty ? 'RESUME · FORTUNE STADIUM' : 'SEMI-FINALS · FORTUNE STADIUM';
+  $('mm-play-sub').textContent = match && inStadium() && !classDirty ? 'RESUME · FORTUNE STADIUM' : 'SEMI-FINALS · FIND A MATCH';
   // play page summary
   const sum = $('mm-sum');
   const cell = (k, v) => { const d = el('div'); d.append(el('small', null, k), el('b', null, v)); return d; };
@@ -1016,7 +1053,7 @@ let camBlend = 1;
 function drawShowroom(aspect) {
   const cam = map.showroom.cam;
   // home: character centred; other screens: character on the right of the panel
-  const home = menuTab === 'home';
+  const home = menuTab === 'home' && !mmk.active;
   const k = home ? 1 : 0;
   camBlend += (k - camBlend) * Math.min(1, 0.12);
   const look = [cam.look[0] - 0.88 * camBlend, cam.look[1] + 0.05 * camBlend, cam.look[2]];

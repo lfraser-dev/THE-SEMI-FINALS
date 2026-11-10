@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.19: Fortune Stadium rebuilt at full arena scale, with realistic materials, enterable multi-storey buildings and a 26-storey tower. PLAY drops you in.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
+**Build 0.20: PLAY now goes through matchmaking, a 30-second loadout pick and a team intro before dropping you into Fortune Stadium. Buildings have furnished rooms and better walls, floors and ceilings.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
 
 ## Run it
 
@@ -136,9 +136,22 @@ Weapon skins (Crimson, Arctic, Desert Ops, Toxic, 24 Karat) recolour your guns e
 
 Your class sets your health, movement speed and starting guns in the test range. You get your chosen primary plus the pistol as a sidearm, or another class weapon if the pistol is your primary. Only your equipped specialisation works, and it's the only one shown on the HUD.
 
-## Fortune Stadium (build 0.19)
+## Matchmaking (build 0.20)
+
+PLAY runs a match lobby before you drop in:
+1. **Finding match.** 12 contestant slots fill up as players are found. Cancel (or Esc) takes you back.
+2. **Match found.**
+3. **Choose your loadout: 30 seconds.** Pick your class, primary weapon and specialisation. Your contestant changes on screen as you pick. Your team panel shows each teammate's class and when they lock in. Hit LOCK IN (or Enter) and the match starts a few seconds later; when the clock runs out you go with what you've got.
+4. **Team intro.** Four teams of three slide in. Team names are drawn at random from a pool of five (The Gold Rush, Neon Vandals, Sky Sharks, Vault Breakers, Lucky Strikes), and player handles are generated from name parts (NOVAFOX22, RONINRUSH31...). Your team is highlighted. The top 2 teams advance to the final.
+5. **DROP IN.** In the arena, the four teams and their cash sit along the top of the HUD.
+
+After that, PLAY resumes your match until you change your loadout.
+
+## Fortune Stadium (builds 0.19–0.20)
 
 The semi-finals arena, at the scale of a real arena from The Finals: about 280 m × 180 m of play space, with six floating sectors over the void inside a full stadium bowl. Build 0.19 drops the white grid look here (that's only for the test range). Surfaces use realistic procedural materials: glass curtain walls, precast concrete, paving, ribbed metal, office facades with lit windows, asphalt, and crowd-filled seats. Every building can be entered, and every floor is reached by switchback stairs.
+
+Inside (build 0.20): painted plaster walls with skirting boards, oak plank floors in the apartments and the court building, tiled floors elsewhere, and ceiling tiles overhead. The court building is red brick with punched windows, stone lintels and sills, and white frames. Office windows have blinds pulled down at different heights, and concrete shows its formwork tie holes. Rooms are furnished in sets: lounges (sofa with cushions, coffee table, TV, rug, plant), bedrooms (bed with pillows and duvet, bedside lamps), kitchens (cabinets, sink, fridge, table and chairs), offices (desks with monitors and chairs, filing cabinets), meeting rooms with whiteboards, libraries full of books, server rooms with blinking racks, lockers, and storage with crates on pallets. The tower's apartments have framed art on the walls.
 
 You spawn on the team gate behind sector 2, looking in. The tower is on your right.
 
@@ -285,6 +298,7 @@ src/props.js          dummies, destructible walls, weapon cases, 7-seg signs
 src/audio.js          procedural sound effects
 src/maps/testRange.js the test range (data + build function), incl. the parkour annex
 src/maps/fortuneStadium.js the semi-finals arena: six floating sectors, the tower, the stadium bowl
+src/matchmaking.js    PLAY flow: matchmaking, 30 s loadout pick, team intro
 ```
 
 To add a map, copy `src/maps/fortuneStadium.js` and change the boxes. Each map defines `spawn`, `build(world)`, `dummies` and `walls`. Arenas live far from the range (Fortune Stadium is 700 m away and 63 m up). Only the place you're in is drawn, and boxes outside the view or beyond the fog are skipped. The stadium file has helpers for facades with holes (`panel`, `walls4`), slabs with holes (`slab`), switchback stair cores (`stairCore`) and whole buildings (`building`).

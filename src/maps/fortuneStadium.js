@@ -10,7 +10,7 @@ import { digitBoxes } from '../props.js';
 // origin: chosen so floors (every 4.5 m) and panel seams line up with the procedural textures
 const OX = 0, OZ = -702, Y0 = 63;
 const FH = 4.5;                                 // storey height
-const TX = { GLASS: 2, CONC: 3, PAVE: 4, METAL: 5, OFFICE: 6, ASPH: 7, SEATS: 8, LED: 9 };
+const TX = { GLASS: 2, CONC: 3, PAVE: 4, METAL: 5, OFFICE: 6, ASPH: 7, SEATS: 8, LED: 9, PLASTER: 10, TILE: 11, WOOD: 12, BRICK: 13 };
 const C = {
   conc: [0.7, 0.69, 0.66], concDark: [0.47, 0.47, 0.46], warm: [0.8, 0.76, 0.68], brick: [0.6, 0.37, 0.29],
   plaster: [0.85, 0.84, 0.81], floor: [0.6, 0.59, 0.57], pave: [0.68, 0.67, 0.64], asph: [0.24, 0.24, 0.25],
@@ -180,10 +180,12 @@ function building(b) {
   for (let k = 1; k <= b.floors; k++) {
     const y = y0 + k * fh;
     const holes = [...(b.voids ? b.voids(k) : []), ...cores.filter(({ c }) => k <= (c.floors ?? b.floors)).map((h) => h.hole), ...(b.extraHoles ? b.extraHoles(k) : [])];
-    slab(b.x0 + t, b.z0 + t, b.x1 - t, b.z1 - t, y - 0.3, y, holes, { color: k === b.floors ? C.concDark : C.floor, tex: TX.CONC });
+    slab(b.x0 + t, b.z0 + t, b.x1 - t, b.z1 - t, y - 0.3, y, holes, { color: C.floor, tex: b.slabTex || TX.TILE });
+    // the roof gets a concrete finish on top of the last slab
+    if (k === b.floors) slab(b.x0 + t, b.z0 + t, b.x1 - t, b.z1 - t, y, y + 0.02, holes, { color: C.concDark, tex: TX.CONC, solid: false, noShadow: true });
   }
-  // polished floor finish on the ground storey
-  deco(b.x0 + t, 0.001, b.z0 + t, b.x1 - t, 0.02, b.z1 - t, { color: C.floor, tex: TX.CONC, noShadow: true });
+  // floor finish on the ground storey
+  deco(b.x0 + t, 0.001, b.z0 + t, b.x1 - t, 0.02, b.z1 - t, { color: C.floor, tex: b.slabTex || TX.TILE, noShadow: true });
   if (b.parapet !== false) walls4(b.x0, b.z0, b.x1, b.z1, top, top + 1.1, b.parapetHoles || {}, { color: C.concDark, tex: TX.CONC }, 0.3);
   for (let k = 0; k < b.floors; k++) b.inner?.(k, y0 + k * fh);
   return top;
@@ -193,52 +195,144 @@ function building(b) {
 const door = (c, w = 1.6, y = 0, h = 2.7) => [c - w / 2, c + w / 2, y, y + h];
 const win = (c, w, y, sill = 1, h = 1.8) => [c - w / 2, c + w / 2, y + sill, y + sill + h];
 
-// furniture and street props (rot swaps the x and z extents)
+// furniture and street props. Room "sets" (lounge, bedroom, kitchen, ...) are a few pieces arranged together.
+// rot swaps the x and z extents. Small details don't cast shadows or collide.
+const RUGS = [[0.55, 0.22, 0.18], [0.2, 0.3, 0.45], [0.7, 0.62, 0.48], [0.28, 0.4, 0.3], [0.35, 0.33, 0.4]];
+const DUVETS = [[0.82, 0.8, 0.74], [0.3, 0.38, 0.52], [0.6, 0.3, 0.25], [0.4, 0.45, 0.38]];
+const BOOKS = [[0.55, 0.16, 0.12], [0.16, 0.3, 0.5], [0.75, 0.62, 0.3], [0.2, 0.4, 0.28], [0.85, 0.82, 0.76], [0.3, 0.2, 0.35]];
+const pick = (a) => a[Math.floor(rnd() * a.length)];
 function prop(kind, x, y, z, rot = false) {
   const B = (a0, b0, c0, a1, b1, c1, o) => (rot ? box(x + c0, y + b0, z + a0, x + c1, y + b1, z + a1, o) : box(x + a0, y + b0, z + c0, x + a1, y + b1, z + c1, o));
+  const D = (a0, b0, c0, a1, b1, c1, o) => B(a0, b0, c0, a1, b1, c1, { solid: false, noShadow: true, ...o });
+  const at = (dx, dz, k, r = rot) => prop(k, x + (rot ? dz : dx), y, z + (rot ? dx : dz), r);
+  const MET = { color: C.dark, mat: 'metal' };
   switch (kind) {
+    // ---- single pieces
     case 'desk':
-      B(-0.8, 0, -0.4, 0.8, 0.75, 0.4, { color: C.white, shape: 0.02 });
-      B(-0.32, 0.75, 0.1, 0.32, 1.15, 0.14, { color: C.dark, mat: 'metal', solid: false });
+      B(-0.8, 0.71, -0.4, 0.8, 0.75, 0.4, { color: [0.88, 0.87, 0.84] });
+      B(-0.78, 0, -0.38, -0.74, 0.71, 0.38, MET); B(0.74, 0, -0.38, 0.78, 0.71, 0.38, MET);
+      D(-0.03, 0.75, 0.12, 0.03, 0.98, 0.18, MET);
+      D(-0.32, 0.92, 0.12, 0.32, 1.28, 0.15, { color: C.dark, mat: 'metal' });
+      D(-0.29, 0.95, 0.115, 0.29, 1.25, 0.12, { color: [0.35, 0.55, 0.85], emissive: 0.35 });
+      D(-0.22, 0.75, -0.12, 0.22, 0.77, 0.04, { color: [0.2, 0.2, 0.22] });
+      at(0, -0.75, 'chair');
       break;
-    case 'desks':
-      B(-1.7, 0, -0.8, 1.7, 0.75, 0.8, { color: C.white, shape: 0.02 });
-      B(-1.4, 0.75, -0.04, 1.4, 1.2, 0.04, { color: [0.45, 0.5, 0.48], solid: false });
+    case 'chair':
+      D(-0.04, 0, -0.04, 0.04, 0.42, 0.04, MET);
+      D(-0.3, 0, -0.3, 0.3, 0.05, 0.3, { color: C.dark, shape: 'cyl' });
+      B(-0.26, 0.42, -0.26, 0.26, 0.5, 0.26, { color: C.fabric, shape: 0.03 });
+      D(-0.24, 0.5, -0.3, 0.24, 1.0, -0.24, { color: C.fabric, shape: 0.03 });
       break;
-    case 'sofa':
-      B(-1.1, 0, -0.45, 1.1, 0.45, 0.45, { color: C.fabric, shape: 0.12 });
-      B(-1.1, 0.4, 0.22, 1.1, 0.95, 0.45, { color: C.fabric, shape: 0.08 });
+    case 'sofa': {
+      const fab = pick([C.fabric, [0.45, 0.4, 0.34], [0.22, 0.3, 0.26], [0.5, 0.25, 0.2]]);
+      B(-1.1, 0.08, -0.45, 1.1, 0.42, 0.45, { color: fab, shape: 0.06 });
+      B(-1.1, 0.08, 0.22, 1.1, 0.88, 0.45, { color: fab, shape: 0.08 });
+      for (const s of [-1, 1]) B(s * 1.1 - 0.12, 0.08, -0.45, s * 1.1 + 0.12, 0.62, 0.45, { color: fab, shape: 0.08 });
+      for (const s of [-0.5, 0.5]) D(s - 0.48, 0.42, -0.4, s + 0.48, 0.54, 0.22, { color: fab.map((v) => v * 1.12), shape: 0.05 });
+      D(-1.05, 0, -0.4, 1.05, 0.08, 0.4, { color: C.dark });
       break;
-    case 'table': B(-0.8, 0, -0.5, 0.8, 0.75, 0.5, { color: C.wood, shape: 0.02 }); break;
-    case 'bed':
-      B(-1, 0, -0.85, 1, 0.5, 0.85, { color: [0.9, 0.9, 0.88], shape: 0.1 });
-      B(-1, 0, 0.85, 1, 1.1, 0.98, { color: C.wood });
+    }
+    case 'coffee': B(-0.55, 0, -0.32, 0.55, 0.4, 0.32, { color: C.wood, shape: 0.02 }); D(-0.2, 0.4, -0.1, 0.1, 0.43, 0.12, { color: pick(BOOKS) }); break;
+    case 'tv':
+      B(-0.9, 0, -0.22, 0.9, 0.5, 0.22, { color: [0.22, 0.2, 0.19] });
+      D(-0.75, 0.5, -0.03, 0.75, 1.36, 0.03, { color: [0.05, 0.05, 0.06], mat: [0.5, 0.15] });
+      D(-0.72, 0.53, -0.035, 0.72, 1.33, -0.03, { color: [0.25, 0.4, 0.6], emissive: 0.3 });
       break;
-    case 'shelf': B(-0.9, 0, -0.25, 0.9, 2.0, 0.25, { color: C.wood }); break;
+    case 'rug': D(-1.4, 0.005, -1, 1.4, 0.02, 1, { color: pick(RUGS), tex: TX.ASPH }); break;
+    case 'bed': {
+      B(-1, 0, -0.9, 1, 0.32, 0.9, { color: C.wood });
+      B(-0.97, 0.32, -0.87, 0.97, 0.54, 0.87, { color: [0.93, 0.93, 0.91], shape: 0.06 });
+      D(-0.99, 0.5, -0.89, 0.99, 0.6, 0.35, { color: pick(DUVETS), shape: 0.05 });
+      for (const s of [-0.45, 0.45]) D(s - 0.3, 0.54, 0.45, s + 0.3, 0.68, 0.82, { color: [0.96, 0.96, 0.95], shape: 0.06 });
+      B(-1.05, 0, 0.9, 1.05, 1.15, 1.0, { color: C.wood, shape: 0.03 });
+      for (const s of [-1, 1]) {
+        B(s * 1.35 - 0.25, 0, 0.55, s * 1.35 + 0.25, 0.5, 0.98, { color: C.wood });
+        D(s * 1.35 - 0.1, 0.5, 0.7, s * 1.35 + 0.1, 0.8, 0.9, { color: [1, 0.92, 0.75], emissive: 0.6, shape: 'cyl' });
+      }
+      break;
+    }
+    case 'table':
+      B(-0.8, 0.72, -0.48, 0.8, 0.76, 0.48, { color: C.wood, shape: 0.01 });
+      for (const [a, c] of [[-0.72, -0.4], [0.72, -0.4], [-0.72, 0.4], [0.72, 0.4]]) D(a - 0.03, 0, c - 0.03, a + 0.03, 0.72, c + 0.03, MET);
+      break;
+    case 'dchair':
+      B(-0.22, 0.44, -0.22, 0.22, 0.48, 0.22, { color: C.wood });
+      D(-0.22, 0.48, 0.18, 0.22, 0.95, 0.22, { color: C.wood });
+      D(-0.2, 0, -0.2, 0.2, 0.44, 0.2, { color: C.dark, mat: 'metal', alpha: 1, shape: 'cyl' });
+      break;
+    case 'shelf': {
+      B(-0.9, 0, -0.2, 0.9, 2.0, 0.2, { color: [0.36, 0.25, 0.16] });
+      for (let i = 0; i < 4; i++) {
+        const yb = 0.12 + i * 0.47;
+        let u = -0.84;
+        while (u < 0.8) {
+          const w = 0.18 + rnd() * 0.36, h = 0.26 + rnd() * 0.12;
+          D(u, yb, -0.215, Math.min(u + w, 0.84), yb + h, -0.2, { color: pick(BOOKS) });
+          u += w + 0.03 + (rnd() < 0.2 ? 0.2 : 0);
+        }
+      }
+      break;
+    }
     case 'plant':
-      B(-0.3, 0, -0.3, 0.3, 0.55, 0.3, { color: [0.3, 0.3, 0.32], shape: 'cyl' });
-      B(-0.45, 0.55, -0.45, 0.45, 1.6, 0.45, { color: C.leaf, shape: 'sphere', solid: false, noBullet: true });
+      B(-0.28, 0, -0.28, 0.28, 0.5, 0.28, { color: [0.82, 0.8, 0.76], shape: 'cyl' });
+      D(-0.25, 0.48, -0.25, 0.25, 0.5, 0.25, { color: [0.25, 0.18, 0.12], shape: 'cyl' });
+      D(-0.45, 0.5, -0.45, 0.45, 1.3, 0.45, { color: C.leaf, shape: 'sphere', noBullet: true });
+      D(-0.3, 1.0, -0.25, 0.35, 1.7, 0.35, { color: [0.3, 0.5, 0.22], shape: 'sphere', noBullet: true });
+      D(-0.4, 0.8, -0.1, 0.0, 1.45, 0.3, { color: [0.2, 0.36, 0.15], shape: 'sphere', noBullet: true });
       break;
     case 'counter':
-      B(-1.5, 0, -0.35, 1.5, 0.95, 0.35, { color: C.white, shape: 0.02 });
-      B(-1.52, 0.95, -0.37, 1.52, 1.0, 0.37, { color: C.dark });
+      B(-1.5, 0, -0.32, 1.5, 0.88, 0.32, { color: [0.9, 0.9, 0.88] });
+      B(-1.52, 0.88, -0.35, 1.52, 0.92, 0.35, { color: [0.2, 0.2, 0.22], mat: [0.1, 0.25] });
+      for (const u of [-0.75, 0, 0.75]) D(u - 0.005, 0.05, -0.325, u + 0.005, 0.85, -0.32, { color: C.dark });
+      D(0.3, 0.9, -0.2, 0.9, 0.925, 0.2, { color: [0.6, 0.62, 0.65], mat: 'steel' });
+      D(0.58, 0.92, 0.18, 0.62, 1.2, 0.22, { color: [0.7, 0.72, 0.75], mat: 'steel', shape: 'cyl' });
       break;
-    case 'crates':
-      B(-0.6, 0, -0.6, 0.6, 1.2, 0.6, { color: [0.55, 0.43, 0.28] });
-      B(0.65, 0, -0.6, 1.85, 1.2, 0.6, { color: [0.5, 0.4, 0.26] });
-      B(0.1, 1.2, -0.55, 1.3, 2.4, 0.65, { color: [0.58, 0.45, 0.3] });
+    case 'fridge':
+      B(-0.4, 0, -0.35, 0.4, 1.9, 0.35, { color: [0.75, 0.77, 0.8], mat: 'paint', shape: 0.03 });
+      D(-0.4, 1.1, -0.355, 0.4, 1.11, -0.35, { color: C.dark });
+      D(0.3, 1.2, -0.38, 0.33, 1.6, -0.35, { color: [0.85, 0.86, 0.88], mat: 'steel' });
       break;
+    case 'crates': {
+      const crate = (a, b, c, s) => {
+        B(a - s / 2, b, c - s / 2, a + s / 2, b + s, c + s / 2, { color: [0.56, 0.44, 0.29] });
+        D(a - s / 2 - 0.01, b + s * 0.15, c - s / 2 - 0.01, a + s / 2 + 0.01, b + s * 0.22, c + s / 2 + 0.01, { color: [0.3, 0.24, 0.17] });
+        D(a - s / 2 - 0.01, b + s * 0.78, c - s / 2 - 0.01, a + s / 2 + 0.01, b + s * 0.85, c + s / 2 + 0.01, { color: [0.3, 0.24, 0.17] });
+      };
+      B(-0.7, 0, -0.65, 2.0, 0.14, 0.65, { color: [0.48, 0.38, 0.25] });
+      crate(0, 0.14, 0, 1.2); crate(1.3, 0.14, 0, 1.1); crate(0.5, 1.34, 0, 1.0);
+      break;
+    }
     case 'rack':
-      B(-0.35, 0, -0.5, 0.35, 2.1, 0.5, { color: C.dark, mat: 'metal' });
-      B(-0.36, 0.3, -0.42, -0.34, 1.9, 0.42, { color: [0.3, 0.9, 0.5], emissive: 0.6, solid: false, noShadow: true });
+      B(-0.32, 0, -0.5, 0.32, 2.1, 0.5, { color: [0.12, 0.12, 0.14], mat: 'metal' });
+      D(-0.33, 0.1, -0.45, -0.32, 2.0, 0.45, { color: [0.2, 0.25, 0.3], alpha: 0.6, mat: [0.6, 0.1] });
+      for (let i = 0; i < 9; i++) D(-0.335, 0.2 + i * 0.2, -0.38 + (i % 3) * 0.05, -0.33, 0.24 + i * 0.2, -0.1 + (i % 3) * 0.05, { color: i % 4 ? [0.3, 0.95, 0.5] : [1, 0.6, 0.15], emissive: 0.9 });
       break;
-    case 'locker': B(-0.9, 0, -0.3, 0.9, 2.0, 0.3, { color: [0.4, 0.45, 0.5], mat: 'paint' }); break;
-    case 'bench': B(-1, 0, -0.3, 1, 0.45, 0.3, { color: C.wood }); break;
-    case 'barrier': B(-1.6, 0, -0.32, 1.6, 0.95, 0.32, { color: C.conc, tex: TX.CONC, shape: 0.15 }); break;
+    case 'locker':
+      B(-0.9, 0, -0.25, 0.9, 1.95, 0.25, { color: [0.38, 0.44, 0.52], mat: 'paint' });
+      for (const u of [-0.3, 0.3]) D(u - 0.006, 0.02, -0.26, u + 0.006, 1.93, -0.25, { color: C.dark });
+      for (const u of [-0.6, 0, 0.6]) D(u - 0.15, 1.6, -0.256, u + 0.15, 1.75, -0.25, { color: [0.25, 0.28, 0.33] });
+      break;
+    case 'filing': B(-0.25, 0, -0.3, 0.25, 1.3, 0.3, { color: [0.5, 0.52, 0.55], mat: 'paint' }); for (const h of [0.43, 0.86]) D(-0.25, h, -0.305, 0.25, h + 0.01, -0.3, { color: C.dark }); break;
+    case 'cooler':
+      B(-0.18, 0, -0.18, 0.18, 1.0, 0.18, { color: [0.88, 0.88, 0.9] });
+      D(-0.15, 1.0, -0.15, 0.15, 1.45, 0.15, { color: [0.45, 0.7, 0.95], alpha: 0.55, shape: 'cyl', mat: [0.3, 0.1] });
+      break;
+    case 'whiteboard':
+      B(-1.2, 0, -0.04, 1.2, 0.05, 0.04, MET);
+      D(-1.2, 0.9, -0.03, 1.2, 2.1, 0.03, { color: [0.95, 0.95, 0.96], mat: [0, 0.3] });
+      D(-1, 1.5, -0.035, 0.2, 1.53, -0.03, { color: [0.2, 0.35, 0.8] }); D(-0.6, 1.3, -0.035, 0.6, 1.33, -0.03, { color: [0.85, 0.2, 0.15] });
+      for (const s of [-1.15, 1.15]) D(s - 0.03, 0, -0.03, s + 0.03, 2.1, 0.03, MET);
+      break;
+    case 'bench': B(-1, 0.4, -0.3, 1, 0.47, 0.3, { color: C.wood }); for (const s of [-0.8, 0.8]) B(s - 0.05, 0, -0.28, s + 0.05, 0.4, 0.28, MET); break;
+    case 'barrier':
+      B(-1.6, 0, -0.32, 1.6, 0.95, 0.32, { color: C.conc, tex: TX.CONC, shape: 0.15 });
+      D(-1.55, 0.6, -0.326, 1.55, 0.7, 0.326, { color: [0.95, 0.75, 0.15] });
+      break;
     case 'planter':
       B(-1.5, 0, -1.5, 1.5, 0.8, 1.5, { color: C.conc, tex: TX.CONC });
       B(-1.35, 0.8, -1.35, 1.35, 0.85, 1.35, { color: C.grass, solid: false });
       B(-0.7, 0.85, -0.7, 0.7, 2.1, 0.7, { color: C.leaf, shape: 'sphere', solid: false, noBullet: true });
+      D(-1.1, 0.85, 0.2, -0.3, 1.4, 1.0, { color: [0.3, 0.48, 0.2], shape: 'sphere', noBullet: true });
       break;
     case 'tree':
       B(-0.22, 0, -0.22, 0.22, 3.4, 0.22, { color: [0.36, 0.27, 0.2], shape: 'cyl' });
@@ -252,8 +346,37 @@ function prop(kind, x, y, z, rot = false) {
       break;
     case 'vending':
       B(-0.5, 0, -0.45, 0.5, 2, 0.45, { color: [0.85, 0.2, 0.15], mat: 'paint' });
-      B(-0.4, 0.8, 0.45, 0.4, 1.85, 0.47, { color: [0.6, 0.85, 1], emissive: 0.5, solid: false, noShadow: true });
+      D(-0.4, 0.8, -0.47, 0.4, 1.85, -0.45, { color: [0.6, 0.85, 1], emissive: 0.5 });
+      D(-0.4, 0.2, -0.47, 0.4, 0.45, -0.45, { color: C.dark });
       break;
+    // ---- room sets
+    case 'lounge': at(0, 0, 'rug'); at(0, 0.9, 'sofa'); at(0, -0.1, 'coffee'); at(0, -1.6, 'tv'); at(1.7, 0.9, 'plant'); break;
+    case 'bedroom': at(0, 0.4, 'rug'); at(0, -0.3, 'bed'); break;
+    case 'kitchen': at(0, 0.6, 'counter'); at(1.95, 0.6, 'fridge'); at(0, -1.0, 'table'); for (const s of [-0.5, 0.5]) { at(s, -1.6, 'dchair'); } break;
+    case 'dining': at(0, 0, 'rug'); at(0, 0, 'table'); for (const s of [-0.45, 0.45]) { at(s, -0.75, 'dchair'); at(s, 0.75, 'dchair'); } at(1.6, 0.6, 'plant'); break;
+    case 'office': at(-0.85, 0, 'desk'); at(0.85, 0, 'desk'); at(1.95, 0.4, 'filing'); if (rnd() < 0.5) at(-1.95, 0.5, 'plant'); break;
+    case 'meeting': at(0, 0, 'table'); at(0, 0.75, 'dchair'); at(0, -0.75, 'dchair'); at(0, 1.6, 'whiteboard'); at(1.5, 0.8, 'cooler'); break;
+    case 'library': at(0, 0.4, 'shelf'); at(1.9, 0.4, 'shelf'); at(0.9, -0.9, 'sofa'); break;
+    case 'storage': at(0, 0, 'crates'); at(0.2, 1.4, 'shelf'); break;
+    case 'servers': at(0, 0, 'rack'); at(0.7, 0, 'rack'); at(-0.7, 0, 'rack'); break;
+    case 'lockers': at(0, 0, 'locker'); at(1.85, 0, 'locker'); break;
+    case 'desks': at(0, 0, 'office'); break;
+  }
+}
+// framed artwork on a wall: a thin panel with a coloured canvas
+function art(x0, y0, z0, x1, y1, z1, r) {
+  deco(x0, y0, z0, x1, y1, z1, { color: [0.15, 0.13, 0.11] });
+  const th = 0.08, alongX = x1 - x0 > z1 - z0;
+  const pal = [[0.85, 0.45, 0.2], [0.2, 0.4, 0.65], [0.85, 0.75, 0.4], [0.3, 0.55, 0.45], [0.75, 0.3, 0.4]];
+  const c1 = pal[Math.floor(r * 5)], c2 = pal[Math.floor(r * 25) % 5];
+  if (alongX) {
+    const m = x0 + (x1 - x0) * (0.3 + 0.4 * r);
+    deco(x0 + th, y0 + th, z0 - 0.005, m, y1 - th, z0, { color: c1 });
+    deco(m, y0 + th, z0 - 0.005, x1 - th, y1 - th, z0, { color: c2 });
+  } else {
+    const m = z0 + (z1 - z0) * (0.3 + 0.4 * r);
+    deco(x0 - 0.005, y0 + th, z0 + th, x0, y1 - th, m, { color: c1 });
+    deco(x0 - 0.005, y0 + th, m, x0, y1 - th, z1 - th, { color: c2 });
   }
 }
 const ceilingLight = (x0, z0, x1, z1, y) => glow(x0, y - 0.33, z0, x1, y - 0.3, z1, C.light, 0.95);
@@ -373,7 +496,7 @@ function sector1() {
   const hNW = [-124.5, 24, -119.9, 27.2];        // stairwell up to the high rooftop
   const winRow = (cs, w) => [1, 2, 3].flatMap((k) => cs.map((c) => win(c, w, k * FH)));
   building({
-    x0: -128, z0: 22, x1: -72, z1: 78, floors: 4, tex: TX.OFFICE, color: C.brick,
+    x0: -128, z0: 22, x1: -72, z1: 78, floors: 4, tex: TX.BRICK, color: C.brick, slabTex: TX.WOOD,
     holes: {
       s: [[-103, -97, 0, 4.2], door(-120, 3, 0, 3.2), door(-80, 3, 0, 3.2), ...winRow([-121, -79], 3)],
       n: [door(-100, 3, 0, 3.2), ...winRow([-90, -110], 3)],
@@ -385,7 +508,7 @@ function sector1() {
     extraHoles: (k) => (k === 4 ? [hNW] : []),
     parapetHoles: {},
     inner: (k, y) => {
-      const pt = { color: C.plaster };
+      const pt = { color: C.plaster, tex: TX.PLASTER };
       const top = y + FH - 0.3;
       wallZ(22.4, 35.6, -107, 0.2, y, top, [door(29, 1.6, y)], pt);
       wallZ(22.4, 35.6, -93, 0.2, y, top, [door(29, 1.6, y)], pt);
@@ -393,9 +516,10 @@ function sector1() {
       wallZ(64.4, 77.6, -93, 0.2, y, top, [door(71, 1.6, y)], pt);
       wallX(-127.6, -114.4, 57, 0.2, y, top, [door(-121, 1.6, y)], pt);
       wallX(-85.6, -72.4, 42, 0.2, y, top, [door(-79, 1.6, y)], pt);
-      const kinds = ['desks', 'sofa', 'table', 'shelf', 'bed', 'plant', 'counter', 'crates'];
-      for (const [x, z, r] of [[-120, 30, false], [-100, 26, false], [-80, 31, true], [-121, 70, false], [-100, 74, false], [-80, 72, false], [-120, 40, true], [-79, 62, true]]) {
-        if (rnd() < 0.75) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, r);
+      const kinds = ['lounge', 'bedroom', 'kitchen', 'office', 'dining', 'library', 'storage'];
+      for (const [x, z, r] of [[-120, 30, false], [-100, 28, false], [-80, 30, true], [-121, 71, false], [-100, 72, false], [-80, 71, false], [-121, 40, true], [-79, 62, true]]) {
+        if (k === 0 && x === -100) continue;                 // keep the ground-floor passages clear
+        if (rnd() < 0.8) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, r);
       }
       for (const [x0, z0, x1, z1] of [[-124, 28, -76, 29], [-124, 71, -76, 72], [-121.5, 38, -120.5, 62], [-79.5, 38, -78.5, 62]]) ceilingLight(x0, z0, x1, z1, y + FH);
     },
@@ -406,12 +530,12 @@ function sector1() {
   walls4(-114.4, 35.6, -85.6, 64.4, 0, 18, {
     n: [[-103, -97, 0, 4.2], ...cw], s: [[-103, -97, 0, 4.2], ...cw],
     w: [door(50, 2.4, 0, 3.2), ...cz], e: [door(50, 2.4, 0, 3.2), ...cz],
-  }, { color: [0.82, 0.8, 0.76], tex: TX.OFFICE });
+  }, { color: [0.72, 0.5, 0.4], tex: TX.BRICK });
   walls4(-114.4, 35.6, -85.6, 64.4, 18, 19.1, {}, { color: C.concDark, tex: TX.CONC }, 0.3);
   // the high rooftop: a 4-storey block on the north-west corner, its own stair continuing up
-  walls4(-128, 22, -114, 36, 18, 36, { e: [win(29, 3, 18 + FH), win(29, 3, 18 + 2 * FH)], s: [win(-121, 3, 18 + FH), win(-121, 3, 18 + 3 * FH)] }, { color: C.brick, tex: TX.OFFICE });
+  walls4(-128, 22, -114, 36, 18, 36, { e: [win(29, 3, 18 + FH), win(29, 3, 18 + 2 * FH)], s: [win(-121, 3, 18 + FH), win(-121, 3, 18 + 3 * FH)] }, { color: C.brick, tex: TX.BRICK });
   const nwHole = stairCore(-126, 24, '+x', 18, 4);
-  for (let k = 1; k <= 4; k++) slab(-127.6, 22.4, -114.4, 35.6, 18 + k * FH - 0.3, 18 + k * FH, [nwHole], { color: k === 4 ? C.concDark : C.floor, tex: TX.CONC });
+  for (let k = 1; k <= 4; k++) slab(-127.6, 22.4, -114.4, 35.6, 18 + k * FH - 0.3, 18 + k * FH, [nwHole], { color: C.floor, tex: TX.WOOD });
   walls4(-128, 22, -114, 36, 36, 37.1, {}, { color: C.concDark, tex: TX.CONC }, 0.3);
   box(-118, 36, 29, -115, 40, 32, { color: C.steel, tex: TX.METAL, shape: 'cyl' });               // water tank
   box(-118.3, 40, 28.7, -114.7, 40.3, 32.3, { color: C.dark, shape: 'cyl' });
@@ -478,16 +602,16 @@ function sector2() {
         wallX(-26, 26, 40, 0.08, y, y + 1.05, [[21.9, 25.3, y, y + 2]], r);
         wallZ(20, 40, -26, 0.08, y, y + 1.05, [], r);
         wallZ(20, 40, 26, 0.08, y, y + 1.05, [], r);
-        for (const x of [-22, -10, 2, 14]) prop('locker', x, y, 18.4);
+        for (const x of [-22, -10, 2, 14]) prop('lockers', x, y, 18.4);
       }
       if (k === 2) {
         // control room round the light well
         const r = { color: C.dark, mat: 'metal' };
         wallX(-12, 12, 24, 0.08, y, y + 1.05, [], r); wallX(-12, 12, 36, 0.08, y, y + 1.05, [], r);
         wallZ(24, 36, -12, 0.08, y, y + 1.05, [], r); wallZ(24, 36, 12, 0.08, y, y + 1.05, [], r);
-        for (const [x, z] of [[-22, 22], [-22, 30], [-22, 38], [17, 20], [-4, 41], [4, 19]]) prop('desks', x, y, z);
-        for (let x = -26; x < -16; x += 1.2) prop('rack', x, y, 41.5, true);
-        wallZ(16.4, 23.8, 0, 0.2, y, y + FH - 0.3, [door(20.5, 1.6, y)], { color: C.plaster });
+        for (const [x, z] of [[-22, 22], [-22, 30], [-22, 38], [17, 20], [-4, 41], [4, 19]]) prop('office', x, y, z);
+        for (let x = -26; x < -16; x += 2.6) prop('servers', x + 1.2, y, 41.5);
+        wallZ(16.4, 23.8, 0, 0.2, y, y + FH - 0.3, [door(20.5, 1.6, y)], { color: C.plaster, tex: TX.PLASTER });
       }
       ceilingLight(-24, 18, 24, 18.6, y + FH); ceilingLight(-24, 41.4, 20, 42, y + FH);
     },
@@ -547,7 +671,7 @@ function sector3() {
   for (let k = 2; k < F - 1; k += 3) balS.push(k);
   for (let k = 3; k < F - 1; k += 3) balW.push(k);
   building({
-    x0: 92, z0: 30, x1: 126, z1: 64, floors: F, tex: TX.GLASS, color: C.glass,
+    x0: 92, z0: 30, x1: 126, z1: 64, floors: F, tex: TX.GLASS, color: C.glass, slabTex: TX.WOOD,
     holes: {
       s: [[104, 114, 0, 4.2], ...balS.map((k) => [98, 120, k * FH, k * FH + 3.2])],
       w: [door(46, 3, 0, 3.2), ...balW.map((k) => [41, 56, k * FH, k * FH + 3.2])],
@@ -557,7 +681,7 @@ function sector3() {
     cores: [{ ax: 105, az: 51.4, dir: '+x' }],
     parapetHoles: { w: [[35.5, 38.5, T, T + 2]] },
     inner: (k, y) => {
-      const top = y + FH - 0.3, pt = { color: C.plaster };
+      const top = y + FH - 0.3, pt = { color: C.plaster, tex: TX.PLASTER };
       if (k === 0) {
         // the lobby: reception, seating, lift doors on the core
         prop('counter', 109, y, 58);
@@ -571,8 +695,10 @@ function sector3() {
         wallZ(30.4, 43, a ? 118 : 116, 0.2, y, top, [door(37, 1.6, y)], pt);
         wallX(113, 125.6, a ? 58 : 56, 0.2, y, top, [door(a ? 119 : 121, 1.6, y)], pt);
         wallZ(51, 63.6, a ? 99 : 101, 0.2, y, top, [door(57, 1.6, y)], pt);
-        const kinds = ['sofa', 'bed', 'table', 'counter', 'shelf', 'plant', 'desk'];
-        for (const [x, z, r] of [[96, 33, false], [122, 34, true], [121, 61, false], [95, 56, true]]) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, r);
+        const kinds = ['lounge', 'bedroom', 'kitchen', 'dining', 'office', 'library'];
+        for (const [x, z, r] of [[97, 33.5, false], [122, 35, true], [120, 61, false], [95.5, 57, true]]) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, r);
+        art(106.3, y + 1.3, 42.96, 108.9, y + 2.5, 42.97, rnd());
+        art(104.96, y + 1.3, 44.5, 104.97, y + 2.5, 47.5, rnd());
       }
       ceilingLight(95, 46.8, 103, 47.3, y + FH); ceilingLight(115, 46.8, 123, 47.3, y + FH);
       ceilingLight(108, 33, 110, 40, y + FH);
@@ -665,7 +791,7 @@ function sector4() {
     voids: () => [atrium],
     cores: [{ ax: 70, az: -82, dir: '+x' }, { ax: 130, az: -21.4, dir: '-x' }],
     inner: (k, y) => {
-      const top = y + FH - 0.3, pt = { color: C.plaster };
+      const top = y + FH - 0.3, pt = { color: C.plaster, tex: TX.PLASTER };
       wallZ(-83.6, -62, 88, 0.2, y, top, [door(-72, 1.8, y)], pt);
       wallZ(-83.6, -62, 112, 0.2, y, top, [door(-72, 1.8, y)], pt);
       wallZ(-38, -16.4, 88, 0.2, y, top, [door(-28, 1.8, y)], pt);
@@ -680,7 +806,7 @@ function sector4() {
         glow(88, y - 0.35, -62.1, 112, y - 0.3, -61.9, col, 0.8);
       }
       for (const [x, z, r] of [[76, -70, false], [100, -76, false], [124, -70, false], [76, -30, false], [100, -24, false], [124, -30, false], [76, -44, true], [124, -56, true]]) {
-        if (rnd() < 0.8) prop(rnd() < 0.6 ? 'desks' : ['shelf', 'sofa', 'plant', 'counter'][Math.floor(rnd() * 4)], x, y, z, r);
+        if (rnd() < 0.85) prop(rnd() < 0.6 ? 'office' : ['library', 'lounge', 'kitchen', 'storage', 'meeting'][Math.floor(rnd() * 5)], x, y, z, r);
       }
       for (const [x0, z0, x1, z1] of [[70, -73, 130, -72.4], [70, -27.6, 130, -27], [76.5, -60, 77.1, -40], [122.9, -60, 123.5, -40]]) ceilingLight(x0, z0, x1, z1, y + FH);
     },
@@ -745,8 +871,8 @@ function sector5() {
       } else {
         // offices over the vault, a gallery overlooking the hall
         wallX(-19.6, 19.6, -52, 0.08, y, y + 1.05, [], { color: C.dark, mat: 'metal' });
-        wallZ(-69.6, -52, -6, 0.2, y, y + FH - 0.3, [door(-60, 1.6, y)], { color: C.plaster });
-        for (const [x, z] of [[-14, -64], [-14, -57], [0, -64], [4, -58]]) prop('desk', x, y, z);
+        wallZ(-69.6, -52, -6, 0.2, y, y + FH - 0.3, [door(-60, 1.6, y)], { color: C.plaster, tex: TX.PLASTER });
+        for (const [x, z] of [[-14, -64], [-14, -57], [0, -64], [4, -58]]) prop('office', x, y, z);
         prop('shelf', -18, y, -68, false); prop('plant', 18, y, -68);
       }
       ceilingLight(-16, -62, 10, -61.4, y + FH);
@@ -792,7 +918,7 @@ function sector6() {
     },
     cores: [{ ax: -132, az: -82, dir: '+x' }, { ax: -68, az: -21.6, dir: '-x' }],
     inner: (k, y) => {
-      const top = y + FH - 0.3, pt = { color: [0.82, 0.8, 0.76] };
+      const top = y + FH - 0.3, pt = { color: [0.82, 0.8, 0.76], tex: TX.PLASTER };
       // the corridors: lined both sides, a door into every room, ceiling lights down the middle
       const segZ = [-83.6, ...GZ.slice(0, 2), CZ[0], CZ[1], ...GZ.slice(2), -16.4];
       const segX = [-133.6, ...GX.slice(0, 2), CX[0], CX[1], ...GX.slice(2), -66.4];
@@ -823,7 +949,7 @@ function sector6() {
       for (const z of GZ) wallX(-133.6, -66.4, z, 0.25, y, top, roomHoles(segX, CX), pt);
       ceilingLight(-100.3, -83, -99.7, -17, y + FH); ceilingLight(-133, -50.3, -67, -49.7, y + FH);
       // the rooms: crates, shelves, desks, racks
-      const kinds = ['crates', 'shelf', 'desk', 'rack', 'locker', 'table', 'bed', 'sofa'];
+      const kinds = ['storage', 'library', 'office', 'servers', 'lockers', 'dining', 'bedroom', 'lounge', 'crates'];
       for (let i = 0; i < 12; i++) {
         const cx = [-128, -117, -106, -94, -83, -72][Math.floor(rnd() * 6)], cz = [-78, -67, -56, -44, -33, -22][Math.floor(rnd() * 6)];
         if ((cx === -128 && cz === -78) || (cx === -72 && cz === -22)) continue;   // stairwells

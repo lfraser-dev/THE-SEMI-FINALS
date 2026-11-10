@@ -366,6 +366,98 @@
   input[type=range] { width: 100%; accent-color: var(--red); }
   #locknote { margin-top: 14px; font-size: 14px; font-weight: 600; color: var(--red); }
   #error { position: fixed; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 700; padding: 24px; text-align: center; }
+
+  /* ---------- matchmaking ---------- */
+  #mmk { position: fixed; inset: 0; z-index: 40; color: #fff; font-family: var(--font);
+    background: linear-gradient(90deg, rgba(8,8,10,.9) 0, rgba(8,8,10,.7) 38%, rgba(8,8,10,.15) 62%, rgba(8,8,10,.55) 100%); }
+  #mmk[data-phase="intro"], #mmk[data-phase="found"] { background: radial-gradient(ellipse at 50% 40%, rgba(30,30,36,.88), rgba(6,6,8,.97) 70%); }
+  .mk-kicker { font: 700 13px var(--font); letter-spacing: .3em; opacity: .65; }
+  .mk-title { font: 800 italic 76px var(--font); line-height: .9; margin: 10px 0 6px; }
+  .mk-title-s { font-size: 52px; }
+  .mk-dots::after { content: ''; animation: mkdots 1.2s steps(4) infinite; }
+  @keyframes mkdots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+  .mk-search { position: absolute; left: 6vw; top: 22vh; width: min(560px, 88vw); }
+  .mk-time { font: 800 italic 40px var(--font); color: var(--red); }
+  .mk-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 26px 0 10px; }
+  .mk-slots i { height: 46px; background: rgba(255,255,255,.07); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); position: relative; transition: background .25s; }
+  .mk-slots i:nth-child(3n+1) { margin-left: 0; }
+  .mk-slots i.on { background: #fff; animation: mkpop .3s; }
+  .mk-slots i.on::after { content: ''; position: absolute; left: 50%; top: 50%; width: 16px; height: 22px; transform: translate(-50%,-50%); background: var(--ink); border-radius: 8px 8px 3px 3px; }
+  .mk-slots { grid-template-columns: repeat(6, 1fr); }
+  @keyframes mkpop { from { transform: scale(.7); } to { transform: scale(1); } }
+  .mk-info { font: 800 14px var(--font); letter-spacing: .2em; opacity: .8; }
+  .mk-cancel { all: unset; cursor: pointer; margin-top: 30px; display: inline-block; font: 800 italic 20px var(--font); letter-spacing: .1em; padding: 8px 26px; background: rgba(255,255,255,.1); }
+  .mk-cancel:hover { background: var(--red); }
+  .mk-found { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; animation: mkzoom .5s cubic-bezier(.2,1.4,.4,1); }
+  .mk-found b { font: 800 italic 120px var(--font); line-height: .9; color: #fff; text-shadow: 0 0 40px rgba(240,32,26,.6); }
+  .mk-found span { font: 800 22px var(--font); letter-spacing: .4em; color: var(--red); margin-top: 10px; }
+  @keyframes mkzoom { from { transform: scale(1.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .mk-load { position: absolute; left: 5vw; top: 6vh; width: min(560px, 90vw); max-height: 88vh; overflow-y: auto; }
+  .mk-desc { font: 600 16px var(--font); opacity: .75; margin: 4px 0 6px; max-width: 480px; }
+  .mk-load h4 { font: 800 13px var(--font); letter-spacing: .26em; opacity: .6; margin: 16px 0 6px; }
+  .mk-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .mk-card { all: unset; cursor: pointer; padding: 10px 14px 9px; background: rgba(255,255,255,.07); border-bottom: 3px solid transparent; position: relative; transition: background .15s; }
+  .mk-card:hover:not(:disabled) { background: rgba(255,255,255,.14); }
+  .mk-card.on, .mk-card.on:hover:not(:disabled) { background: rgba(255,255,255,.95); color: var(--ink); border-bottom-color: var(--c); }
+  .mk-card:disabled { cursor: default; opacity: .55; }
+  .mk-card.on:disabled { opacity: 1; }
+  .mk-card b { display: block; font: 800 italic 22px var(--font); line-height: 1; }
+  .mk-card small { display: block; font: 700 11px var(--font); letter-spacing: .12em; opacity: .7; margin-top: 3px; }
+  .mk-lock { all: unset; cursor: pointer; display: block; text-align: center; margin-top: 20px; padding: 14px; font: 800 italic 34px var(--font); letter-spacing: .04em; background: var(--red);
+    clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); }
+  .mk-lock:hover { filter: brightness(1.12); }
+  .mk-lock.done { background: #2fd39a; color: var(--ink); cursor: default; }
+  .mk-clock { position: absolute; right: 5vw; top: 6vh; text-align: center; }
+  .mk-clock > span { display: block; font: 800 13px var(--font); letter-spacing: .26em; opacity: .7; margin-bottom: 8px; }
+  .mk-ring { --p: 1; width: 120px; height: 120px; border-radius: 50%; display: grid; place-items: center; margin: 0 auto;
+    background: conic-gradient(var(--red) calc(var(--p) * 360deg), rgba(255,255,255,.12) 0); transition: background .1s; }
+  .mk-ring b { width: 100px; height: 100px; border-radius: 50%; background: #111216; display: grid; place-items: center; font: 800 italic 56px var(--font); }
+  #mmk.hurry .mk-ring b { color: var(--red); animation: mkbeat 1s infinite; }
+  @keyframes mkbeat { 0% { transform: scale(1.12); } 40% { transform: scale(1); } }
+  .mk-squad { position: absolute; right: 5vw; bottom: 7vh; width: 320px; background: rgba(8,8,10,.8); padding: 14px 16px; }
+  .mk-squad-h { border-left: 5px solid var(--t); padding-left: 10px; margin-bottom: 10px; }
+  .mk-squad-h small, .mk-team-h small { display: block; font: 800 11px var(--font); letter-spacing: .26em; opacity: .65; }
+  .mk-squad-h b { font: 800 italic 26px var(--font); }
+  .mk-pl { display: grid; grid-template-columns: 1fr auto 74px; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid rgba(255,255,255,.08); }
+  .mk-pl b, .mk-tp b { font: 800 18px var(--font); letter-spacing: .04em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mk-pl.you b, .mk-tp.you b { color: #ffd04a; }
+  .mk-pl i, .mk-tp i { font: 800 11px var(--font); font-style: normal; letter-spacing: .14em; padding: 2px 8px; background: var(--c); color: var(--ink); }
+  .mk-pl span { font: 800 12px var(--font); letter-spacing: .14em; opacity: .55; text-align: right; }
+  .mk-pl span.ok { opacity: 1; color: #2fd39a; }
+  .mk-intro { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+  .mk-intro-top { text-align: center; margin-bottom: 34px; animation: mkzoom .6s; }
+  .mk-intro-top small { display: block; font: 800 15px var(--font); letter-spacing: .4em; color: var(--red); }
+  .mk-intro-top b { font: 800 italic 84px var(--font); line-height: .95; }
+  .mk-teams { display: grid; grid-template-columns: repeat(4, minmax(0, 250px)); gap: 14px; width: min(1080px, 100%); justify-content: center; }
+  .mk-team { background: rgba(255,255,255,.06); border-top: 6px solid var(--t); padding: 14px 16px 10px; opacity: 0; animation: mkin .55s cubic-bezier(.2,1.2,.4,1) forwards; }
+  .mk-team.mine { background: rgba(255,255,255,.13); box-shadow: 0 0 0 2px var(--t), 0 0 40px color-mix(in srgb, var(--t) 40%, transparent); }
+  @keyframes mkin { from { opacity: 0; transform: translateY(40px) scale(.94); } to { opacity: 1; transform: none; } }
+  .mk-team-h { margin-bottom: 10px; }
+  .mk-team-h b { display: block; font: 800 italic 30px var(--font); line-height: .95; color: var(--t); }
+  .mk-tp { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.08); }
+  .mk-rule { margin-top: 26px; font: 800 14px var(--font); letter-spacing: .3em; opacity: 0; animation: mkfade .6s 3.6s forwards; }
+  @keyframes mkfade { to { opacity: .75; } }
+  .mk-drop { all: unset; cursor: pointer; margin-top: 22px; padding: 12px 48px; font: 800 italic 38px var(--font); background: var(--red);
+    clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%); opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s; transform: translateY(10px); }
+  .mk-drop.on { opacity: 1; pointer-events: auto; transform: none; animation: mkbeat 1.4s infinite; }
+  @media (max-width: 1100px) {
+    .mk-load { width: 52vw; left: 4vw; } .mk-squad { width: 38vw; right: 4vw; } .mk-title-s { font-size: 40px; }
+    .mk-card b { font-size: 18px; } .mk-ring { width: 92px; height: 92px; } .mk-ring b { width: 76px; height: 76px; font-size: 42px; } .mk-clock { right: 4vw; }
+  }
+  @media (max-width: 760px) {
+    .mk-title { font-size: 48px; } .mk-title-s { font-size: 36px; } .mk-teams { grid-template-columns: repeat(2, 1fr); }
+    .mk-clock { position: static; margin: 10px; } .mk-squad { position: static; width: auto; margin: 10px 16px; } .mk-load { position: static; padding: 16px; max-height: none; }
+    #mmk { overflow-y: auto; } .mk-intro-top b { font-size: 52px; }
+  }
+  /* team strip on the HUD in the stadium */
+  #teams { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+  body:not(.stadium) #teams { display: none; }
+  #teams .tm { background: rgba(17,18,22,.82); color: #fff; border-top: 4px solid var(--t); padding: 4px 12px 5px; min-width: 120px; display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+    clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+  #teams .tm b { font: 800 italic 15px var(--font); letter-spacing: .03em; white-space: nowrap; }
+  #teams .tm span { font: 800 13px var(--font); color: #ffd04a; }
+  #teams .tm.mine { background: rgba(255,255,255,.92); color: var(--ink); }
+  #teams .tm.mine span { color: #b07a00; }
 </style>
 </head>
 <body>
@@ -403,12 +495,15 @@
     <div class="ab" id="ab-grapple"><kbd>G</kbd><b>GRAPPLE</b><span class="cd"></span></div>
     <div class="ab" id="ab-slam"><kbd>Z</kbd><b>SLAM</b><span class="cd"></span></div>
   </div>
+  <div id="teams"></div>
   <div id="mapname"><div class="small">THE SEMI-FINALS</div><div class="big">TEST RANGE</div></div>
   <div id="slots"><div id="slot1"></div><div id="slot2"></div></div>
   <div id="weapontype"></div>
   <div id="weaponname"></div>
   <div class="panel" id="ammobox"><span id="ammo">30</span><span id="reserve">/ ∞</span></div>
 </div>
+
+<div id="mmk" class="hidden"></div>
 
 <div id="menu">
   <header class="mm-top">
@@ -428,7 +523,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.19</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.20</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FORTUNE STADIUM</span>

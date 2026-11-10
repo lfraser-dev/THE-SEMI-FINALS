@@ -152,7 +152,11 @@ void main() {
       vec2 c = top ? p / 3.0 : vec2(p.x / 3.0, p.y / 1.5);
       float seam = 1.0 - pane(c, vec2(0.006, 0.012));
       float streak = noise(vec3(p.x * 2.5, p.y * 0.12, 1.0));
-      base *= (0.88 + 0.22 * blot) * (1.0 - seam * 0.35) * (1.0 - (top ? 0.0 : streak * 0.12));
+      float tone = 0.94 + 0.1 * hash(vec3(floor(c), 17.0));
+      // formwork tie holes on a 0.75 m grid (walls only), fading out with distance
+      vec2 q = (fract(p / 0.75) - 0.5) * 0.75;
+      float tie = top ? 0.0 : (1.0 - smoothstep(0.018, 0.03, length(q))) * (1.0 - smoothstep(0.02, 0.06, fwidth(p.x)));
+      base *= tone * (0.88 + 0.22 * blot) * (1.0 - seam * 0.35) * (1.0 - (top ? 0.0 : streak * 0.12)) * (1.0 - tie * 0.45);
       tRough = 0.9; tMetal = 0.0;
     } else if (k == 4) {
       // paving: 1 m slabs, each a slightly different tone
@@ -174,7 +178,14 @@ void main() {
       float win = band(c.y, 0.24, 0.84) * pane(vec2(c.x, 0.5), vec2(0.05, 0.0));
       float lit = step(0.8, hash(vec3(floor(c.x / 3.0), floor(c.y), 5.0)));
       vec3 glass = mix(vec3(0.1, 0.13, 0.17), vec3(0.95, 0.85, 0.62), lit * 0.35);
+      // blinds pulled part-way down in some windows
+      float hb = 0.84 - 0.5 * hash(vec3(floor(c), 8.0));
+      float blind = step(0.55, hash(vec3(floor(c), 9.0))) * step(hb, fract(c.y));
+      float slat = mix(0.86 + 0.14 * sin(p.y * 70.0), 0.93, smoothstep(0.3, 1.0, fwidth(p.y * 70.0)));
+      glass = mix(glass, vec3(0.78, 0.77, 0.72) * slat, blind * 0.9);
+      float sill = band(c.y, 0.215, 0.24) * pane(vec2(c.x, 0.5), vec2(0.02, 0.0));
       base = mix(base * (0.9 + 0.15 * blot), glass, win);
+      base = mix(base, vec3(0.86, 0.86, 0.84), sill);
       tRough = mix(0.88, 0.06, win); tMetal = mix(0.0, 0.8, win);
       tGlow = win * lit * 0.12;
     } else if (k == 7) {
@@ -191,6 +202,67 @@ void main() {
       float person = pane(c, vec2(0.12, 0.1)) * step(0.32, h);
       base = mix(base, fan, person * 0.85);
       tRough = 0.85; tMetal = 0.0;
+    } else if (k == 10) {
+      // painted plaster: roller texture, a dark skirting board at every storey, scuffs low down
+      if (!top) {
+        float fy = fract(vWorld.y / 4.5) * 4.5;            // height above this storey's floor
+        float skirt = 1.0 - smoothstep(0.115, 0.13, fy);
+        float roll = noise(vec3(p.x * 0.7, p.y * 9.0, 2.0));
+        base *= 0.95 + 0.06 * roll + 0.04 * blot;
+        base *= 1.0 - (1.0 - smoothstep(0.15, 0.9, fy)) * 0.14 * noise(vWorld * 3.0);
+        base = mix(base, vec3(0.24, 0.24, 0.26), skirt);
+        tRough = mix(0.78, 0.35, skirt);
+      } else tRough = 0.8;
+      tMetal = 0.0;
+    } else if (k == 11 || k == 12) {
+      // interior floor slab: tiles (11) or oak planks (12) on top, ceiling tiles underneath, concrete edges
+      if (top && n.y > 0.0) {
+        if (k == 11) {
+          vec2 c = p / 0.9;
+          float g = 1.0 - pane(c, vec2(0.012, 0.012));
+          base *= (0.94 + 0.08 * hash(vec3(floor(c), 11.0))) * (0.95 + 0.07 * blot) * (1.0 - g * 0.4);
+          tRough = mix(0.3, 0.8, g);
+        } else {
+          vec2 c = vec2(p.x / 1.4, p.y / 0.18);
+          c.x += hash(vec3(0.0, floor(c.y), 12.0));
+          vec2 cell = floor(c);
+          float g = 1.0 - pane(c, vec2(0.004, 0.05));
+          float gr = noise(vec3(p.x * 0.8, p.y * 45.0, cell.x));
+          base = vec3(0.5, 0.35, 0.21) * (0.82 + 0.3 * hash(vec3(cell, 13.0))) * (0.88 + 0.18 * gr) * (1.0 - g * 0.5);
+          tRough = 0.42;
+        }
+      } else if (top) {
+        vec2 c = p / 0.6;
+        float g = 1.0 - pane(c, vec2(0.025, 0.025));
+        base = mix(vec3(0.88, 0.88, 0.86), vec3(0.58, 0.59, 0.61), g) * (0.97 + 0.05 * noise(vWorld * 4.0));
+        tRough = 0.92;
+      } else {
+        base *= 0.88 + 0.2 * blot;
+        tRough = 0.9;
+      }
+      tMetal = 0.0;
+    } else if (k == 13 && !top) {
+      // brick with punched windows: 1.8 m bays, stone lintels and sills, white frames, a few lit rooms
+      vec2 c = vec2(p.x / 1.8, p.y / 4.5);
+      float wx = band(c.x, 0.18, 0.82), wy = band(c.y, 0.22, 0.72);
+      float win = wx * wy;
+      float inner = band(c.x, 0.205, 0.795) * band(c.y, 0.24, 0.7) * (1.0 - band(c.x, 0.492, 0.508));
+      float frame = clamp(win - inner, 0.0, 1.0);
+      vec2 bc = vec2(p.x / 0.225, p.y / 0.075);
+      bc.x += 0.5 * mod(floor(bc.y), 2.0);
+      float far = smoothstep(0.25, 0.7, fwidth(bc.y));
+      float mortar = (1.0 - pane(bc, vec2(0.04, 0.12))) * (1.0 - far);
+      vec3 brick = base * mix(0.8 + 0.35 * hash(vec3(floor(bc), 21.0)), 0.97, far) * (0.92 + 0.12 * blot);
+      brick = mix(brick, vec3(0.7, 0.68, 0.64), mortar * 0.8);
+      float stone = band(c.x, 0.16, 0.84) * (band(c.y, 0.72, 0.765) + band(c.y, 0.195, 0.22));
+      float lit = step(0.82, hash(vec3(floor(c), 5.0)));
+      vec3 glass = mix(vec3(0.08, 0.1, 0.13), vec3(0.95, 0.82, 0.6), lit * 0.4);
+      vec3 col = mix(brick, vec3(0.8, 0.78, 0.74), stone);
+      col = mix(col, vec3(0.9, 0.9, 0.88), frame);
+      base = mix(col, glass, inner);
+      tRough = mix(mix(0.9, 0.5, frame), 0.05, inner);
+      tMetal = inner * 0.8;
+      tGlow = inner * lit * 0.12;
     } else if (k == 9) {
       // LED screen: tiny pixels, gently scrolling bands
       vec2 c = p / 0.12;
