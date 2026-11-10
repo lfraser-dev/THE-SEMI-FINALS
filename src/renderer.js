@@ -51,6 +51,21 @@ float noise(vec3 x) {
              mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z);
 }
 
+// anti-aliased "inside the pane" mask for a repeating cell: margin m (fraction of the cell) on each side
+float pane(vec2 c, vec2 m) {
+  vec2 fw = max(fwidth(c), vec2(1e-4));
+  vec2 f = fract(c);
+  vec2 a = smoothstep(m - fw, m + fw, f) * (1.0 - smoothstep(1.0 - m - fw, 1.0 - m + fw, f));
+  float v = a.x * a.y;
+  float far = smoothstep(0.25, 0.6, max(fw.x, fw.y));      // far away: blend to the average
+  return mix(v, (1.0 - 2.0 * m.x) * (1.0 - 2.0 * m.y), far);
+}
+float band(float y, float a, float b) {                       // 1 between a and b (fractions of a cell)
+  float fw = max(fwidth(y), 1e-4), f = fract(y);
+  float v = smoothstep(a - fw, a + fw, f) * (1.0 - smoothstep(b - fw, b + fw, f));
+  return mix(v, b - a, smoothstep(0.25, 0.6, fw));
+}
+
 float grid(vec2 p, float spacing, float px) {
   vec2 c = p / spacing;
   vec2 fw = max(fwidth(c), vec2(1e-4));
@@ -114,7 +129,76 @@ void main() {
   vec3 base = uColor;
   bool world = uShadowOn > 0.5;
 
-  if (uGrid > 0.5) {
+  // ---- realistic surfaces (uGrid >= 2 picks a procedural material instead of the sandbox grid)
+  float tRough = -1.0, tMetal = -1.0, tGlow = 0.0;
+  if (uGrid > 1.5) {
+    int k = int(uGrid + 0.5);
+    vec3 an = abs(n);
+    bool top = an.y > 0.5;
+    vec2 p = top ? vWorld.xz : (an.x > 0.5 ? vWorld.zy : vWorld.xy);
+    float blot = noise(vWorld * 0.18) * 0.6 + noise(vWorld * 0.9) * 0.4;
+    if (k == 2 && !top) {
+      // glass curtain wall: 1.5 m panes, a spandrel band at every 4.5 m floor, slim mullions
+      vec2 c = vec2(p.x / 1.5, p.y / 4.5);
+      float glass = pane(c, vec2(0.035, 0.02)) * (1.0 - band(c.y, 0.0, 0.13));
+      float tint = hash(vec3(floor(c), 3.0));
+      vec3 g = base * (0.75 + 0.35 * tint);
+      base = mix(vec3(0.2, 0.21, 0.23), g, glass);
+      tRough = mix(0.45, 0.04, glass);
+      tMetal = mix(0.6, 0.9, glass);
+      tGlow = glass * step(0.93, hash(vec3(floor(c), 7.0))) * 0.25;
+    } else if (k == 3) {
+      // concrete: precast panels with seams, stains running down
+      vec2 c = top ? p / 3.0 : vec2(p.x / 3.0, p.y / 1.5);
+      float seam = 1.0 - pane(c, vec2(0.006, 0.012));
+      float streak = noise(vec3(p.x * 2.5, p.y * 0.12, 1.0));
+      base *= (0.88 + 0.22 * blot) * (1.0 - seam * 0.35) * (1.0 - (top ? 0.0 : streak * 0.12));
+      tRough = 0.9; tMetal = 0.0;
+    } else if (k == 4) {
+      // paving: 1 m slabs, each a slightly different tone
+      vec2 c = p / (top ? 1.0 : 0.5);
+      float seam = 1.0 - pane(c, vec2(0.025, 0.025));
+      base *= (0.9 + 0.16 * hash(vec3(floor(c), 1.0))) * (0.92 + 0.14 * blot) * (1.0 - seam * 0.45);
+      tRough = 0.82; tMetal = 0.0;
+    } else if (k == 5) {
+      // ribbed metal cladding
+      float r = sin(p.x * 15.7) * 0.5 + 0.5;
+      float fw = fwidth(p.x * 15.7);
+      r = mix(r, 0.5, smoothstep(0.6, 2.0, fw));
+      base *= top ? 0.95 : (0.8 + 0.3 * r);
+      base *= 0.94 + 0.1 * blot;
+      tRough = 0.38; tMetal = 0.65;
+    } else if (k == 6 && !top) {
+      // office facade: ribbon windows between concrete spandrels, mullions every 1.8 m, a few lit rooms
+      vec2 c = vec2(p.x / 1.8, p.y / 4.5);
+      float win = band(c.y, 0.24, 0.84) * pane(vec2(c.x, 0.5), vec2(0.05, 0.0));
+      float lit = step(0.8, hash(vec3(floor(c.x / 3.0), floor(c.y), 5.0)));
+      vec3 glass = mix(vec3(0.1, 0.13, 0.17), vec3(0.95, 0.85, 0.62), lit * 0.35);
+      base = mix(base * (0.9 + 0.15 * blot), glass, win);
+      tRough = mix(0.88, 0.06, win); tMetal = mix(0.0, 0.8, win);
+      tGlow = win * lit * 0.12;
+    } else if (k == 7) {
+      // asphalt / rubber
+      base *= 0.85 + 0.25 * noise(vWorld * 6.0) + 0.1 * blot;
+      tRough = 0.95; tMetal = 0.0;
+    } else if (k == 8) {
+      // seats with spectators: each 0.6 m seat is either empty (seat colour) or a fan in a random colour
+      vec2 c = top ? p / 0.6 : vec2(p.x / 0.6, p.y / 0.9);
+      vec2 cell = floor(c);
+      float h = hash(vec3(cell, 9.0));
+      vec3 fan = vec3(hash(vec3(cell, 1.0)), hash(vec3(cell, 2.0)), hash(vec3(cell, 4.0)));
+      fan = mix(vec3(0.85, 0.8, 0.75), fan, 0.75);
+      float person = pane(c, vec2(0.12, 0.1)) * step(0.32, h);
+      base = mix(base, fan, person * 0.85);
+      tRough = 0.85; tMetal = 0.0;
+    } else if (k == 9) {
+      // LED screen: tiny pixels, gently scrolling bands
+      vec2 c = p / 0.12;
+      float px = pane(c, vec2(0.18, 0.18));
+      float wave = 0.65 + 0.35 * sin(p.y * 0.8 + p.x * 0.15 + uCamPos.x * 0.0);
+      base = base * mix(0.35, 1.0, px) * wave;
+    }
+  } else if (uGrid > 0.5) {
     vec3 an = abs(n);
     vec2 p = an.y > 0.5 ? vWorld.xz : (an.x > 0.5 ? vWorld.zy : vWorld.xy);
     float minor = grid(p, 0.5, 1.0) * 0.1;
@@ -184,8 +268,8 @@ void main() {
   }
 
   // glossier when dark (metal, rubber), rougher when light (paint, concrete) -- unless the part has a material
-  float rough = uMat.y >= 0.0 ? uMat.y : mix(0.32, 0.82, smoothstep(0.02, 0.45, lum0));
-  float metal = uMat.x;
+  float rough = tRough >= 0.0 ? tRough : uMat.y >= 0.0 ? uMat.y : mix(0.32, 0.82, smoothstep(0.02, 0.45, lum0));
+  float metal = tMetal >= 0.0 ? tMetal : uMat.x;
   float specPow = 2.0 / max(rough * rough * rough * rough, 0.002) - 2.0;
   vec3 H = normalize(L + V);
   float ndh = max(dot(n, H), 0.0), vdh = max(dot(V, H), 0.0), ndv = max(dot(n, V), 0.0);
@@ -204,6 +288,7 @@ void main() {
   // rim light (used for characters in the showroom / arena)
   col += toLin(uRim) * pow(1.0 - max(dot(n, V), 0.0), 3.0) * 1.6;
   col = mix(col, toLin(uColor) * 2.2, uEmissive);
+  col += toLin(base) * tGlow * 2.0;
 
   vec3 display = toSrgb(aces(col * 0.85));
 
@@ -615,6 +700,6 @@ export class Renderer {
   }
 
   drawBox(b) {
-    this.draw(b.model, b.scale, b.color, b.grid ? 1 : 0, b.edges ? 1 : 0, b.emissive, b.alpha ?? 1, b.shape);
+    this.draw(b.model, b.scale, b.color, b.tex || (b.grid ? 1 : 0), b.edges ? 1 : 0, b.emissive, b.alpha ?? 1, b.shape, b.mat);
   }
 }

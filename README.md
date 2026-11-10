@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.18: the first tournament arena is open. PLAY drops you into Fortune Stadium, the semi-finals map.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
+**Build 0.19: Fortune Stadium rebuilt at full arena scale, with realistic materials, enterable multi-storey buildings and a 26-storey tower. PLAY drops you in.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
 
 ## Run it
 
@@ -136,24 +136,33 @@ Weapon skins (Crimson, Arctic, Desert Ops, Toxic, 24 Karat) recolour your guns e
 
 Your class sets your health, movement speed and starting guns in the test range. You get your chosen primary plus the pistol as a sidearm, or another class weapon if the pistol is your primary. Only your equipped specialisation works, and it's the only one shown on the HUD.
 
-## Fortune Stadium (build 0.18)
+## Fortune Stadium (build 0.19)
 
-The semi-finals arena. Six floating sectors hang over the void inside a stadium bowl, joined by bridges and launch pads. You spawn on a raised platform behind the arena, looking in, with the tower on your right.
+The semi-finals arena, at the scale of a real arena from The Finals: about 280 m × 180 m of play space, with six floating sectors over the void inside a full stadium bowl. Build 0.19 drops the white grid look here (that's only for the test range). Surfaces use realistic procedural materials: glass curtain walls, precast concrete, paving, ribbed metal, office facades with lit windows, asphalt, and crowd-filled seats. Every building can be entered, and every floor is reached by switchback stairs.
 
-| Sector | Colour | What's there |
-| --- | --- | --- |
-| 1 | Orange | A two-floor court building wrapped round an open-air court with hoops. Stairs up to the upper floor and the roof, a raised rooftop in the corner you can mantle up to, and a destructible wall on the far side |
-| 2 | Yellow | An open two-floor deck on pillars in front of the electric building (transformers, generators, a mezzanine and a destructible back wall) |
-| 3 | Teal | **The tower**: 48 m tall, with a lobby, glowing crown, balconies to grapple, and a cage lift up the outside to a rooftop helipad with an antenna. Beside it is a courtyard with planters, a fountain and a kiosk |
-| 4 | Magenta | The giant building: two floors round an open atrium, with a launch pad in the atrium that throws you onto the roof |
-| 5 | Blue | The vault: a steel strongroom with the cashout station inside (its light beam goes up through the roof), surrounded by open ground and cover |
-| 6 | Purple | The maze: one massive storey of tight corridors and small rooms, a destructible wall, and stairs up to the roof |
+You spawn on the team gate behind sector 2, looking in. The tower is on your right.
 
-**Getting around.** Bridges join 1–2, 2–3, 2–5, 5–4, 5–6 and 1–6, and a stair bridge runs from spawn into sector 2. Launch pads glow in their sector colour. Step on one and it throws you in an arc that lands on its target: spawn to the sector 1 rooftop, spawn to the tower courtyard, the tower to the sector 4 rooftop, and the sector 4 atrium to its roof. To ride the tower lift, stand by the bottom gate and it comes down, then step in.
+| Sector | What's there |
+| --- | --- |
+| 1 | **The court building.** A 4-storey brick ring wrapped round an outdoor basketball court with hoops, bleachers and floodlights. Rooms on every floor, windows onto the court, a billboard on the roof, and a 4-storey block on the corner for the high rooftop (36 m). A launch pad on the court throws you up to it |
+| 2 | **The electric building.** An open two-level deck on columns, with stairs up the front and a big double-height opening, leads by a footbridge into the electric building. Inside: a turbine hall with transformers, tanks and switchgear, a mezzanine, a control room with server racks, and a light well. More transformers stand in the yard outside |
+| 3 | **The tower.** 26 storeys of glass (117 m to the roof, about 160 m to the tip of the antenna). Every floor has apartments round a concrete core, stairs all the way up, and balconies every few floors on the spawn side and the courtyard side. On top: a helipad, a steel crown with lit ring frames, and a launch pad that throws you down onto sector 4's roof. An outside lift runs from the courtyard to the roof. Beside it is a courtyard with a fountain, trees and a café with a roof terrace |
+| 4 | **The giant building.** 5 storeys round an open atrium, with balconies on every floor looking into it and a launch pad in the middle that throws you onto the roof. Offices and rooms in all four wings, glass corner towers, and a huge LED billboard on the roof |
+| 5 | **The vault.** A stone bank with a columned portico. Inside is a double-height banking hall and a steel vault with its door open and the cashout station inside; its beam rises through the roof. Offices sit upstairs. It's surrounded by open ground with cover, an armoured truck and a statue |
+| 6 | **The maze.** A massive 3-storey block of tight corridors and small rooms: two crossing corridors with a door into every room, and room walls that are a different maze on each floor |
+
+**Getting around.** Steel bridges join 1–2, 2–3, 2–5, 5–4, 5–6 and 1–6, and one runs from the spawn into sector 2. Launch pads aim their arc so you land on the target:
+- spawn → sector 1 roof
+- spawn → the tower courtyard
+- sector 1 court → the high rooftop
+- sector 4 atrium → its roof
+- tower roof → sector 4 roof
+
+To ride the tower lift, stand by its bottom gate in the courtyard (or by the top gate on the roof) and it comes to you.
 
 **The void.** Fall off a sector and you're out: the screen fades and you're back at the spawn.
 
-**The stadium.** Tiered stands with a crowd in sector colours, LED ribbon boards, a roof canopy with floodlight strips, floodlight masts in the corners, a centre-hung scoreboard, and a giant hologram trophy floating between the rows. There are target dummies on every sector. Bots come later.
+**The stadium.** 22 tiers of seats packed with fans on all four sides, LED ribbon boards, glass hospitality boxes, a roof canopy with floodlights round its edge, giant screens at both ends, a centre-hung scoreboard, and Fortune Stadium's floating holographic sneaker bobbing over the middle. Training dummies are spread over every sector and up the tower, and there are destructible walls in sectors 1, 4 and 6 and the tower lobby.
 
 ## Underground arena
 
@@ -278,7 +287,7 @@ src/maps/testRange.js the test range (data + build function), incl. the parkour 
 src/maps/fortuneStadium.js the semi-finals arena: six floating sectors, the tower, the stadium bowl
 ```
 
-To add a map, copy `src/maps/fortuneStadium.js` and change the boxes. Each map defines `spawn`, `build(world)`, `dummies` and `walls`. Arenas live far from the range (Fortune Stadium is 700 m away and 60 m up), and boxes beyond the fog are skipped when drawing.
+To add a map, copy `src/maps/fortuneStadium.js` and change the boxes. Each map defines `spawn`, `build(world)`, `dummies` and `walls`. Arenas live far from the range (Fortune Stadium is 700 m away and 63 m up). Only the place you're in is drawn, and boxes outside the view or beyond the fog are skipped. The stadium file has helpers for facades with holes (`panel`, `walls4`), slabs with holes (`slab`), switchback stair cores (`stairCore`) and whole buildings (`building`).
 
 ## Roadmap
 

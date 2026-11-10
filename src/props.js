@@ -4,20 +4,39 @@ import { compose, mat4 } from './math.js';
 import { makeBox, moveBoxTo } from './world.js';
 
 const RED = [0.92, 0.1, 0.08];
-const RED_HEAD = [1, 0.22, 0.16];
 
-// Dummy parts relative to its feet: [center, size, color]
-const RED_DARK2 = [0.5, 0.07, 0.06];
+// Crash-test style training dummy on a steel stand. Parts relative to its feet: centre, size, colour.
+const YEL = [0.98, 0.76, 0.12];      // painted body shells
+const BLK = [0.09, 0.09, 0.1];       // rubber joints
+const GRY = [0.32, 0.33, 0.36];
+const STL = [0.55, 0.56, 0.6];
+// faces +z (toward the firing line in the range)
+const P = (c, s, col, shape, mat, head = false) => ({ c: [c[0], c[1], -c[2]], s, col, shape, mat, head });
 const DUMMY = [
-  { c: [-0.11, 0.42, 0], s: [0.17, 0.84, 0.2], col: RED, shape: 0.08 },              // legs
-  { c: [0.11, 0.42, 0], s: [0.17, 0.84, 0.2], col: RED, shape: 0.08 },
-  { c: [0, 0.86, 0], s: [0.4, 0.2, 0.24], col: RED_DARK2, shape: 0.09 },            // hips
-  { c: [0, 1.17, 0], s: [0.52, 0.48, 0.28], col: RED, shape: 0.14 },                // chest
-  { c: [0, 1.17, -0.13], s: [0.3, 0.28, 0.06], col: RED_HEAD, shape: 0.03 },        // chest target plate
-  { c: [-0.32, 1.15, 0], s: [0.12, 0.44, 0.14], col: RED_DARK2, shape: 0.06 },      // arms
-  { c: [0.32, 1.15, 0], s: [0.12, 0.44, 0.14], col: RED_DARK2, shape: 0.06 },
-  { c: [0, 1.62, 0], s: [0.27, 0.31, 0.28], col: RED_HEAD, head: true, shape: 'sphere' },
-  { c: [0, 1.63, -0.005], s: [0.285, 0.07, 0.295], col: [0.25, 0.04, 0.03], head: true, shape: 0.035 },   // visor band
+  P([0, 0.025, 0.12], [0.62, 0.05, 0.52], GRY, 0.02, 'metal'),                 // stand base
+  P([0, 0.62, 0.2], [0.05, 1.2, 0.05], STL, 'cyl', 'steel'),                   // stand pole
+  P([0, 1.2, 0.16], [0.16, 0.08, 0.06], GRY, 0.02, 'metal'),                   // back clamp
+  ...[-1, 1].flatMap((s) => [
+    P([s * 0.11, 0.05, -0.04], [0.12, 0.1, 0.27], BLK, 0.04, 'rubber'),        // boot
+    P([s * 0.11, 0.32, 0], [0.13, 0.44, 0.14], YEL, 0.06, 'paint'),           // shin
+    P([s * 0.11, 0.56, 0], [0.15, 0.13, 0.15], BLK, 'sphere', 'rubber'),       // knee
+    P([s * 0.11, 0.79, 0], [0.17, 0.4, 0.18], YEL, 0.07, 'paint'),            // thigh
+    P([s * 0.27, 1.47, 0], [0.15, 0.15, 0.15], BLK, 'sphere', 'rubber'),       // shoulder
+    P([s * 0.3, 1.29, 0], [0.11, 0.3, 0.12], YEL, 0.05, 'paint'),             // upper arm
+    P([s * 0.31, 1.13, 0], [0.1, 0.09, 0.1], BLK, 'sphere', 'rubber'),         // elbow
+    P([s * 0.31, 0.99, -0.03], [0.095, 0.26, 0.1], YEL, 0.045, 'paint'),      // forearm
+    P([s * 0.31, 0.82, -0.03], [0.08, 0.12, 0.09], BLK, 0.03, 'rubber'),       // hand
+    P([s * 0.123, 1.77, 0], [0.01, 0.09, 0.09], BLK, 0.004, 'rubber', true),   // head target marks
+    P([s * 0.124, 1.77, 0], [0.01, 0.045, 0.045], YEL, 0.002, 'paint', true),
+  ]),
+  P([0, 1.0, 0], [0.38, 0.2, 0.22], BLK, 0.08, 'rubber'),                      // pelvis
+  P([0, 1.15, 0], [0.3, 0.16, 0.2], GRY, 0.07, 'rubber'),                      // abdomen
+  P([0, 1.37, 0], [0.45, 0.34, 0.25], YEL, 0.11, 'paint'),                     // chest
+  P([0, 1.39, -0.127], [0.13, 0.13, 0.01], BLK, 0.005, 'rubber'),              // chest target
+  P([0, 1.39, -0.132], [0.065, 0.065, 0.01], YEL, 0.003, 'paint'),
+  P([0, 1.6, 0], [0.1, 0.1, 0.1], BLK, 'cyl', 'rubber', true),                 // neck
+  P([0, 1.77, 0], [0.24, 0.27, 0.25], YEL, 'sphere', 'paint', true),           // head
+  P([0, 1.79, -0.11], [0.15, 0.04, 0.05], BLK, 0.015, 'rubber', true),         // brow line
 ];
 
 export class Dummy {
@@ -39,7 +58,7 @@ export class Dummy {
     this.hp = 100;
     this.flash = 0;
     this.boxes = DUMMY.map((p) => this.world.add(makeBox([0, 0, 0], p.s, {
-      color: [...p.col], grid: false, emissive: 0.18, tag: 'dummy', ref: this, shape: p.shape,
+      color: [...p.col], grid: false, edges: false, emissive: 0, tag: 'dummy', ref: this, shape: p.shape, mat: p.mat,
     })));
     this.boxes.forEach((b, i) => { b.head = !!DUMMY[i].head; });
     this.place();
@@ -84,7 +103,7 @@ export class Dummy {
     this.boxes.forEach((b, i) => {
       const col = DUMMY[i].col;
       for (let k = 0; k < 3; k++) b.color[k] = col[k] + (1 - col[k]) * f * 0.85;
-      b.emissive = f ? 0.9 : 0.18;
+      b.emissive = f ? 0.9 : 0;
     });
     if (this.move) {
       const m = this.move;
@@ -105,9 +124,9 @@ export class Dummy {
 // to the ground collapses.
 export class DestructibleWall {
   // origin = min corner. Runs along +X (axis 0) or +Z (axis 2).
-  constructor(world, effects, origin, { cols = 12, rows = 6, chunk = 0.5, thick = 0.35, axis = 0 } = {}) {
+  constructor(world, effects, origin, { cols = 12, rows = 6, chunk = 0.5, thick = 0.35, axis = 0, color = null } = {}) {
     Object.assign(this, { world, effects, origin, cols, rows, chunk, thick, axis });
-    this.color = [0.9, 0.9, 0.92];
+    this.color = color || [0.9, 0.9, 0.92];
     this.cells = [];
     this.build();
   }

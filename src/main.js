@@ -65,7 +65,7 @@ player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
 const elevator = new Elevator(world, map.elevator);
 const towerLift = new Elevator(world, stadium.lift);   // glass-free cage lift up the tower in sector 3
-towerLift.dur = 7;
+towerLift.dur = stadium.liftDur || 7;
 let where = 'range';       // 'range' or 'stadium'
 const inStadium = () => where === 'stadium';
 let padCd = 0, voidT = 0;
@@ -1226,6 +1226,12 @@ function launch(pad) {
   padCd = 0.6;
 }
 function updateStadium(dt) {
+  const shoe = stadium.refs?.shoe;
+  if (shoe) {
+    if (!shoe.base) shoe.base = shoe.map((b) => [...b.center]);
+    const bob = Math.sin(time * 0.7) * 1.2;
+    shoe.forEach((b, i) => moveBoxTo(b, [shoe.base[i][0], shoe.base[i][1] + bob, shoe.base[i][2]]));
+  }
   padCd -= dt;
   if (padCd <= 0 && player.grounded) {
     for (const p of stadium.pads) {
@@ -1334,17 +1340,36 @@ function frame(now) {
 
   // shadow pass
   // keep the sun's shadow map centred on the player so the annex gets shadows too
-  const sc = [Math.round(player.pos[0] / 8) * 8, Math.round(player.pos[1] / 8) * 8, Math.round(player.pos[2] / 8) * 8];
-  renderer.setShadowArea(sc, 50);
-  const fogD = inStadium() ? stadium.fog : 0.0095;
-  const farCull = 2.4 / fogD;           // past this the fog has swallowed everything
-  const far = (b, c, lim) => {
-    const dx = b.center[0] - c[0], dy = b.center[1] - c[1], dz = b.center[2] - c[2];
-    const r = 0.5 * Math.hypot(b.scale[0], b.scale[1], b.scale[2]);
-    return dx * dx + dy * dy + dz * dz > (lim + r) * (lim + r);
+  // only draw the place you're in (the range or the stadium), and only what the camera can see
+  const st = inStadium(), SA = stadium.area;
+  const zoneOk = (b) => {
+    const c = b.center;
+    return (c[0] > SA.min[0] && c[0] < SA.max[0] && c[1] > SA.min[1] && c[1] < SA.max[1] && c[2] > SA.min[2] && c[2] < SA.max[2]) === st;
   };
+  const shadowHalf = st ? stadium.shadowHalf : 50;
+  const sc = [Math.round(player.pos[0] / 8) * 8, Math.round(player.pos[1] / 8) * 8, Math.round(player.pos[2] / 8) * 8];
+  renderer.setShadowArea(sc, shadowHalf);
+  const fogD = st ? stadium.fog : 0.0095;
+  const farCull = 2.4 / fogD;           // past this the fog has swallowed everything
+  const radius = (b) => 0.5 * Math.hypot(b.scale[0], b.scale[1], b.scale[2]);
+  const nearShadow = (b) => {
+    const dx = b.center[0] - sc[0], dy = b.center[1] - sc[1], dz = b.center[2] - sc[2], lim = shadowHalf * 1.5 + radius(b);
+    return dx * dx + dy * dy + dz * dz < lim * lim;
+  };
+  const tv = Math.tan(vfov / 2), kf = Math.hypot(tv, tv * aspect), kr = Math.sqrt(1 + kf * kf);
+  const inView = (b) => {
+    const r = radius(b);
+    const dx = b.center[0] - camEye[0], dy = b.center[1] - camEye[1], dz = b.center[2] - camEye[2];
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > (farCull + r) * (farCull + r)) return false;
+    const al = dx * camFwd[0] + dy * camFwd[1] + dz * camFwd[2];
+    if (al < -r) return false;
+    if (Math.sqrt(Math.max(0, d2 - al * al)) > al * kf + r * kr) return false;
+    return !!b.tag || r > 0.0022 * Math.sqrt(d2);     // skip tiny props far away (never targets)
+  };
+  const live = world.boxes.filter((b) => !b.hidden && zoneOk(b));
   renderer.beginShadow();
-  for (const b of world.boxes) if (!b.noShadow && !b.hidden && !far(b, sc, 80)) renderer.shadowDraw(b.model, b.shape, b.scale);
+  for (const b of live) if (!b.noShadow && nearShadow(b)) renderer.shadowDraw(b.model, b.shape, b.scale);
   for (const p of caseParts) renderer.shadowDraw(p.model, p.shape, p.scale);
   effects.drawShadows(renderer);
   for (const p of botParts) renderer.shadowDraw(p.model, p.shape, p.scale);
@@ -1355,7 +1380,7 @@ function frame(now) {
   renderer.setCamera(proj, view, fogD, camEye, true);
   renderer.drawSky(camEye);
   renderer.setBlend(false);
-  const vis = world.boxes.filter((b) => !b.hidden && !far(b, camEye, farCull));
+  const vis = live.filter(inView);
   for (const b of vis) if (b.alpha >= 1) renderer.drawBox(b);
   for (const p of caseParts) renderer.drawPart(p);
   effects.drawOpaque(renderer);

@@ -19,6 +19,8 @@ export function makeBox(min, max, o = {}) {
     noShadow: !!o.noShadow,       // doesn't cast shadows
     hidden: !!o.hidden,           // collision / hitbox only, never drawn
     shape: o.shape,               // undefined = box, number = rounded edges (m), 'sphere', 'cyl'
+    tex: o.tex || 0,              // procedural surface: 2 glass, 3 concrete, 4 paving, 5 metal, 6 office facade, 7 asphalt, 8 seats, 9 LED
+    mat: o.mat,                   // material name or [metalness, roughness]
     tag: o.tag || null,
     ref: o.ref || null,
     model: new Float32Array(16),
