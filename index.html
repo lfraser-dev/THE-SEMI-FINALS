@@ -462,7 +462,7 @@
 
   /* ---------- cashout HUD ---------- */
   #objective { position: absolute; top: 122px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
-  #objective b { display: block; font: 800 italic 30px var(--font); letter-spacing: .02em; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45), 0 0 18px rgba(0,0,0,.35); }
+  #objective b { display: block; white-space: nowrap; font: 800 italic 28px var(--font); letter-spacing: .02em; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45), 0 0 18px rgba(0,0,0,.35); }
   #objective span { display: inline-block; margin-top: 2px; font: 800 13px var(--font); letter-spacing: .22em; color: #fff; background: rgba(17,18,22,.75); padding: 3px 12px; }
   #objective span:empty { display: none; }
   #objective i { --p: 0; display: block; width: 240px; height: 6px; margin: 6px auto 0; background: linear-gradient(90deg, #ffd04a calc(var(--p) * 100%), rgba(255,255,255,.2) 0); transition: opacity .2s; }
@@ -561,10 +561,10 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.23</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.24</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
-        <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · SKY DOCKS</span>
+        <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · CONTAINER SHIP</span>
       </button>
       <button class="mm-card mm-range" id="play" type="button">
         <b>TEST RANGE</b><span id="mm-range-sub">GUNS · MOVEMENT · PARKOUR · BOTS</span><i>▶</i>
@@ -669,37 +669,37 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.23-1794327022",
-  "./src/audio.js": "./src/audio.js?v=0.23-1794327022",
-  "./src/bench.js": "./src/bench.js?v=0.23-1794327022",
-  "./src/bots.js": "./src/bots.js?v=0.23-1794327022",
-  "./src/cargo.js": "./src/cargo.js?v=0.23-1794327022",
-  "./src/cashout.js": "./src/cashout.js?v=0.23-1794327022",
-  "./src/classes.js": "./src/classes.js?v=0.23-1794327022",
-  "./src/contestant.js": "./src/contestant.js?v=0.23-1794327022",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.23-1794327022",
-  "./src/course.js": "./src/course.js?v=0.23-1794327022",
-  "./src/effects.js": "./src/effects.js?v=0.23-1794327022",
-  "./src/elevator.js": "./src/elevator.js?v=0.23-1794327022",
-  "./src/input.js": "./src/input.js?v=0.23-1794327022",
-  "./src/lift.js": "./src/lift.js?v=0.23-1794327022",
-  "./src/main.js": "./src/main.js?v=0.23-1794327022",
-  "./src/maps/skyDocks.js": "./src/maps/skyDocks.js?v=0.23-1794327022",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.23-1794327022",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.23-1794327022",
-  "./src/math.js": "./src/math.js?v=0.23-1794327022",
-  "./src/nav.js": "./src/nav.js?v=0.23-1794327022",
-  "./src/player.js": "./src/player.js?v=0.23-1794327022",
-  "./src/props.js": "./src/props.js?v=0.23-1794327022",
-  "./src/renderer.js": "./src/renderer.js?v=0.23-1794327022",
-  "./src/rig.js": "./src/rig.js?v=0.23-1794327022",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.23-1794327022",
-  "./src/weapon.js": "./src/weapon.js?v=0.23-1794327022",
-  "./src/weapons.js": "./src/weapons.js?v=0.23-1794327022",
-  "./src/world.js": "./src/world.js?v=0.23-1794327022"
+  "./src/attachments.js": "./src/attachments.js?v=0.24-1794328426",
+  "./src/audio.js": "./src/audio.js?v=0.24-1794328426",
+  "./src/bench.js": "./src/bench.js?v=0.24-1794328426",
+  "./src/bots.js": "./src/bots.js?v=0.24-1794328426",
+  "./src/cargo.js": "./src/cargo.js?v=0.24-1794328426",
+  "./src/cashout.js": "./src/cashout.js?v=0.24-1794328426",
+  "./src/classes.js": "./src/classes.js?v=0.24-1794328426",
+  "./src/contestant.js": "./src/contestant.js?v=0.24-1794328426",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.24-1794328426",
+  "./src/course.js": "./src/course.js?v=0.24-1794328426",
+  "./src/effects.js": "./src/effects.js?v=0.24-1794328426",
+  "./src/elevator.js": "./src/elevator.js?v=0.24-1794328426",
+  "./src/input.js": "./src/input.js?v=0.24-1794328426",
+  "./src/lift.js": "./src/lift.js?v=0.24-1794328426",
+  "./src/main.js": "./src/main.js?v=0.24-1794328426",
+  "./src/maps/containerShip.js": "./src/maps/containerShip.js?v=0.24-1794328426",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.24-1794328426",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.24-1794328426",
+  "./src/math.js": "./src/math.js?v=0.24-1794328426",
+  "./src/nav.js": "./src/nav.js?v=0.24-1794328426",
+  "./src/player.js": "./src/player.js?v=0.24-1794328426",
+  "./src/props.js": "./src/props.js?v=0.24-1794328426",
+  "./src/renderer.js": "./src/renderer.js?v=0.24-1794328426",
+  "./src/rig.js": "./src/rig.js?v=0.24-1794328426",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.24-1794328426",
+  "./src/weapon.js": "./src/weapon.js?v=0.24-1794328426",
+  "./src/weapons.js": "./src/weapons.js?v=0.24-1794328426",
+  "./src/world.js": "./src/world.js?v=0.24-1794328426"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.23-1794327022"></script>
+<script type="module" src="src/main.js?v=0.24-1794328426"></script>
 </body>
 </html>

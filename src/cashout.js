@@ -6,8 +6,9 @@
 import { Bot, teamPalette } from './bots.js';
 import { Nav } from './nav.js';
 import { compose, mat4, clamp } from './math.js';
+import { moveBoxTo } from './world.js';
 
-export const CASH_TIME = 45, LOCK_TIME = 30, STEAL_TIME = 4, PRIZE = 1000, GOAL = 2000;
+export const CASH_TIME = 45, LOCK_TIME = 30, STEAL_TIME = 5, PRIZE = 1000, GOAL = 2000;
 const BOT_RESPAWN = 8, ROUND_GAP = 6;
 const TYPE_OF = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -81,11 +82,18 @@ class Agent {
     }
     this.animate(dt);
 
-    // ---- what am I doing?
+    // ---- health: hurt recently? heal up after 5 s out of the fight
+    if (this.lastHp == null) this.lastHp = b.hp;
+    if (b.hp < this.lastHp - 0.01) this.hurtT = 0; else this.hurtT = (this.hurtT ?? 9) + dt;
+    if (this.hurtT > 5 && b.hp < b.maxHp) b.hp = Math.min(b.maxHp, b.hp + 30 * dt);
+    this.lastHp = b.hp;
+    const carrying = co.box.carrier === this;
+
+    // ---- what am I doing? (badly hurt: fall back to my team to heal, unless I'm carrying the box)
     this.goalT -= dt;
     if (this.goalT <= 0) {
       this.goalT = 0.4 + Math.random() * 0.3;
-      const ng = co.goalFor(this);
+      const ng = this.hpFrac < 0.3 && this.hurtT < 6 && !carrying ? co.retreatGoal(this) : co.goalFor(this);
       if (!this.goal || !ng || dist2(ng.pos, this.goal.pos) > 2.5 || Math.abs(ng.pos[1] - this.goal.pos[1]) > 1 || ng.mode !== this.goal.mode) { this.goal = ng; this.repathT = 0; }
       else this.goal.pos = ng.pos;
     }
@@ -99,42 +107,66 @@ class Agent {
       this.seg = null;
     }
 
-    // ---- who am I shooting?
+    // ---- who am I shooting? the box carrier first, then whoever's stealing our cashout, then the closest threat
     this.targetT -= dt;
     if (this.targetT <= 0) {
-      this.targetT = 0.25 + Math.random() * 0.15;
+      this.targetT = 0.22 + Math.random() * 0.12;
+      const prev = this.target;
       this.target = null;
       let best = 1e9;
+      const st = co.box.state === 'deposited' ? co.box.station : null;
       for (const e of co.entities()) {
         if (e.team === this.team || !e.alive) continue;
         const d = Math.hypot(e.pos[0] - b.pos[0], e.pos[1] - b.pos[1], e.pos[2] - b.pos[2]);
-        if (d > 46 || d > best) continue;
+        if (d > 48) continue;
+        let score = d;
+        if (co.box.carrier === e) score -= 22;
+        if (st && st.owner === this.team.idx && near(e.pos, st.pos, 4)) score -= 18;
+        if (e === prev) score -= 6;                                  // stick with a target
+        if (!e.isPlayer && e.hpFrac < 0.4) score -= 5;                // finish off the wounded
+        if (score > best) continue;
         if (!b.canSee(b.eye(), e.eye(), e.isPlayer ? null : e.bot)) continue;
-        best = d; this.target = e;
+        best = score; this.target = e;
       }
+      if (this.target !== prev) { this.react = 0.22 + Math.random() * 0.3; this.track = 0; this.cover = null; }
     }
     const tgt = this.target && this.target.alive ? this.target : null;
     const tDist = tgt ? Math.hypot(tgt.pos[0] - b.pos[0], tgt.pos[2] - b.pos[2]) : 0;
+    this.react = Math.max(0, (this.react || 0) - dt);
+    this.track = tgt ? Math.min(1.5, (this.track || 0) + dt) : 0;
 
-    // ---- move: follow the path; hold and strafe in a fight unless the objective can't wait
+    // ---- move: follow the path; in a fight, duck into cover between bursts and strafe while shooting
     const urgent = this.goal && (this.goal.mode === 'carry' || this.goal.mode === 'steal' || this.goal.mode === 'grab');
-    const [lo, hi] = b.t.range;
-    const carrying = co.box.carrier === this;
+    const [, hi] = b.t.range;
     let speed = b.t.speed * (carrying ? 0.85 : 1);
     let moved = 0;
     const atGoal = this.goal && dist2(b.pos, this.goal.pos) < (this.goal.r || 1.2) && Math.abs(b.pos[1] - this.goal.pos[1]) < 1.5;
-    if (tgt && !urgent && tDist < hi * 1.4) {
-      // fighting: strafe sideways, keep my height
-      const dx = tgt.pos[0] - b.pos[0], dz = tgt.pos[2] - b.pos[2], l = Math.hypot(dx, dz) || 1;
-      const sx = -dz / l * this.strafe, sz = dx / l * this.strafe;
-      const st = b.t.speed * 0.55 * dt;
-      const nx = [b.pos[0] + sx * st, b.pos[1], b.pos[2] + sz * st];
-      if (!b.blocked(nx) && co.world.pointInside([nx[0], nx[1] - 0.06, nx[2]])) { b.pos[0] = nx[0]; b.pos[2] = nx[2]; moved = st; }
-      else this.strafe *= -1;
-      if (Math.random() < dt * 0.6) this.strafe *= -1;
+    const stepTo = (tx, tz, sp) => {
+      const dx = tx - b.pos[0], dz = tz - b.pos[2], l = Math.hypot(dx, dz);
+      if (l < 0.05) return 0;
+      const st = Math.min(l, sp * dt);
+      const nx = [b.pos[0] + dx / l * st, b.pos[1], b.pos[2] + dz / l * st];
+      if (b.blocked(nx) || !co.world.firstOverlap([nx[0] - 0.08, nx[1] - 0.12, nx[2] - 0.08], [nx[0] + 0.08, nx[1] - 0.03, nx[2] + 0.08])) return -1;
+      b.pos[0] = nx[0]; b.pos[2] = nx[2];
+      return st;
+    };
+    if (tgt && !urgent && tDist < hi * 1.5) {
+      const wantCover = this.pauseCd > 0.35 || this.hpFrac < 0.5;
+      if (wantCover && !this.cover) this.cover = co.findCover(this, tgt) || { none: true };
+      if (!wantCover) this.cover = null;
+      if (this.cover && !this.cover.none) {
+        const r = stepTo(this.cover.pos[0], this.cover.pos[2], b.t.speed);
+        if (r < 0) this.cover = { none: true }; else moved = r;
+      } else {
+        // strafe sideways round the target
+        const dx = tgt.pos[0] - b.pos[0], dz = tgt.pos[2] - b.pos[2], l = Math.hypot(dx, dz) || 1;
+        const r = stepTo(b.pos[0] - dz / l * this.strafe, b.pos[2] + dx / l * this.strafe, b.t.speed * 0.6);
+        if (r < 0) this.strafe *= -1; else moved = r;
+        if (Math.random() < dt * 0.7) this.strafe *= -1;
+      }
       this.repathT = Math.min(this.repathT, 0.5);
     } else if (this.path && this.pi < this.path.length && !atGoal) {
-      if (tgt) speed *= 0.75;
+      if (tgt) speed *= 0.8;
       moved = this.follow(dt, speed);
     }
     b.moving += ((moved > 0.001 ? 1 : 0) - b.moving) * Math.min(1, dt * 8);
@@ -150,15 +182,16 @@ class Agent {
     let dy = want - b.yaw;
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
-    b.yaw += dy * Math.min(1, dt * 7);
+    b.yaw += dy * Math.min(1, dt * 8);
     if (tgt) {
       const pe = tgt.eye();
       b.aimPitch += (Math.atan2(pe[1] - (b.pos[1] + 1.4 * b.sc), Math.max(tDist, 0.5)) - b.aimPitch) * Math.min(1, dt * 6);
     } else b.aimPitch *= Math.exp(-4 * dt);
 
-    // ---- shoot in bursts
+    // ---- shoot in bursts, after a moment to react; not from inside cover
     this.shotCd -= dt; this.pauseCd -= dt;
-    if (tgt && tDist < 46 && Math.abs(dy) < 0.5) {
+    const inCover = this.cover && !this.cover.none && dist2(b.pos, this.cover.pos) < 0.4;
+    if (tgt && tDist < 48 && Math.abs(dy) < 0.45 && this.react <= 0 && !inCover) {
       if (this.burst <= 0 && this.pauseCd <= 0) { const [a, c] = b.t.burst; this.burst = a + Math.floor(Math.random() * (c - a + 1)); }
       if (this.burst > 0 && this.shotCd <= 0) {
         this.shotCd = 60 / b.t.rpm;
@@ -210,6 +243,7 @@ class Agent {
     } else {
       chance = (0.4 - Math.max(0, dist - 6) * 0.012) * b.t.acc;
     }
+    chance *= 0.55 + 0.45 * Math.min(1, (this.track || 0) / 1.2);      // the longer they track you, the better they shoot
     chance = clamp(chance, 0.04, 0.85);
     let end;
     if (Math.random() < chance) {
@@ -305,12 +339,15 @@ export class Cashout {
     if (this.over) return { pos: a.pos, mode: 'idle' };
     if (box.state === 'none') return { pos: ring(this.vaults[this.vaultIdx]?.pos || a.pos, 4), mode: 'idle' };
     if (box.carrier === a) {
-      const st = this.bestStation(a.pos);
+      const st = this.bestStation(a.pos, a.team);                  // the station with the fewest enemies about
       return st ? { pos: st.pos, mode: 'carry', r: 1.4 } : { pos: a.pos, mode: 'idle' };
     }
     if (box.state === 'deposited') {
       const st = box.station;
-      if (st.owner === team.idx) return { pos: ring(st.pos, 3.5 + a.slot), mode: 'defend', r: 1.5 };
+      if (st.owner === team.idx) return { pos: ring(st.pos, 4 + a.slot * 1.5), mode: 'defend', r: 1.5 };
+      // wait for the squad before pushing a steal, unless time's running out
+      const mates = this.agents.filter((o) => o !== a && o.team === team && o.alive && dist2(o.pos, st.pos) < 16).length + (this.you.team === team && this.you.alive && dist2(this.you.pos, st.pos) < 16 ? 1 : 0);
+      if (st.t > 14 && mates < 1 && dist2(a.pos, st.pos) < 22) return { pos: ring(st.pos, 13), mode: 'stage', r: 2 };
       return { pos: st.pos, mode: 'steal', r: 1.2 };
     }
     if (box.carrier) {
@@ -321,11 +358,45 @@ export class Cashout {
     return { pos: box.pos, mode: 'grab', r: 0.8 };
   }
 
-  bestStation(p) {
+  // a nearby spot the target can't see from (for ducking out of a fight between bursts)
+  findCover(a, tgt) {
+    const nav = this.nav, b = a.bot, te = tgt.eye();
+    let best = null, bs = Infinity;
+    const ids = nav.around(b.pos, 7);
+    for (let k = 0; k < Math.min(ids.length, 22); k++) {
+      const n = ids[(k * 7 + a.slot) % ids.length];
+      const p = nav.point(n);
+      const d = dist2(p, b.pos);
+      if (d < 1 || d > 7) continue;
+      if (b.canSee([p[0], p[1] + 1.5 * b.sc, p[2]], te, tgt.isPlayer ? null : tgt.bot)) continue;
+      const sc = d + Math.random() * 1.5;
+      if (sc < bs) { bs = sc; best = { pos: p }; }
+    }
+    return best;
+  }
+
+  // badly hurt: back to the nearest teammate (or my spawn) to heal
+  retreatGoal(a) {
+    let best = null, bd = Infinity;
+    for (const o of this.agents) {
+      if (o === a || o.team !== a.team || !o.alive) continue;
+      const d = dist2(o.pos, a.pos);
+      if (d > 4 && d < bd) { bd = d; best = o.pos; }
+    }
+    return { pos: best ? [...best] : [...a.team.spawn.pos], mode: 'retreat', r: 2.5 };
+  }
+
+  enemiesNear(p, team, r) {
+    let n = 0;
+    for (const e of this.entities()) if (e.alive && e.team !== team && dist2(e.pos, p) < r) n++;
+    return n;
+  }
+
+  bestStation(p, team = null) {
     let best = null, bd = Infinity;
     for (const s of this.stations) {
       if (!s.active || s.owner != null) continue;
-      const d = Math.hypot(s.pos[0] - p[0], (s.pos[1] - p[1]) * 3, s.pos[2] - p[2]);
+      const d = Math.hypot(s.pos[0] - p[0], (s.pos[1] - p[1]) * 3, s.pos[2] - p[2]) + (team ? this.enemiesNear(s.pos, team, 16) * 25 : 0);
       if (d < bd) { bd = d; best = s; }
     }
     return best;
@@ -334,7 +405,7 @@ export class Cashout {
   // bots pick up / deposit automatically
   tryInteract(a) {
     const box = this.box;
-    if ((box.state === 'ready' || box.state === 'dropped') && near(a.pos, box.pos, 2.5)) this.pickUp(a);
+    if ((box.state === 'ready' || box.state === 'dropped') && near(a.pos, box.pos, 2.5, 2.9)) this.pickUp(a);
     else if (box.carrier === a) {
       const st = this.bestStation(a.pos);
       if (st && near(a.pos, st.pos, 2.2)) this.deposit(a, st);
@@ -345,8 +416,8 @@ export class Cashout {
   playerAction(dry = false) {
     if (!this.active || this.over || !this.you.alive) return null;
     const box = this.box, p = this.player.pos;
-    if ((box.state === 'ready' || box.state === 'dropped') && near(p, box.pos, 2.2)) { if (!dry) this.pickUp(this.you); return 'pickup'; }
-    if (box.state === 'locked' && near(p, box.pos, 2.4)) return 'locked';
+    if ((box.state === 'ready' || box.state === 'dropped') && near(p, box.pos, 2.4, 2.9)) { if (!dry) this.pickUp(this.you); return 'pickup'; }
+    if (box.state === 'locked' && near(p, box.pos, 2.6, 2.9)) return 'locked';
     if (box.carrier === this.you) {
       const st = this.bestStation(p);
       if (st && near(p, st.pos, 2.6)) { if (!dry) this.deposit(this.you, st); return 'deposit'; }
@@ -368,7 +439,7 @@ export class Cashout {
     box.state = 'deposited';
     box.carrier = null;
     box.station = st;
-    box.pos = [st.pos[0], st.pos[1] + 1.43, st.pos[2]];
+    box.pos = [st.pos[0], st.pos[1] + (st.slot ?? 1.43), st.pos[2]];
     st.owner = e.team.idx;
     st.t = CASH_TIME;
     st.steal = null;
@@ -411,13 +482,16 @@ export class Cashout {
         if (e.isPlayer && !holdE) continue;
         thief = e; break;
       }
-      if (thief) {
+      // a defender standing on the station blocks the steal
+      const contested = thief && this.entities().some((e) => e.alive && e.team.idx === st.owner && near(e.pos, st.pos, 3.2));
+      if (thief && contested) { if (st.steal) st.steal.grace = 0.5; }
+      else if (thief) {
         if (!st.steal || st.steal.team !== thief.team.idx) st.steal = { team: thief.team.idx, t: 0, who: thief };
         st.steal.t += dt;
         st.steal.grace = 0.5;
         if (st.steal.t >= STEAL_TIME) {
           st.owner = thief.team.idx;
-          st.t = Math.max(st.t, 15);
+          st.t = Math.max(st.t, 8);
           this.events.push({ type: 'steal', team: thief.team, who: thief });
           st.steal = null;
           this.paintStations();
@@ -447,6 +521,8 @@ export class Cashout {
     }
     // station lights
     const pulse = 0.55 + 0.35 * Math.sin(performance.now() * 0.006);
+    const bob = Math.sin(performance.now() * 0.002) * 0.12;
+    for (const s of this.stations) for (const h of s.holo || []) { if (!h.base) h.base = [...h.center]; moveBoxTo(h, [h.base[0], h.base[1] + bob, h.base[2]]); }
     for (const s of this.stations) {
       if (s.owner != null) { s.beam.alpha = 0.3; s.ring.emissive = 1; }
       else if (s.active) { s.ring.emissive = pulse; s.top.emissive = pulse; }
@@ -461,6 +537,7 @@ export class Cashout {
       if (s.owner != null && this.teams) { c = this.teams[s.owner].rgb; e = 1; beam = 0.3; }
       s.ring.color = c; s.top.color = c; s.ring.emissive = e; s.top.emissive = e;
       s.beam.color = c; s.beam.alpha = beam;
+      for (const f of [...(s.fins || []), ...(s.holo || [])]) { f.color = c; f.emissive = Math.max(e, 0.6); f.alpha = s.active || s.owner != null ? 0.85 : 0.25; }
     }
   }
 
@@ -489,7 +566,7 @@ export class Cashout {
     if (box.state === 'none' || box.carrier === this.you) return out;
     let c, rot;
     if (box.carrier) { const b = box.carrier.bot; c = b.toWorld([0.42, 1.0, -0.1]); rot = [0, b.yaw, 0]; }
-    else if (box.state === 'deposited') { c = [box.pos[0], box.pos[1] + 0.25, box.pos[2]]; rot = [0, time * 1.5, 0]; }
+    else if (box.state === 'deposited') { c = [box.pos[0], box.pos[1] + 0.26, box.pos[2]]; rot = [0, time * 0.6, 0]; }
     else { c = [box.pos[0], box.pos[1] + 0.32 + Math.sin(time * 2.4) * 0.06, box.pos[2]]; rot = [0, time * 0.8, 0]; }
     out.push(...cashBoxParts(this.parts, c, rot, box.state === 'locked'));
     return out;
@@ -525,10 +602,10 @@ export class Cashout {
     for (const s of this.stations) {
       if (!s.active && s.owner == null) continue;
       const o = s.owner != null ? this.teams[s.owner] : null;
-      out.push({ pos: [s.pos[0], s.pos[1] + 2.4, s.pos[2]], kind: 'station', label: o ? `CASHOUT ${Math.ceil(Math.max(0, s.t))}s` : 'CASHOUT', col: o ? o.col : '#ffffff' });
+      out.push({ pos: [s.pos[0], s.pos[1] + (s.slot ? 5.2 : 2.4), s.pos[2]], kind: 'station', label: o ? `CASHOUT ${Math.ceil(Math.max(0, s.t))}s` : 'CASHOUT', col: o ? o.col : '#ffffff' });
     }
     if (box.state === 'locked' || box.state === 'ready' || box.state === 'dropped') {
-      out.push({ pos: [box.pos[0], box.pos[1] + 1.4, box.pos[2]], kind: 'box', label: box.state === 'locked' ? `LOCKED ${Math.ceil(box.t)}s` : 'CASH BOX', col: box.state === 'locked' ? '#ff6a5a' : '#ffd04a' });
+      out.push({ pos: [box.pos[0], box.pos[1] + 1.2, box.pos[2]], kind: 'box', label: box.state === 'locked' ? `LOCKED ${Math.ceil(box.t)}s` : 'CASH BOX', col: box.state === 'locked' ? '#ff6a5a' : '#ffd04a' });
     } else if (box.carrier && box.carrier !== this.you) {
       out.push({ pos: [box.carrier.pos[0], box.carrier.pos[1] + 2.4, box.carrier.pos[2]], kind: 'carrier', label: box.carrier.name, col: box.carrier.team.col });
     }
@@ -536,16 +613,25 @@ export class Cashout {
   }
 }
 
-// the cash box: a gold case with a dark band, handle and corner guards
-const GOLD = [1, 0.74, 0.18];
+// the cash box: a dark armoured case with gold corner bumpers, glowing yellow light panels down the sides,
+// a carry handle and a status light (red while the vault's locked, green when it's ready)
+const CASE = [0.13, 0.13, 0.15], GOLD = [1, 0.76, 0.2], LIGHT = [1, 0.82, 0.25];
 export function cashBoxParts(ms, c, rot, locked) {
   const parts = [];
   const cy = Math.cos(rot[1]), sy = Math.sin(rot[1]);
   const at = (o) => [c[0] + cy * o[0] + sy * o[2], c[1] + o[1], c[2] - sy * o[0] + cy * o[2]];
-  const P = (i, o, s, color, emissive = 0, shape = 0.04, mat = 'paint') => { compose(ms[i], at(o), rot, s); parts.push({ model: ms[i], scale: s, color, emissive, shape, mat }); };
-  P(0, [0, 0, 0], [0.62, 0.4, 0.4], GOLD, 0.15, 0.05, 'steel');
-  P(1, [0, 0.02, 0], [0.64, 0.07, 0.42], [0.12, 0.12, 0.13], 0, 0.02, 'metal');
-  P(2, [0, 0.24, 0], [0.24, 0.05, 0.06], [0.12, 0.12, 0.13], 0, 0.02, 'metal');
-  P(3, [0, 0, 0.205], [0.16, 0.12, 0.02], locked ? [1, 0.2, 0.15] : [0.3, 1, 0.5], 1, 0.01);
+  let i = 0;
+  const P = (o, s, color, emissive = 0, shape = 0.03, mat = 'metal') => {
+    const m = ms[i] || (ms[i] = mat4()); i++;
+    compose(m, at(o), rot, s);
+    parts.push({ model: m, scale: s, color, emissive, shape, mat });
+  };
+  P([0, 0, 0], [0.7, 0.44, 0.44], CASE, 0, 0.06, 'metal');                                       // body
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) P([sx * 0.33, 0, sz * 0.2], [0.08, 0.47, 0.08], GOLD, 0.15, 0.02, 'steel');   // corner bumpers
+  for (const sz of [-1, 1]) P([0, 0, sz * 0.222], [0.5, 0.06, 0.01], LIGHT, 0.95, 0.005, 'paint');                                 // light panels
+  for (const sz of [-1, 1]) P([0, 0.12, sz * 0.222], [0.3, 0.03, 0.01], LIGHT, 0.95, 0.005, 'paint');
+  P([0, 0.245, 0], [0.32, 0.05, 0.08], GOLD, 0.1, 0.02, 'steel');                                  // handle
+  for (const sx of [-1, 1]) P([sx * 0.14, 0.23, 0], [0.04, 0.06, 0.06], CASE, 0, 0.01);
+  P([0.352, 0.04, 0], [0.01, 0.12, 0.2], locked ? [1, 0.2, 0.15] : [0.3, 1, 0.5], 1, 0.005, 'paint');                              // status light
   return parts;
 }

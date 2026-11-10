@@ -7,18 +7,18 @@ const RIB = 5;    // ribbed-metal surface
 export class CargoLine {
   // o: { a: [x, y, z] dock A (container centre), b: dock B, size: [sx, sy, sz], color, speed, pause, phase (0..1), railY }
   constructor(world, o) {
-    Object.assign(this, { world, a: o.a, b: o.b, size: o.size, speed: o.speed || 6, pause: o.pause ?? 3, railY: o.railY });
+    Object.assign(this, { world, a: o.a, b: o.b, size: o.size, speed: o.speed || 6, pause: o.pause ?? 3, railY: o.railY, loop: !!o.loop });
     const d = [this.b[0] - this.a[0], this.b[1] - this.a[1], this.b[2] - this.a[2]];
     this.len = Math.hypot(...d);
     this.travel = this.len / this.speed;
-    this.cycle = 2 * (this.travel + this.pause);
+    this.cycle = this.loop ? this.travel : 2 * (this.travel + this.pause);
     this.t = (o.phase || 0) * this.cycle;
     const [sx, sy, sz] = this.size;
     const add = (c, s, opt) => world.add(makeBox([c[0] - s[0] / 2, c[1] - s[1] / 2, c[2] - s[2] / 2], [c[0] + s[0] / 2, c[1] + s[1] / 2, c[2] + s[2] / 2], { grid: false, edges: false, ...opt }));
     this.parts = [];
     const part = (off, s, opt) => { const b = add(this.a.map((v, i) => v + off[i]), s, opt); this.parts.push([b, off]); return b; };
     // the container itself (the hook targets this box), end doors and corner posts
-    this.box = part([0, 0, 0], this.size, { color: o.color, tex: RIB, tag: 'cargo' });
+    this.box = part([0, 0, 0], this.size, { color: o.color, tex: o.tex || RIB, tag: 'cargo' });
     const along = sx > sz ? 0 : 2;
     const endOff = (s) => (along === 0 ? [s * (sx / 2 + 0.01), 0, 0] : [0, 0, s * (sz / 2 + 0.01)]);
     const endSize = along === 0 ? [0.04, sy - 0.2, sz - 0.2] : [sx - 0.2, sy - 0.2, 0.04];
@@ -38,6 +38,7 @@ export class CargoLine {
   // where the container is at time t: A → (pause) → B → (pause) → A
   at(t) {
     const c = ((t % this.cycle) + this.cycle) % this.cycle, T = this.travel, P = this.pause;
+    if (this.loop) { const k = c / T; return this.a.map((v, i) => v + (this.b[i] - v) * k); }   // one way, then round again out of sight
     let k;
     if (c < P) k = 0;
     else if (c < P + T) k = ease((c - P) / T);
@@ -57,7 +58,8 @@ export class CargoLine {
     this.pos = this.at(this.t);
     const d = [this.pos[0] - prev[0], this.pos[1] - prev[1], this.pos[2] - prev[2]];
     const [sx, sy, sz] = this.size, p = player.pos;
-    const onTop = Math.abs(p[0] - prev[0]) < sx / 2 + 0.25 && Math.abs(p[2] - prev[2]) < sz / 2 + 0.25 && Math.abs(p[1] - (prev[1] + sy / 2)) < 0.2;
+    const wrapped = Math.hypot(...d) > this.speed * Math.max(dt, 0.02) * 4;   // jumped back to the start (out in the fog)
+    const onTop = !wrapped && Math.abs(p[0] - prev[0]) < sx / 2 + 0.25 && Math.abs(p[2] - prev[2]) < sz / 2 + 0.25 && Math.abs(p[1] - (prev[1] + sy / 2)) < 0.2;
     if (onTop && (player.grounded || player.vel[1] <= 0.1)) { p[0] += d[0]; p[1] += d[1]; p[2] += d[2]; }
     const moving = Math.hypot(...d) > 1e-4;
     this.lamp.emissive = moving ? (Math.sin(this.t * 8) > 0 ? 1 : 0.2) : 0.4;

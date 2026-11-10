@@ -113,7 +113,7 @@ export class Matchmaking {
   // ---------------------------------------------------------------- search
   buildSearch() {
     const wrap = el('div', 'mk-search');
-    wrap.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'SKY DOCKS'} · 4 TEAMS OF 3`));
+    wrap.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'CONTAINER SHIP'} · 4 TEAMS OF 3`));
     const title = el('div', 'mk-title');
     title.append(el('span', null, 'FINDING MATCH'), el('i', 'mk-dots'));
     wrap.append(title);
@@ -140,7 +140,7 @@ export class Matchmaking {
   // ---------------------------------------------------------------- found
   buildFound() {
     const w = el('div', 'mk-found');
-    w.append(el('b', null, 'MATCH FOUND'), el('span', null, this.mapName || 'SKY DOCKS'));
+    w.append(el('b', null, 'MATCH FOUND'), el('span', null, this.mapName || 'CONTAINER SHIP'));
     this.root.append(w);
     this.sounds?.checkpoint?.();
   }
@@ -148,7 +148,7 @@ export class Matchmaking {
   // ---------------------------------------------------------------- loadout (30 s)
   buildLoadout() {
     const left = el('div', 'mk-load');
-    left.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'SKY DOCKS'}`));
+    left.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'CONTAINER SHIP'}`));
     left.append(el('div', 'mk-title mk-title-s', 'CHOOSE YOUR LOADOUT'));
     this.loadBody = el('div', 'mk-load-body');
     left.append(this.loadBody);
@@ -234,7 +234,7 @@ export class Matchmaking {
     this.dropShown = false;
     const w = el('div', 'mk-intro');
     const top = el('div', 'mk-intro-top');
-    top.append(el('small', null, 'THE SEMI-FINALS · ROUND 1'), el('b', null, this.mapName || 'SKY DOCKS'));
+    top.append(el('small', null, 'THE SEMI-FINALS · ROUND 1'), el('b', null, this.mapName || 'CONTAINER SHIP'));
     w.append(top);
     const row = el('div', 'mk-teams');
     this.teams.forEach((tm, i) => {

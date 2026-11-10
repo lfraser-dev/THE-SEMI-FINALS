@@ -116,6 +116,18 @@ export class Nav {
     return best;
   }
 
+  // grid nodes on the same level within r of p
+  around(p, r) {
+    const li = this.levelOf(p[1]), out = [];
+    if (li < 0) return out;
+    const cx = Math.round(p[0] / STEP), cz = Math.round(p[2] / STEP), R = Math.ceil(r / STEP);
+    for (let dx = -R; dx <= R; dx++) for (let dz = -R; dz <= R; dz++) {
+      const n = this.hash.get(`${cx + dx},${cz + dz},${li}`);
+      if (n != null) out.push(n);
+    }
+    return out;
+  }
+
   point(n) { return [this.X[n], this.Y[n], this.Z[n]]; }
 
   // A* from node a to node b; returns a list of points (or null)

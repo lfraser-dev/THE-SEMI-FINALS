@@ -30,7 +30,7 @@ in vec3 vWorld, vNormal, vLocal, vLocalN;
 in vec4 vLightPos;
 in float vViewZ;
 uniform vec3 uColor, uScale, uFogColor, uSunDir, uCamPos, uSkyTop;
-uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky, uViewUnder, uAO;
+uniform float uGrid, uEdges, uEmissive, uAlpha, uFogDensity, uShadowOn, uSky, uViewUnder, uAO, uTime;
 uniform vec3 uRim;
 uniform vec2 uMat;          // x = metalness, y = roughness (< 0: automatic from colour)
 uniform vec3 uStudio, uStudioFwd, uStudioKey;   // menu studio: backdrop colour (zero = off), camera forward, key light dir
@@ -263,6 +263,51 @@ void main() {
       tRough = mix(mix(0.9, 0.5, frame), 0.05, inner);
       tMetal = inner * 0.8;
       tGlow = inner * lit * 0.12;
+    } else if (k == 14) {
+      // shipping containers: one box can be a whole stack. Each 2.6 m level is its own container in its own
+      // colour (picked from uColor as a seed), with corrugated sides, door ends with locking bars, and seams.
+      float lvl = floor(vWorld.y / 2.6 + 0.001);
+      float seed = uColor.r * 97.0 + uColor.g * 13.0 + uColor.b * 7.0;
+      float hsh = hash(vec3(lvl, seed, 4.0));
+      vec3 pal[8] = vec3[8](vec3(0.72, 0.17, 0.12), vec3(0.13, 0.32, 0.58), vec3(0.85, 0.56, 0.1), vec3(0.16, 0.45, 0.3),
+        vec3(0.82, 0.82, 0.8), vec3(0.45, 0.17, 0.4), vec3(0.24, 0.26, 0.3), vec3(0.85, 0.36, 0.1));
+      vec3 box = pal[int(hsh * 7.99)] * (0.9 + 0.2 * hash(vec3(lvl, seed, 9.0)));
+      float fy = fract(vWorld.y / 2.6 + 0.001) * 2.6;
+      float seamY = 1.0 - smoothstep(0.04, 0.09, fy) * (1.0 - smoothstep(2.48, 2.53, fy));      // top and bottom rails
+      if (top) {
+        float rib = sin(p.x * 9.0) * 0.5 + 0.5;
+        base = box * (0.88 + 0.12 * rib) * (0.92 + 0.1 * blot);
+      } else if (an.x > 0.5) {
+        // door end: two leaves, four locking bars, a dark gasket
+        float u = fract(p.x / 2.44 + 0.0001) * 2.44;
+        float bars = 0.0;
+        for (int i = 0; i < 4; i++) { float bx = 0.3 + float(i) * 0.6; bars = max(bars, 1.0 - smoothstep(0.02, 0.04, abs(u - bx))); }
+        float mid = 1.0 - smoothstep(0.015, 0.03, abs(u - 1.22));
+        base = box * (0.9 + 0.08 * blot);
+        base = mix(base, box * 0.55, mid);
+        base = mix(base, vec3(0.62, 0.63, 0.65), bars * step(0.2, fy) * step(fy, 2.4) * 0.8);
+      } else {
+        float r = sin(p.x * 10.5) * 0.5 + 0.5;
+        float fw = fwidth(p.x * 10.5);
+        r = mix(r, 0.5, smoothstep(0.6, 2.0, fw));
+        base = box * (0.78 + 0.32 * r) * (0.9 + 0.12 * blot);
+        // rust streaks and a stencilled ID band
+        base *= 1.0 - 0.18 * smoothstep(0.55, 0.9, noise(vec3(p.x * 1.5, p.y * 0.3, seed))) * (1.0 - smoothstep(0.0, 1.6, fy));
+        float id = step(1.9, fy) * step(fy, 2.15) * step(0.3, fract(p.x / 12.2)) * step(fract(p.x / 12.2), 0.45);
+        base = mix(base, vec3(0.92), id * 0.6);
+      }
+      base = mix(base, box * 0.45, seamY);
+      tRough = 0.55; tMetal = 0.35;
+    } else if (k == 15) {
+      // the sea: a rolling swell with glints, darker in the troughs
+      vec2 q = vWorld.xz;
+      float t = uTime;
+      float a1 = q.x * 0.06 + q.y * 0.04 + t * 0.7, a2 = -q.x * 0.11 + q.y * 0.09 + t * 1.1, a3 = q.x * 0.23 - q.y * 0.19 + t * 1.7;
+      float h = sin(a1) * 0.5 + sin(a2) * 0.3 + sin(a3) * 0.15 + noise(vec3(q * 0.18, t * 0.25)) * 0.5;
+      n = normalize(vec3(-(cos(a1) * 0.03 - cos(a2) * 0.033 + cos(a3) * 0.035), 1.0, -(cos(a1) * 0.02 + cos(a2) * 0.027 - cos(a3) * 0.028)));
+      base = base * (0.8 + 0.3 * h);
+      base = mix(base, vec3(0.8, 0.88, 0.9), smoothstep(0.82, 1.05, h) * 0.35);       // whitecaps
+      tRough = 0.08; tMetal = 0.6;
     } else if (k == 9) {
       // LED screen: tiny pixels, gently scrolling bands
       vec2 c = p / 0.12;
@@ -543,7 +588,7 @@ export class Renderer {
     this.shadowProg = compile(gl, SHADOW_VERT, SHADOW_FRAG);
     this.u = {};
     for (const name of ['uProj', 'uView', 'uModel', 'uScale', 'uColor', 'uFogColor', 'uSunDir', 'uCamPos',
-      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim', 'uMat', 'uStudio', 'uStudioFwd', 'uStudioKey']) {
+      'uSkyTop', 'uGrid', 'uEdges', 'uEmissive', 'uAlpha', 'uFogDensity', 'uShadowOn', 'uSky', 'uLightVP', 'uShadowMap', 'uViewUnder', 'uAO', 'uRim', 'uMat', 'uStudio', 'uStudioFwd', 'uStudioKey', 'uTime']) {
       this.u[name] = gl.getUniformLocation(this.prog, name);
     }
     this.su = {
@@ -697,6 +742,7 @@ export class Renderer {
     gl.clearColor(...this.fogColor, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.useProgram(this.prog);
+    if (this.u.uTime) gl.uniform1f(this.u.uTime, (performance.now() / 1000) % 3600);
     this.drawCalls = 0;
   }
 
