@@ -11,6 +11,7 @@ import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, angle
 import { buildDef, ratings } from './attachments.js';
 import { CLASSES, CLASS_ORDER, ABILITIES, loadLoadout, saveLoadout } from './classes.js';
 import { Contestant } from './contestant.js';
+import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
 import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
 import { Course, fmtTime } from './course.js';
@@ -49,9 +50,12 @@ map.build(world);
 const dummies = map.dummies.map((d) => new Dummy(world, effects, d.pos, d.move));
 const walls = map.walls.map((w) => new DestructibleWall(world, effects, w.origin, w));
 // attachments: one saved loadout per weapon
+const classLo = loadLoadout();
 let loadouts = {};
 try { loadouts = JSON.parse(localStorage.getItem('semifinals.loadouts') || '{}') || {}; } catch { /* ignore */ }
-const defFor = (id) => buildDef(WEAPONS[id], loadouts[id] || {});
+const cosmetics = loadCosmetics();
+let skinClass = null;    // class whose weapon skin to show (defaults to the active class)
+const defFor = (id) => skinDef(buildDef(WEAPONS[id], loadouts[id] || {}), gunSkinFor(cosmetics, skinClass || classLo.cls));
 const cases = CASE_ORDER.map((id, i) => new WeaponCase(world, defFor(id), [map.cases.xs[i], 0, map.cases.z], i + 1));
 const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
@@ -89,7 +93,7 @@ function pickUp(caseDef) {
 }
 
 // ---------- classes (chosen in the Armoury) ----------
-const classLo = loadLoadout();
+// (classLo is hoisted into a var-like holder so defFor can be used while the file loads)
 let equippedAbility = classLo[classLo.cls].ability;
 let classDirty = true;          // class changed since the current test-range session started
 function classWeapons() {
@@ -716,7 +720,7 @@ const menu = $('menu');
 
 function setPlaying(on) {
   playing = on;
-  if (!on) { renderMenu(); showTab('play'); }
+  if (!on) { renderMenu(); showTab('home'); }
   input.enabled = on;
   input.reset();
   menu.classList.toggle('hidden', on);
@@ -748,14 +752,121 @@ function enterRange() {
   start();
 }
 $('play').addEventListener('click', enterRange);
-let menuTab = 'play';
+let menuTab = 'home';
 function showTab(tab) {
   menuTab = tab;
-  document.querySelectorAll('.mm-nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('.mm-nav button, .mm-gear').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   document.querySelectorAll('.mm-page').forEach((p) => p.classList.toggle('hidden', p.dataset.page !== tab));
+  $('menu').dataset.screen = tab;
+  tryOn = null;
+  if (tab === 'custom' || tab === 'shop') custCls = custCls || classLo.cls;
+  renderMenu();
   sounds.click?.(2400, 0.12);
 }
-document.querySelectorAll('.mm-nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+document.querySelectorAll('.mm-nav button, .mm-gear, .mm-logo').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+document.querySelectorAll('.mm-back').forEach((b) => b.addEventListener('click', () => showTab('home')));
+addEventListener('keydown', (e) => {
+  if (!playing && !bench.open && e.code === 'Escape' && menuTab !== 'home' && !rebinding) showTab('home');
+});
+let custCls = null, custSlot = 'head', tryOn = null, shopFilter = 'all';
+const fmt = (n) => n.toLocaleString('en-GB');
+function itemCard(id, { onClick, on = false, priceTag = true }) {
+  const it = ITEMS[id], r = RARITY[it.rarity];
+  const b = el('button', `it${on ? ' on' : ''}${!owns(cosmetics, id) ? ' locked' : ''}`);
+  b.type = 'button';
+  b.style.setProperty('--r', rgb(r.color));
+  const sw = swatch(it);
+  const s0 = el('div', 'sw', iconFor(it.slot));
+  s0.style.setProperty('--sw', sw ? rgb(sw) : 'rgba(255,255,255,.15)');
+  b.append(s0, el('b', null, it.name), el('small', null, r.name));
+  if (priceTag) {
+    if (owns(cosmetics, id)) b.append(el('span', 'price own', it.price ? 'OWNED' : 'FREE'));
+    else b.append(el('span', 'price', `◆ ${fmt(it.price)}`));
+  }
+  b.onclick = onClick;
+  return b;
+}
+function renderCustom() {
+  const cls = custCls || classLo.cls;
+  $('cu-classes').replaceChildren(...CLASS_ORDER.map((id) => {
+    const k = CLASSES[id];
+    const b = el('button', `mm-class${id === cls ? ' on' : ''}`);
+    b.type = 'button';
+    b.style.setProperty('--c', rgb(k.color));
+    b.append(el('b', null, k.name));
+    b.onclick = () => { custCls = id; tryOn = null; sounds.swap?.(); renderMenu(); };
+    return b;
+  }));
+  $('cu-slots').replaceChildren(...CSLOTS.map((sl) => {
+    const b = el('button', sl.id === custSlot ? 'on' : '', sl.name);
+    b.type = 'button';
+    b.onclick = () => { custSlot = sl.id; tryOn = null; renderMenu(); };
+    return b;
+  }));
+  const eq = cosmetics.equip[cls];
+  $('cu-items').replaceChildren(...itemsFor(custSlot).map((it) => itemCard(it.id, {
+    on: eq[custSlot] === it.id || tryOn === it.id,
+    onClick: () => {
+      if (owns(cosmetics, it.id)) {
+        eq[custSlot] = it.id; tryOn = null; saveCosmetics(cosmetics);
+        if (custSlot === 'wskin') refreshGuns();
+        sounds.cloth?.();
+      } else { tryOn = it.id; sounds.click?.(2000, 0.15); }
+      renderMenu();
+    },
+  })));
+  const foot = $('cu-foot');
+  if (tryOn) {
+    const it = ITEMS[tryOn];
+    const go = el('button', null, 'GET IT IN THE SHOP ›');
+    go.type = 'button';
+    go.onclick = () => { const t = tryOn; showTab('shop'); tryOn = t; renderMenu(); };
+    foot.replaceChildren(`Previewing ${it.name} (not owned).`, go);
+  } else foot.replaceChildren(`Equipped on ${CLASSES[cls].name}. Click an owned item to wear it, or a locked one to preview it.`);
+}
+function renderShop() {
+  const sell = Object.keys(ITEMS).filter((id) => ITEMS[id].price > 0);
+  const pick = (id) => () => { tryOn = id; sounds.click?.(2000, 0.15); renderMenu(); };
+  $('sh-featured').replaceChildren(...FEATURED.map((id) => itemCard(id, { on: tryOn === id, onClick: pick(id) })));
+  const filters = [['all', 'ALL'], ...CSLOTS.filter((s0) => sell.some((id) => ITEMS[id].slot === s0.id)).map((s0) => [s0.id, s0.name])];
+  $('sh-filter').replaceChildren(...filters.map(([id, name]) => {
+    const b = el('button', id === shopFilter ? 'on' : '', name);
+    b.type = 'button';
+    b.onclick = () => { shopFilter = id; renderMenu(); };
+    return b;
+  }));
+  const order = { legendary: 0, epic: 1, rare: 2, common: 3 };
+  const list = sell.filter((id) => !FEATURED.includes(id) && (shopFilter === 'all' || ITEMS[id].slot === shopFilter))
+    .sort((a, b) => order[ITEMS[a].rarity] - order[ITEMS[b].rarity] || ITEMS[b].price - ITEMS[a].price);
+  $('sh-grid').replaceChildren(...list.map((id) => itemCard(id, { on: tryOn === id, onClick: pick(id) })));
+  // buy panel for the selected item
+  const box = $('sh-buy');
+  if (!tryOn) { box.classList.remove('on'); return; }
+  const it = ITEMS[tryOn], r = RARITY[it.rarity], own = owns(cosmetics, tryOn);
+  box.classList.add('on');
+  box.style.setProperty('--r', rgb(r.color));
+  const slotName = CSLOTS.find((x) => x.id === it.slot).name;
+  const worn = own && cosmetics.equip[custCls || classLo.cls][it.slot] === tryOn;
+  const btn = el('button', own ? 'own' : cosmetics.credits < it.price ? 'no' : '', worn ? 'EQUIPPED ✓' : own ? 'EQUIP' : `BUY ◆ ${fmt(it.price)}`);
+  btn.type = 'button';
+  btn.onclick = () => {
+    const cls = custCls || classLo.cls;
+    if (!own && !buy(cosmetics, tryOn)) { sounds.dry?.(); return; }
+    if (!own) sounds.pickup?.();
+    cosmetics.equip[cls][it.slot] = tryOn;
+    saveCosmetics(cosmetics);
+    if (it.slot === 'wskin') refreshGuns();
+    renderMenu();
+  };
+  const note = worn ? `Wearing it on ${CLASSES[custCls || classLo.cls].name}.` : own ? `Owned. Equip it on ${CLASSES[custCls || classLo.cls].name}.` : cosmetics.credits < it.price ? 'Not enough credits.' : `Buys and equips on ${CLASSES[custCls || classLo.cls].name}.`;
+  box.replaceChildren(el('small', null, `${r.name} · ${slotName}`), el('b', null, it.name), btn, el('p', null, note));
+}
+// rebuild guns after a weapon-skin change (in your hands, the cases and the showroom)
+function refreshGuns() {
+  slots.forEach((w) => { const a = w.ammo; w.setDef(defFor(w.def.id)); w.ammo = Math.min(a, w.def.mag); });
+  cases.forEach((c) => { c.def = defFor(c.def.id); });
+  showroomKey = '';
+}
 $('mm-play').addEventListener('click', () => {
   const el = $('mm-play');
   el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
@@ -769,6 +880,9 @@ function renderMenu() {
   document.documentElement.style.setProperty('--cls', rgb(c.color));
   $('mm-chip').innerHTML = '';
   $('mm-chip').append('CLASS ', el('b', null, c.name));
+  $('mm-credits').textContent = `${fmt(cosmetics.credits)} ${CURRENCY}`;
+  if (menuTab === 'custom') renderCustom();
+  if (menuTab === 'shop') renderShop();
   $('mm-name').replaceChildren(el('b', null, c.name), el('span', null, `${WEAPONS[sel.weapon].name} · ${ABILITIES[sel.ability].short}`));
   $('mm-range-sub').textContent = sessionStarted && !classDirty ? 'RESUME YOUR SESSION' : 'GUNS · MOVEMENT · PARKOUR · BOTS';
   // play page summary
@@ -825,26 +939,37 @@ function renderMenu() {
 // ---------- showroom (the 3D scene behind the main menu) ----------
 let showroomChar = null, showroomKey = '';
 function setShowroomClass() {
-  const c = CLASSES[classLo.cls], sel = classLo[classLo.cls];
-  const key = `${classLo.cls}|${sel.weapon}`;
+  const dressing = menuTab === 'custom' || menuTab === 'shop';
+  const cls = dressing ? (custCls || classLo.cls) : classLo.cls;
+  const c = CLASSES[cls], sel = classLo[cls];
+  const key = `${cls}|${sel.weapon}|${JSON.stringify(cosmetics.equip[cls])}|${tryOn}`;
   if (key === showroomKey) return;
   showroomKey = key;
   const sp = map.showroom.spot;
-  showroomChar = new Contestant({ ...c.skin, build: c.build, name: c.name }, sp, 0.5);   // 3/4 turn so the gun faces you
+  const keepT = showroomChar ? showroomChar.t : 0;
+  showroomChar = new Contestant({ ...buildOutfit(cosmetics, cls, tryOn), name: c.name }, sp, 0.5);   // 3/4 turn so the gun faces you
+  showroomChar.t = keepT;
   showroomChar.pose = 'lobby';
   showroomChar.realGun = true;
-  showroomChar.gunDef = defFor(sel.weapon);
+  skinClass = cls;
+  showroomChar.gunDef = skinDef(buildDef(WEAPONS[sel.weapon], loadouts[sel.weapon] || {}), gunSkinFor(cosmetics, cls, tryOn));
+  skinClass = null;
   const R = map.showroomRefs;
   R.panels.forEach((p, i) => { p.color = [...c.color]; p.emissive = i % 2 ? 0.45 : 0.85; });
   R.bars.forEach((p) => { p.color = [...c.color]; });
   R.ring.forEach((p) => { p.color = [...c.color]; });
 }
 const projS = mat4(), viewS = mat4();
+let camBlend = 1;
 function drawShowroom(aspect) {
   const cam = map.showroom.cam;
-  // a slow drift so the scene feels alive
-  const eye = [cam.eye[0] + Math.sin(time * 0.2) * 0.12, cam.eye[1] + Math.sin(time * 0.31) * 0.03, cam.eye[2]];
-  const fwd = norm([cam.look[0] - eye[0], cam.look[1] - eye[1], cam.look[2] - eye[2]]);
+  // home: character centred; other screens: character on the right of the panel
+  const home = menuTab === 'home';
+  const k = home ? 1 : 0;
+  camBlend += (k - camBlend) * Math.min(1, 0.12);
+  const look = [cam.look[0] - 0.88 * camBlend, cam.look[1] + 0.05 * camBlend, cam.look[2]];
+  const eye = [cam.eye[0] - 0.25 * camBlend + Math.sin(time * 0.2) * 0.12, cam.eye[1] + Math.sin(time * 0.31) * 0.03 + 0.05 * camBlend, cam.eye[2] - 0.5 * camBlend];
+  const fwd = norm([look[0] - eye[0], look[1] - eye[1], look[2] - eye[2]]);
   perspective(projS, (aspect < 1 ? 62 : 44) * Math.PI / 180, aspect, 0.05, 200);
   lookDir(viewS, eye, fwd, [0, 1, 0], 0);
   renderer.begin();
@@ -858,7 +983,7 @@ function drawShowroom(aspect) {
     for (const p of Weapon.worldParts(showroomChar.gunDef, showroomChar.gunMatrix)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
   }
 }
-renderMenu();
+showTab('home');
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement === canvas) {
     locked = true;
@@ -1145,4 +1270,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.9: Main menu with an Armoury (Light / Medium / Heavy), Test Range, Parkour Course and underground bot arena.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.10: Home screen with Armoury, Customization and Shop; Test Range, Parkour Course and underground bot arena.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -73,12 +73,18 @@ Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Set
 
 ## Main menu
 
-The game opens on a main menu with your character standing in a lit showroom, and the lights change colour with your class. There are three tabs:
-- **PLAY:** the big **PLAY** button is for the first tournament arena. It's locked (Coming Soon). **TEST RANGE** takes you into the range, and shows **Resume** if you have a session going. Below them is a summary of your loadout.
-- **ARMOURY:** pick your class, then its primary weapon and its specialisation (ability). Your choices are saved.
-- **SETTINGS:** controls, sensitivity, FOV, volume and key binds.
+The game opens on a **Home** screen with your character standing in a lit showroom. The lights take your class colour. On the Home screen:
+- the big **PLAY** button is for the first tournament arena, and it's locked (Coming Soon)
+- **TEST RANGE** takes you into the range, and resumes your session if you have one
+- your loadout summary sits in the corner
 
-Esc in game takes you back to the menu.
+The top row opens the other screens, and each one has a **Back** button (Esc works too):
+- **ARMOURY:** pick your class, its primary weapon and its specialisation (ability).
+- **CUSTOMIZATION:** dress each class separately. The slots are head, top, outerwear, legs, shoes, gloves, neck, skin tone and weapon skin. Click an owned item to wear it, or a locked one to preview it on your character.
+- **SHOP:** featured items plus a full catalogue you can filter by slot. Click to try anything on, then buy it with credits, which also equips it. You start with 10,000 credits, and earning more will come with the battle pass. Items come in Common, Rare, Epic and Legendary.
+- **⚙ (Settings):** controls, sensitivity, FOV, volume and key binds.
+
+Weapon skins (Crimson, Arctic, Desert Ops, Toxic, 24 Karat) recolour your guns everywhere: in your hands, in the weapon cases and in the showroom. Purchases and outfits are saved in your browser.
 
 | Class | Health | Speed | Weapons | Specialisations |
 | --- | --- | --- | --- | --- |
@@ -195,7 +201,8 @@ src/renderer.js       WebGL2 renderer + grid/edge shader (everything is a box)
 src/world.js          box list, collision queries, raycasts
 src/player.js         movement, vault/mantle/ledge grab/wall run, collision, camera springs
 src/course.js         parkour time trial: gates, checkpoints, hazards, best times
-src/classes.js       Light / Medium / Heavy data, ability list, saved loadout
+src/classes.js        Light / Medium / Heavy data, ability list, saved loadout
+src/cosmetics.js      outfit items, weapon skins, shop catalogue, credits, owned / equipped
 src/contestant.js     character rig, outfits and poses (used for the menu showroom)
 src/elevator.js       cage elevator from the range down to the underground arena (gates, car, cage)
 src/bots.js           combat bots (model, AI, shooting) + wave manager

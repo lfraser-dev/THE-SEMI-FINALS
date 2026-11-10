@@ -211,6 +211,65 @@
   /* ---------- menu ---------- */
   #menu.hidden, .hidden { display: none !important; }
   body:not(.playing):not(.benching) #hud { display: none; }
+  /* separate screens */
+  .mm-logo { all: unset; cursor: pointer; font: 800 italic 30px var(--font); letter-spacing: -.01em; white-space: nowrap; }
+  .mm-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .mm-chip { margin-left: 0; }
+  .mm-credits { font: 800 15px var(--font); letter-spacing: .08em; padding: 5px 12px 5px 30px; background: rgba(255,200,40,.14); color: #ffd04a; position: relative; white-space: nowrap; }
+  .mm-credits::before { content: ''; position: absolute; left: 10px; top: 50%; width: 12px; height: 12px; margin-top: -6px; background: #ffd04a; transform: rotate(45deg); }
+  .mm-gear { all: unset; cursor: pointer; font-size: 22px; width: 36px; height: 36px; display: grid; place-items: center; background: rgba(255,255,255,.08); }
+  .mm-gear:hover, .mm-gear.on { background: var(--red); }
+  .mm-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .mm-head h2 { margin: 0; font: 800 italic 44px var(--font); line-height: 1; }
+  .mm-back { all: unset; cursor: pointer; white-space: nowrap; font: 800 14px var(--font); letter-spacing: .16em; padding: 6px 12px; background: rgba(255,255,255,.1); }
+  .mm-back:hover { background: #fff; color: var(--ink); }
+  #menu[data-screen="home"] { background: linear-gradient(0deg, rgba(8,8,10,.85) 0, rgba(8,8,10,0) 45%), linear-gradient(90deg, rgba(8,8,10,.55) 0, rgba(8,8,10,0) 30%); }
+  .mm-home { position: absolute; inset: 70px 0 0 0; padding: 0; }
+  .mm-home-left { position: absolute; left: 32px; bottom: 34px; width: min(440px, calc(100% - 64px)); }
+  .mm-home .mm-sum { position: absolute; right: 32px; bottom: 34px; width: 340px; margin: 0; }
+  #menu[data-screen="home"] .mm-name { display: none; }
+  .mm-small .mm-class { padding: 8px 10px; }
+  .mm-small .mm-class b { font-size: 20px; }
+  /* customization */
+  .cu-slots { display: flex; flex-wrap: wrap; gap: 4px; margin: 14px 0 10px; }
+  .cu-slots button { all: unset; cursor: pointer; font: 800 12px var(--font); letter-spacing: .14em; padding: 6px 10px; background: rgba(255,255,255,.08); }
+  .cu-slots button:hover { background: rgba(255,255,255,.16); }
+  .cu-slots button.on { background: #fff; color: var(--ink); }
+  .cu-items, .sh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 6px; }
+  .it { all: unset; cursor: pointer; position: relative; display: block; padding: 10px 10px 8px; background: rgba(255,255,255,.07); border-bottom: 3px solid var(--r); min-height: 86px; box-sizing: border-box; }
+  .it:hover { background: rgba(255,255,255,.14); }
+  .it.on { outline: 2px solid #fff; outline-offset: -2px; background: rgba(255,255,255,.16); }
+  .it.locked { opacity: .55; }
+  .it .sw { width: 34px; height: 34px; display: grid; place-items: center; font-size: 18px; background: var(--sw); color: rgba(0,0,0,.45); clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+  .it b { display: block; font: 800 italic 15px var(--font); margin-top: 8px; line-height: 1.05; }
+  .it small { display: block; font: 700 10px var(--font); letter-spacing: .16em; color: var(--r); margin-top: 2px; }
+  .it .price { position: absolute; right: 8px; top: 8px; font: 800 12px var(--font); color: #ffd04a; }
+  .it .price.own { color: rgba(255,255,255,.6); }
+  .it .tag { position: absolute; right: 8px; top: 8px; font: 800 10px var(--font); letter-spacing: .14em; background: #fff; color: var(--ink); padding: 1px 5px; }
+  .cu-foot { margin-top: 12px; font: 600 14px var(--font); opacity: .75; min-height: 20px; }
+  .cu-foot button { all: unset; cursor: pointer; font: 800 13px var(--font); letter-spacing: .12em; color: #ffd04a; margin-left: 6px; }
+  /* shop */
+  .mm-shop { width: min(560px, 100%); }
+  .sh-note { font: 500 14px var(--font); opacity: .7; margin: -6px 0 6px; }
+  .sh-featured { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .sh-featured .it { min-height: 140px; background: linear-gradient(160deg, color-mix(in srgb, var(--r) 45%, transparent), rgba(255,255,255,.05)); }
+  .sh-featured .it .sw { width: 52px; height: 52px; font-size: 26px; }
+  .sh-featured .it b { font-size: 19px; }
+  .sh-filter { display: flex; flex-wrap: wrap; gap: 4px; margin: 16px 0 8px; }
+  .sh-filter button { all: unset; cursor: pointer; font: 800 11px var(--font); letter-spacing: .14em; padding: 5px 9px; background: rgba(255,255,255,.08); }
+  .sh-filter button.on { background: #fff; color: var(--ink); }
+  .sh-buy { position: fixed; right: 5vw; bottom: calc(7vh + 120px); width: 300px; padding: 14px 18px; background: rgba(8,8,10,.86); display: none; }
+  .sh-buy.on { display: block; }
+  .sh-buy small { font: 800 11px var(--font); letter-spacing: .2em; color: var(--r); }
+  .sh-buy b { display: block; font: 800 italic 28px var(--font); line-height: 1; margin: 2px 0 8px; }
+  .sh-buy button { all: unset; cursor: pointer; display: block; text-align: center; padding: 10px; font: 800 italic 20px var(--font); letter-spacing: .06em; background: #ffd04a; color: var(--ink);
+    clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  .sh-buy button:hover { background: #fff; }
+  .sh-buy button.no { background: rgba(255,255,255,.12); color: rgba(255,255,255,.5); cursor: not-allowed; }
+  .sh-buy button.own { background: rgba(255,255,255,.12); color: #fff; }
+  .sh-buy p { margin: 8px 0 0; font: 600 13px var(--font); opacity: .7; }
+  @media (max-width: 760px) { .mm-home { position: static; padding: 20px 16px; } .mm-home-left, .mm-home .mm-sum { position: static; width: auto; margin-top: 12px; } .sh-buy { position: static; width: auto; margin: 16px; } .mm-nav button { font-size: 15px; padding: 6px 8px; } }
+
   /* ---------- main menu ---------- */
   #menu { position: fixed; inset: 0; display: block; padding: 0; background: linear-gradient(90deg, rgba(8,8,10,.86) 0, rgba(8,8,10,.6) 34%, rgba(8,8,10,0) 58%); color: #fff; overflow-y: auto; }
   #menu h3 { color: #fff; }
@@ -347,18 +406,23 @@
 
 <div id="menu">
   <header class="mm-top">
-    <div class="mm-logo"><span class="semi">SEMI</span>-FINALS</div>
+    <button class="mm-logo" data-tab="home" type="button"><span class="semi">SEMI</span>-FINALS</button>
     <nav class="mm-nav">
-      <button data-tab="play" class="on" type="button">PLAY</button>
+      <button data-tab="home" class="on" type="button">HOME</button>
       <button data-tab="armoury" type="button">ARMOURY</button>
-      <button data-tab="settings" type="button">SETTINGS</button>
+      <button data-tab="custom" type="button">CUSTOMIZATION</button>
+      <button data-tab="shop" type="button">SHOP</button>
     </nav>
-    <div class="mm-chip" id="mm-chip"></div>
+    <div class="mm-right">
+      <div class="mm-chip" id="mm-chip"></div>
+      <div class="mm-credits" id="mm-credits"></div>
+      <button class="mm-gear" data-tab="settings" type="button" title="Settings">⚙</button>
+    </div>
   </header>
 
-  <section class="mm-page" data-page="play">
-    <div class="mm-col">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.9</div>
+  <section class="mm-page mm-home" data-page="home">
+    <div class="mm-col mm-home-left">
+      <div class="mm-kicker">SEASON 1 · BUILD 0.10</div>
       <button class="mm-big locked" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s">TOURNAMENT ARENA</span>
@@ -368,13 +432,14 @@
       <button class="mm-card mm-range" id="play" type="button">
         <b>TEST RANGE</b><span id="mm-range-sub">GUNS · MOVEMENT · PARKOUR · BOTS</span><i>▶</i>
       </button>
-      <div class="mm-card mm-sum" id="mm-sum"></div>
       <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     </div>
+    <div class="mm-card mm-sum" id="mm-sum"></div>
   </section>
 
   <section class="mm-page hidden" data-page="armoury">
     <div class="mm-col mm-arm">
+      <div class="mm-head"><button class="mm-back" type="button">‹ BACK</button><h2>ARMOURY</h2></div>
       <div class="mm-classes" id="mm-classes"></div>
       <div class="mm-classinfo" id="mm-classinfo"></div>
       <h4>PRIMARY WEAPON</h4>
@@ -384,8 +449,31 @@
     </div>
   </section>
 
+  <section class="mm-page hidden" data-page="custom">
+    <div class="mm-col mm-cust">
+      <div class="mm-head"><button class="mm-back" type="button">‹ BACK</button><h2>CUSTOMIZATION</h2></div>
+      <div class="mm-classes mm-small" id="cu-classes"></div>
+      <div class="cu-slots" id="cu-slots"></div>
+      <div class="cu-items" id="cu-items"></div>
+      <div class="cu-foot" id="cu-foot"></div>
+    </div>
+  </section>
+
+  <section class="mm-page hidden" data-page="shop">
+    <div class="mm-col mm-shop">
+      <div class="mm-head"><button class="mm-back" type="button">‹ BACK</button><h2>SHOP</h2></div>
+      <div class="sh-note">Try anything on by clicking it. Buy with credits. Earning credits arrives with the battle pass.</div>
+      <h4>FEATURED</h4>
+      <div class="sh-featured" id="sh-featured"></div>
+      <div class="sh-filter" id="sh-filter"></div>
+      <div class="sh-grid" id="sh-grid"></div>
+    </div>
+    <div class="sh-buy" id="sh-buy"></div>
+  </section>
+
   <section class="mm-page hidden" data-page="settings">
     <div class="mm-col mm-settings">
+      <div class="mm-head"><button class="mm-back" type="button">‹ BACK</button><h2>SETTINGS</h2></div>
       <div class="grid2">
       <div>
         <h3>CONTROLS</h3>
