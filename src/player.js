@@ -196,6 +196,7 @@ export class Player {
     this.sprinting = input.down('ShiftLeft') && fwdIn > 0 && !this.crouching && !ads && !firing;
     let speed = this.crouching ? SPEED.crouch : this.sprinting ? SPEED.sprint : SPEED.walk;
     if (ads) speed = Math.min(speed, SPEED.ads);
+    speed *= this.speedMul || 1;            // class speed (Light is quicker, Heavy slower)
 
     // --- abilities ---
     if (act.dash) this.tryDash(wx, wz, wl);

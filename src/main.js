@@ -8,7 +8,9 @@ import { Effects } from './effects.js';
 import { Sounds } from './audio.js';
 import { Dummy, DestructibleWall, WeaponCase, Workbench } from './props.js';
 import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, anglesFor, clamp } from './math.js';
-import { buildDef } from './attachments.js';
+import { buildDef, ratings } from './attachments.js';
+import { CLASSES, CLASS_ORDER, ABILITIES, loadLoadout, saveLoadout } from './classes.js';
+import { Contestant } from './contestant.js';
 import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
 import { Course, fmtTime } from './course.js';
@@ -84,6 +86,27 @@ function pickUp(caseDef) {
   slots[current].equip();
   sounds.pickup();
   updateSlotHud();
+}
+
+// ---------- classes (chosen in the Armoury) ----------
+const classLo = loadLoadout();
+let equippedAbility = classLo[classLo.cls].ability;
+let classDirty = true;          // class changed since the current test-range session started
+function classWeapons() {
+  const c = CLASSES[classLo.cls], primary = classLo[classLo.cls].weapon;
+  return [primary, primary === 'pistol' ? c.weapons.find((w) => w !== 'pistol') : 'pistol'];
+}
+function applyClass() {
+  const c = CLASSES[classLo.cls];
+  Object.assign(player, { maxHp: c.hp, hp: c.hp, speedMul: c.speed });
+  const [a, b] = classWeapons();
+  slots[0] = new Weapon(defFor(a));
+  slots[1] = new Weapon(defFor(b));
+  current = 0; lastSlot = 1;
+  equippedAbility = classLo[classLo.cls].ability;
+  player.resetAbilities?.();
+  updateSlotHud();
+  classDirty = false;
 }
 
 // called by the workbench when a loadout changes
@@ -517,7 +540,8 @@ function updateAbilityHud() {
   hud.ab.grapple.classList.toggle('active', !!gActive);
   set(hud.ab.slam, a.slam.cd / a.slam.max, a.slam.cd <= 0, a.slam.cd > 0 ? a.slam.cd.toFixed(1) : '');
   // grapple range hint on the crosshair
-  grappleOk = a.grapple.cd <= 0 && !player.grapple && !!player.grappleTarget();
+  for (const k of ['dash', 'grapple', 'slam']) hud.ab[k].classList.toggle('hidden', k !== equippedAbility);
+  grappleOk = equippedAbility === 'grapple' && a.grapple.cd <= 0 && !player.grapple && !!player.grappleTarget();
   hud.cross.classList.toggle('grapple', grappleOk);
 }
 function refreshAbilityKeys() {
@@ -536,6 +560,7 @@ function updateSlotHud() {
 }
 updateSlotHud();
 refreshAbilityKeys();
+applyClass();
 
 const vp = mat4();
 function project(p) {
@@ -691,6 +716,7 @@ const menu = $('menu');
 
 function setPlaying(on) {
   playing = on;
+  if (!on) { renderMenu(); showTab('play'); }
   input.enabled = on;
   input.reset();
   menu.classList.toggle('hidden', on);
@@ -709,7 +735,130 @@ function start() {
   }
 }
 
-$('play').addEventListener('click', start);
+// ---------- main menu ----------
+let sessionStarted = false;
+function enterRange() {
+  if (!sessionStarted || classDirty) {
+    applyClass();
+    resetRange();
+    player.respawn();
+    Object.assign(player, { hp: player.maxHp });
+    sessionStarted = true;
+  }
+  start();
+}
+$('play').addEventListener('click', enterRange);
+let menuTab = 'play';
+function showTab(tab) {
+  menuTab = tab;
+  document.querySelectorAll('.mm-nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('.mm-page').forEach((p) => p.classList.toggle('hidden', p.dataset.page !== tab));
+  sounds.click?.(2400, 0.12);
+}
+document.querySelectorAll('.mm-nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+$('mm-play').addEventListener('click', () => {
+  const el = $('mm-play');
+  el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+  $('mm-locknote').classList.add('on');
+  sounds.dry?.();
+});
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const rgb = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
+function renderMenu() {
+  const c = CLASSES[classLo.cls], sel = classLo[classLo.cls];
+  document.documentElement.style.setProperty('--cls', rgb(c.color));
+  $('mm-chip').innerHTML = '';
+  $('mm-chip').append('CLASS ', el('b', null, c.name));
+  $('mm-name').replaceChildren(el('b', null, c.name), el('span', null, `${WEAPONS[sel.weapon].name} · ${ABILITIES[sel.ability].short}`));
+  $('mm-range-sub').textContent = sessionStarted && !classDirty ? 'RESUME YOUR SESSION' : 'GUNS · MOVEMENT · PARKOUR · BOTS';
+  // play page summary
+  const sum = $('mm-sum');
+  const cell = (k, v) => { const d = el('div'); d.append(el('small', null, k), el('b', null, v)); return d; };
+  const edit = el('button', 'edit', 'EDIT LOADOUT IN THE ARMOURY ›');
+  edit.type = 'button';
+  edit.onclick = () => showTab('armoury');
+  sum.replaceChildren(cell('CLASS', c.name), cell('WEAPON', WEAPONS[sel.weapon].name), cell('ABILITY', ABILITIES[sel.ability].short), edit);
+  // armoury: class tabs
+  $('mm-classes').replaceChildren(...CLASS_ORDER.map((id) => {
+    const k = CLASSES[id];
+    const b = el('button', `mm-class${id === classLo.cls ? ' on' : ''}`);
+    b.type = 'button';
+    b.style.setProperty('--c', rgb(k.color));
+    b.append(el('b', null, k.name), el('span', null, `${k.hp} HP`));
+    b.onclick = () => { classLo.cls = id; classDirty = true; saveLoadout(classLo); sounds.swap?.(); renderMenu(); };
+    return b;
+  }));
+  const info = $('mm-classinfo');
+  info.style.setProperty('--c', rgb(c.color));
+  const stat = (name, p, txt) => { const d = el('div', 'mm-stat'); const i = el('i'); i.style.setProperty('--p', p); d.append(el('span', null, name), i, el('em', null, txt)); return d; };
+  info.replaceChildren(el('p', null, c.desc), stat('HEALTH', c.hp / 350, String(c.hp)), stat('SPEED', (c.speed - 0.7) / 0.5, `${Math.round(c.speed * 100)}%`),
+    stat('SIZE', c.build / 1.3, c.build < 1 ? 'SMALL' : c.build > 1 ? 'LARGE' : 'MEDIUM'));
+  // weapons
+  $('mm-weapons').replaceChildren(...c.weapons.map((id) => {
+    const d = defFor(id), r = ratings(d);
+    const pick = (n) => r.find((x) => x.name === n);
+    const b = el('button', `mm-wpn${id === sel.weapon ? ' on' : ''}`);
+    b.type = 'button';
+    b.style.setProperty('--c', rgb(c.color));
+    const bars = el('div', 'bars');
+    for (const n of ['DAMAGE', 'FIRE RATE', 'RANGE']) {
+      const sp = el('span', null, n); const i = el('i'); i.style.setProperty('--p', pick(n).v.toFixed(3)); sp.append(i); bars.append(sp);
+    }
+    b.append(el('b', null, WEAPONS[id].name), el('small', null, WEAPONS[id].type), bars);
+    b.onclick = () => { sel.weapon = id; classDirty = true; saveLoadout(classLo); sounds.magIn?.(); renderMenu(); };
+    return b;
+  }));
+  // abilities
+  $('mm-abilities').replaceChildren(...c.abilities.map((id) => {
+    const a = ABILITIES[id];
+    const b = el('button', `mm-abl${id === sel.ability ? ' on' : ''}`);
+    b.type = 'button';
+    b.style.setProperty('--c', rgb(c.color));
+    b.append(el('b', null, a.name), el('small', null, `COOLDOWN ${a.cd}`), el('p', null, a.desc));
+    b.onclick = () => { sel.ability = id; classDirty = true; saveLoadout(classLo); sounds.click?.(2600, 0.3, 4); renderMenu(); };
+    return b;
+  }));
+  // showroom character
+  setShowroomClass();
+}
+
+// ---------- showroom (the 3D scene behind the main menu) ----------
+let showroomChar = null, showroomKey = '';
+function setShowroomClass() {
+  const c = CLASSES[classLo.cls], sel = classLo[classLo.cls];
+  const key = `${classLo.cls}|${sel.weapon}`;
+  if (key === showroomKey) return;
+  showroomKey = key;
+  const sp = map.showroom.spot;
+  showroomChar = new Contestant({ ...c.skin, build: c.build, name: c.name }, sp, 0.5);   // 3/4 turn so the gun faces you
+  showroomChar.pose = 'lobby';
+  showroomChar.realGun = true;
+  showroomChar.gunDef = defFor(sel.weapon);
+  const R = map.showroomRefs;
+  R.panels.forEach((p, i) => { p.color = [...c.color]; p.emissive = i % 2 ? 0.45 : 0.85; });
+  R.bars.forEach((p) => { p.color = [...c.color]; });
+  R.ring.forEach((p) => { p.color = [...c.color]; });
+}
+const projS = mat4(), viewS = mat4();
+function drawShowroom(aspect) {
+  const cam = map.showroom.cam;
+  // a slow drift so the scene feels alive
+  const eye = [cam.eye[0] + Math.sin(time * 0.2) * 0.12, cam.eye[1] + Math.sin(time * 0.31) * 0.03, cam.eye[2]];
+  const fwd = norm([cam.look[0] - eye[0], cam.look[1] - eye[1], cam.look[2] - eye[2]]);
+  perspective(projS, (aspect < 1 ? 62 : 44) * Math.PI / 180, aspect, 0.05, 200);
+  lookDir(viewS, eye, fwd, [0, 1, 0], 0);
+  renderer.begin();
+  renderer.setCamera(projS, viewS, 0.0095, eye, true);
+  renderer.setBlend(false);
+  const near = (b) => b.max[0] > 280 && b.min[2] > 315;   // only the showroom set
+  for (const b of world.boxes) if (b.alpha >= 1 && !b.hidden && near(b)) renderer.drawBox(b);
+  if (showroomChar) {
+    showroomChar.t = time;
+    for (const p of showroomChar.parts()) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+    for (const p of Weapon.worldParts(showroomChar.gunDef, showroomChar.gunMatrix)) renderer.draw(p.model, p.scale, p.color, 0, 1, p.emissive);
+  }
+}
+renderMenu();
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement === canvas) {
     locked = true;
@@ -725,7 +874,7 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (playing && !locked && (e.code === 'Escape' || e.code === 'KeyP')) setPlaying(false);
-  else if (!playing && e.code === 'Enter') start();
+  else if (!playing && e.code === 'Enter') enterRange();
 });
 
 // ---------- workbench ----------
@@ -906,7 +1055,12 @@ function frame(now) {
     else if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
     else if (nearBench && input.hit('KeyE')) openBench();
     w = weapon();
-    const act = { dash: input.hit(settings.dashKey), grapple: input.hit(settings.grappleKey), slam: input.hit(settings.slamKey) };
+    // only your class's equipped specialisation works
+    const act = {
+      dash: equippedAbility === 'dash' && input.hit(settings.dashKey),
+      grapple: equippedAbility === 'grapple' && input.hit(settings.grappleKey),
+      slam: equippedAbility === 'slam' && input.hit(settings.slamKey),
+    };
     elevator.update(dt, player, sounds);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     updateCombat(dt);
@@ -922,6 +1076,12 @@ function frame(now) {
   // ---- render ----
   const w = weapon();
   const aspect = renderer.resize();
+  if (!playing && !bench.open) {
+    drawShowroom(aspect);
+    input.endFrame();
+    requestAnimationFrame(frame);
+    return;
+  }
   const targetKick = player.dash ? 16 : player.grapple?.phase === 'pull' ? 10 : player.slam?.phase === 'fall' ? 7 : player.wallRunning ? 8 : player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
   fovKick += (targetKick - fovKick) * damp(player.dash ? 18 : 6, dt);
   const hfov = (settings.fov + fovKick) * (1 - w.adsT * (1 - w.def.adsZoom)) * Math.PI / 180;
@@ -985,4 +1145,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
-window.game = { cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

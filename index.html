@@ -209,9 +209,80 @@
   #bindnote { font-size: 13px; font-weight: 600; color: var(--red); min-height: 1.2em; margin-top: 4px; }
 
   /* ---------- menu ---------- */
-  #menu { position: fixed; inset: 0; display: grid; place-items: safe center; padding: 16px; overflow-y: auto;
-    background: radial-gradient(ellipse at center, rgba(238,239,242,.55), rgba(238,239,242,.92)); }
   #menu.hidden, .hidden { display: none !important; }
+  body:not(.playing):not(.benching) #hud { display: none; }
+  /* ---------- main menu ---------- */
+  #menu { position: fixed; inset: 0; display: block; padding: 0; background: linear-gradient(90deg, rgba(8,8,10,.86) 0, rgba(8,8,10,.6) 34%, rgba(8,8,10,0) 58%); color: #fff; overflow-y: auto; }
+  #menu h3 { color: #fff; }
+  .mm-top { display: flex; align-items: center; gap: 28px; padding: 16px 32px; background: rgba(5,5,6,.6); border-bottom: 1px solid rgba(255,255,255,.08); position: sticky; top: 0; z-index: 2; }
+  .mm-logo { font: 800 italic 30px var(--font); letter-spacing: -.01em; white-space: nowrap; }
+  .mm-logo .semi { color: var(--red); }
+  .mm-nav { display: flex; gap: 4px; }
+  .mm-nav button { all: unset; cursor: pointer; font: 800 italic 20px var(--font); letter-spacing: .1em; padding: 6px 16px; opacity: .55; position: relative; }
+  .mm-nav button:hover { opacity: 1; }
+  .mm-nav button.on { opacity: 1; }
+  .mm-nav button.on::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: -2px; height: 3px; background: var(--red); }
+  .mm-chip { margin-left: auto; font: 800 13px var(--font); letter-spacing: .16em; padding: 5px 12px; background: rgba(255,255,255,.1); white-space: nowrap; }
+  .mm-chip b { color: var(--cls, #ff4a40); }
+  .mm-page { padding: 34px 32px 40px; }
+  .mm-col { width: min(470px, 100%); }
+  .mm-kicker { font: 700 13px var(--font); letter-spacing: .3em; opacity: .6; margin-bottom: 12px; }
+  .mm-big { all: unset; position: relative; display: block; width: 100%; box-sizing: border-box; padding: 22px 26px 20px; background: var(--red); cursor: pointer;
+    clip-path: polygon(18px 0, 100% 0, calc(100% - 18px) 100%, 0 100%); overflow: hidden; }
+  .mm-big-t { display: block; font: 800 italic 76px var(--font); line-height: .85; }
+  .mm-big-s { display: block; font: 800 14px var(--font); letter-spacing: .3em; margin-top: 6px; opacity: .85; }
+  .mm-big.locked { background: repeating-linear-gradient(-45deg, #2a2b30 0 14px, #24252a 14px 28px); cursor: not-allowed; }
+  .mm-big.locked .mm-big-t { color: rgba(255,255,255,.35); }
+  .mm-lock { position: absolute; right: 26px; top: 50%; transform: translateY(-50%); font: 800 14px var(--font); letter-spacing: .16em; background: rgba(0,0,0,.55); padding: 6px 12px; }
+  .mm-big.shake { animation: mmshake .35s; }
+  @keyframes mmshake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
+  .mm-locknote { height: 0; overflow: hidden; font: 600 14px var(--font); color: #ff6a60; transition: height .2s; }
+  .mm-locknote.on { height: 24px; padding-top: 6px; }
+  .mm-card { all: unset; box-sizing: border-box; display: block; width: 100%; margin-top: 12px; padding: 14px 20px; background: rgba(255,255,255,.07); position: relative;
+    clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+  .mm-range { cursor: pointer; background: #fff; color: var(--ink); }
+  .mm-range:hover { background: var(--red); color: #fff; }
+  .mm-range b { display: block; font: 800 italic 34px var(--font); line-height: 1; }
+  .mm-range span { font: 700 12px var(--font); letter-spacing: .22em; opacity: .7; }
+  .mm-range i { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); font-style: normal; font-size: 26px; }
+  .mm-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mm-sum div small { display: block; font: 700 11px var(--font); letter-spacing: .2em; opacity: .55; }
+  .mm-sum div b { font: 800 italic 20px var(--font); }
+  .mm-sum .edit { all: unset; grid-column: 1 / -1; cursor: pointer; font: 700 12px var(--font); letter-spacing: .2em; opacity: .6; }
+  .mm-sum .edit:hover { opacity: 1; color: #ff4a40; }
+  /* armoury */
+  .mm-classes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .mm-class { all: unset; cursor: pointer; padding: 12px 12px 10px; background: rgba(255,255,255,.07); border-bottom: 3px solid transparent; }
+  .mm-class:hover { background: rgba(255,255,255,.14); }
+  .mm-class.on { background: rgba(255,255,255,.16); border-color: var(--c); }
+  .mm-class b { display: block; font: 800 italic 26px var(--font); line-height: 1; }
+  .mm-class span { font: 700 11px var(--font); letter-spacing: .16em; opacity: .6; }
+  .mm-classinfo { margin: 14px 0 6px; }
+  .mm-classinfo p { margin: 0 0 10px; font: 500 16px var(--font); opacity: .85; }
+  .mm-stat { display: grid; grid-template-columns: 90px 1fr 44px; align-items: center; gap: 10px; font: 800 12px var(--font); letter-spacing: .14em; margin-top: 5px; }
+  .mm-stat i { height: 6px; background: rgba(255,255,255,.12); position: relative; transform: skewX(-12deg); }
+  .mm-stat i::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: var(--c, #fff); }
+  .mm-stat em { font-style: normal; text-align: right; opacity: .8; }
+  .mm-arm h4 { margin: 18px 0 8px; font: 800 13px var(--font); letter-spacing: .26em; opacity: .55; }
+  .mm-weapons, .mm-abilities { display: grid; gap: 6px; }
+  .mm-wpn, .mm-abl { all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; padding: 10px 14px; background: rgba(255,255,255,.07); border-left: 3px solid transparent; }
+  .mm-wpn:hover, .mm-abl:hover { background: rgba(255,255,255,.13); }
+  .mm-wpn.on, .mm-abl.on { background: rgba(255,255,255,.18); border-color: var(--c); }
+  .mm-wpn b, .mm-abl b { font: 800 italic 20px var(--font); }
+  .mm-wpn small, .mm-abl small { font: 700 11px var(--font); letter-spacing: .18em; opacity: .6; text-align: right; }
+  .mm-wpn .bars { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mm-wpn .bars span { font: 700 10px var(--font); letter-spacing: .14em; opacity: .7; }
+  .mm-wpn .bars i { display: block; height: 4px; margin-top: 3px; background: rgba(255,255,255,.12); position: relative; }
+  .mm-wpn .bars i::after { content: ''; position: absolute; inset: 0; width: calc(var(--p) * 100%); background: #fff; }
+  .mm-abl p { grid-column: 1 / -1; margin: 0; font: 500 14px var(--font); opacity: .75; }
+  .mm-settings { width: min(760px, 100%); background: rgba(8,8,10,.6); padding: 20px 24px; }
+  .mm-settings .keys kbd, .mm-settings .binds button { color: var(--ink); }
+  .mm-settings label { color: #fff; }
+  .mm-name { position: fixed; right: 5vw; bottom: 7vh; text-align: right; pointer-events: none; }
+  .mm-name b { display: block; font: 800 italic clamp(48px, 7vw, 96px) var(--font); line-height: .85; color: #fff; text-shadow: 0 4px 0 rgba(0,0,0,.4); }
+  .mm-name span { display: inline-block; margin-top: 6px; font: 800 13px var(--font); letter-spacing: .24em; background: var(--cls, var(--red)); padding: 3px 10px; }
+  @media (max-width: 760px) { .mm-name { display: none; } #menu { background: rgba(8,8,10,.82); } .mm-top { flex-wrap: wrap; gap: 10px; padding: 12px 16px; } .mm-page { padding: 20px 16px; } .mm-big-t { font-size: 56px; } }
+
   body.benching #hud > :not(#vignette) { display: none; }
   body.benching #game { filter: saturate(.85); }
   .card { width: min(560px, 100%); }
@@ -219,11 +290,7 @@
   .logo .the { display: block; font-size: .32em; letter-spacing: .3em; font-style: normal; font-weight: 700; margin-bottom: .25em; }
   .logo .semi { color: var(--red); }
   .sub { font-weight: 700; letter-spacing: .28em; font-size: 13px; opacity: .6; margin: 14px 0 26px; }
-  #play { all: unset; cursor: pointer; display: block; width: 100%; text-align: center; background: var(--ink); color: #fff;
-    font-weight: 800; font-style: italic; font-size: 30px; letter-spacing: .08em; padding: 14px 0;
-    clip-path: polygon(16px 0, 100% 0, calc(100% - 16px) 100%, 0 100%); transition: background .12s; }
-  #play:hover { background: var(--red); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 26px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
   @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
   h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .2em; opacity: .6; }
   .keys { font-size: 15px; font-weight: 500; line-height: 1.5; }
@@ -279,12 +346,47 @@
 </div>
 
 <div id="menu">
-  <div class="card">
-    <h1 class="logo"><span class="the">THE</span><span class="semi">SEMI</span>-FINALS</h1>
-    <div class="sub">TEST RANGE · BUILD 0.7</div>
-    <button id="play">CLICK TO PLAY</button>
-    <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
-    <div class="grid2">
+  <header class="mm-top">
+    <div class="mm-logo"><span class="semi">SEMI</span>-FINALS</div>
+    <nav class="mm-nav">
+      <button data-tab="play" class="on" type="button">PLAY</button>
+      <button data-tab="armoury" type="button">ARMOURY</button>
+      <button data-tab="settings" type="button">SETTINGS</button>
+    </nav>
+    <div class="mm-chip" id="mm-chip"></div>
+  </header>
+
+  <section class="mm-page" data-page="play">
+    <div class="mm-col">
+      <div class="mm-kicker">SEASON 1 · BUILD 0.9</div>
+      <button class="mm-big locked" id="mm-play" type="button">
+        <span class="mm-big-t">PLAY</span>
+        <span class="mm-big-s">TOURNAMENT ARENA</span>
+        <span class="mm-lock">🔒 COMING SOON</span>
+      </button>
+      <div class="mm-locknote" id="mm-locknote">The first arena isn't open yet. Warm up in the test range.</div>
+      <button class="mm-card mm-range" id="play" type="button">
+        <b>TEST RANGE</b><span id="mm-range-sub">GUNS · MOVEMENT · PARKOUR · BOTS</span><i>▶</i>
+      </button>
+      <div class="mm-card mm-sum" id="mm-sum"></div>
+      <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
+    </div>
+  </section>
+
+  <section class="mm-page hidden" data-page="armoury">
+    <div class="mm-col mm-arm">
+      <div class="mm-classes" id="mm-classes"></div>
+      <div class="mm-classinfo" id="mm-classinfo"></div>
+      <h4>PRIMARY WEAPON</h4>
+      <div class="mm-weapons" id="mm-weapons"></div>
+      <h4>SPECIALISATION</h4>
+      <div class="mm-abilities" id="mm-abilities"></div>
+    </div>
+  </section>
+
+  <section class="mm-page hidden" data-page="settings">
+    <div class="mm-col mm-settings">
+      <div class="grid2">
       <div>
         <h3>CONTROLS</h3>
         <div class="keys">
@@ -297,10 +399,10 @@
           sprint-jump along a wall to wall run · <kbd>SPACE</kbd> wall jump<br>
           <kbd>LMB</kbd>/<kbd class="keyhint-fire">F</kbd>shoot · <kbd>RMB</kbd>/<kbd class="keyhint-aim">V</kbd>aim<br>
           <kbd>R</kbd>reload · <kbd>E</kbd>take gun from case<br>
-          <kbd class="keyhint-dash">Q</kbd>dash · <kbd class="keyhint-grapple">G</kbd>grapple · <kbd class="keyhint-slam">Z</kbd>ground slam<br>
+          <kbd class="keyhint-dash">Q</kbd>dash · <kbd class="keyhint-grapple">G</kbd>grapple · <kbd class="keyhint-slam">Z</kbd>ground slam (whichever your class has equipped)<br>
           <kbd>E</kbd>at the workbench for attachments<br>
           take the elevator (west wall) down to the <b>underground arena</b> · <kbd>E</kbd> at the console to fight bots<br>
-          <kbd>1</kbd><kbd>2</kbd>/scroll swap · <kbd>T</kbd>reset range<br>
+          <kbd>1</kbd><kbd>2</kbd>/scroll swap · <kbd>T</kbd>reset range · <kbd>ESC</kbd> main menu<br>
           parkour course through the east door · <kbd>X</kbd> restart run
         </div>
       </div>
@@ -319,8 +421,11 @@
         </div>
         <div id="bindnote"></div>
       </div>
+      </div>
     </div>
-  </div>
+  </section>
+
+  <div class="mm-name" id="mm-name"></div>
 </div>
 <div id="death" class="hidden"><div><b>ELIMINATED</b><span id="deathsub"></span></div></div>
 <div id="bench" class="hidden">

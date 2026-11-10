@@ -155,6 +155,7 @@ export default {
 
     buildParkour(add, deco, H);
     this.deckRefs = buildDeck(add, deco);
+    this.showroomRefs = buildShowroom(add);
   },
 
   // weapon cases along the south wall (the slot number is shown above each)
@@ -190,6 +191,9 @@ export default {
       pods: { from: [-69.5, DECK_Y + 12.2, 5], to: [-71, DECK_Y + 11.6, -2], look: [-78.2, DECK_Y + 0.2, -3.2] },   // high, looking down into the open pods
     },
   },
+
+  // main-menu showroom, deep underground and far away (lit by its own ceiling lamp)
+  showroom: { spot: [300, -40, 332], cam: { eye: [300.25, -38.6, 327.3], look: [301.15, -38.95, 332] } },
 
   // parkour time trial (geometry is in buildParkour below)
   course: {
@@ -389,4 +393,35 @@ function buildDeck(add, deco) {
   // bay back wall lights
   for (let z = -26; z <= 20; z += 4) deco([-81.88, Y + 1, z], [-81.8, Y + 4.5, z + 0.25], { color: [1, 0.96, 0.9], emissive: 1, noShadow: true });
   return { doors, alarms, button, buttonRing, screen };
+}
+
+// ---------------------------------------------------------------- main menu showroom
+function buildShowroom(add) {
+  const box = (min, max, o = {}) => add(makeBox(min, max, { grid: false, ...o }));
+  const Y = -40, X = 300, Z = 332;
+  const BLK = [0.06, 0.06, 0.07];
+  box([X - 14, Y - 1, Z - 12], [X + 14, Y, Z + 8], { color: [0.09, 0.09, 0.1] });                   // floor
+  box([X - 14, Y, Z + 5.5], [X + 14, Y + 9, Z + 6], { color: BLK });                                 // back wall
+  box([X - 14, Y + 8, Z - 12], [X + 14, Y + 9, Z + 6], { color: BLK });                              // ceiling
+  for (const sx of [-1, 1]) box([X + sx * 9 - 0.5, Y, Z - 12], [X + sx * 9 + 0.5, Y + 9, Z + 6], { color: BLK });   // side walls
+  // turntable the character stands on
+  box([X - 1.3, Y, Z - 1.3], [X + 1.3, Y + 0.12, Z + 1.3], { color: [0.14, 0.14, 0.16] });
+  box([X - 1.1, Y + 0.12, Z - 1.1], [X + 1.1, Y + 0.14, Z + 1.1], { color: [0.2, 0.2, 0.22], solid: false });
+  const ring = [];
+  for (const [a, b, c, d] of [[-1.32, -1.3, -1.32, 1.32], [1.3, 1.32, -1.32, 1.32], [-1.32, 1.32, -1.32, -1.3], [-1.32, 1.32, 1.3, 1.32]]) {
+    ring.push(box([X + a, Y + 0.02, Z + c], [X + b, Y + 0.1, Z + d], { color: [0.92, 0.1, 0.08], emissive: 1, solid: false, noShadow: true }));
+  }
+  // light panels on the back wall (class colour), bars on the side walls
+  const panels = [];
+  for (let i = -4; i <= 4; i++) {
+    const x0 = X + i * 1.6 - 0.6;
+    panels.push(box([x0, Y + 0.6, Z + 5.4], [x0 + 1.2, Y + 7.2, Z + 5.5], { color: [0.92, 0.1, 0.08], emissive: i % 2 ? 0.45 : 0.85, solid: false, noShadow: true }));
+  }
+  const bars = [];
+  for (const sx of [-1, 1]) for (let y = 0.8; y < 7.5; y += 1.1) {
+    bars.push(box([X + sx * 8.48 - 0.02, Y + y, Z - 6], [X + sx * 8.5, Y + y + 0.08, Z + 5], { color: [0.92, 0.1, 0.08], emissive: 1, solid: false, noShadow: true }));
+  }
+  // floor strips leading to the turntable
+  for (const sx of [-1, 1]) ring.push(box([X + sx * 2.4 - 0.05, Y, Z - 10], [X + sx * 2.4 + 0.05, Y + 0.012, Z + 5], { color: [0.92, 0.1, 0.08], emissive: 0.8, solid: false, noShadow: true }));
+  return { panels, bars, ring };
 }

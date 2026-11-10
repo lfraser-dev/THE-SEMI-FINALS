@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.7: Test Range, Parkour Course and an underground arena with bots that fight back.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
+**Build 0.9: Main menu with an Armoury (Light / Medium / Heavy), Test Range, Parkour Course and underground bot arena.** There are no enemies yet. This build is a sandbox for testing movement, gunplay and destruction.
 
 ## Run it
 
@@ -70,6 +70,23 @@ Reload animations differ by gun, and they have some flair:
 Reload animations differ by gun. The old mag drops onto the floor, a fresh one comes up in your hand, and an empty mag means a longer reload with a charging-handle pull. Casings eject on every shot.
 
 Aim, shoot, dash, grapple and slam keys can all be changed in the menu under Settings, and aim can be set to hold or toggle. This helps on trackpads.
+
+## Main menu
+
+The game opens on a main menu with your character standing in a lit showroom, and the lights change colour with your class. There are three tabs:
+- **PLAY:** the big **PLAY** button is for the first tournament arena. It's locked (Coming Soon). **TEST RANGE** takes you into the range, and shows **Resume** if you have a session going. Below them is a summary of your loadout.
+- **ARMOURY:** pick your class, then its primary weapon and its specialisation (ability). Your choices are saved.
+- **SETTINGS:** controls, sensitivity, FOV, volume and key binds.
+
+Esc in game takes you back to the menu.
+
+| Class | Health | Speed | Weapons | Specialisations |
+| --- | --- | --- | --- | --- |
+| Light | 150 | 112% | V9-S SMG, LH-7 sniper, P-19 pistol | Evasive Dash, Grappling Hook |
+| Medium | 250 | 100% | SF-47 rifle, SG-12 shotgun, P-19 pistol | Grappling Hook, Evasive Dash |
+| Heavy | 350 | 86% | M60-X LMG, SG-12 shotgun | Ground Slam, Evasive Dash |
+
+Your class sets your health, movement speed and starting guns in the test range. You get your chosen primary plus the pistol as a sidearm, or another class weapon if the pistol is your primary. Only your equipped specialisation works, and it's the only one shown on the HUD.
 
 ## Underground arena
 
@@ -178,6 +195,8 @@ src/renderer.js       WebGL2 renderer + grid/edge shader (everything is a box)
 src/world.js          box list, collision queries, raycasts
 src/player.js         movement, vault/mantle/ledge grab/wall run, collision, camera springs
 src/course.js         parkour time trial: gates, checkpoints, hazards, best times
+src/classes.js       Light / Medium / Heavy data, ability list, saved loadout
+src/contestant.js     character rig, outfits and poses (used for the menu showroom)
 src/elevator.js       cage elevator from the range down to the underground arena (gates, car, cage)
 src/bots.js           combat bots (model, AI, shooting) + wave manager
 src/weapon.js         gun logic, reload animations, first-person viewmodel + hands
