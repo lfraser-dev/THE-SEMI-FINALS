@@ -1,4 +1,4 @@
-// Cashout mode for Fortune Stadium.
+// Cashout mode for the semi-finals arena.
 // A cash box spawns in a vault, locked for 30 s. Grab it (you can still shoot while carrying it), take it to an
 // active cashout station and deposit it. The station counts down; any other team can steal it by standing on the
 // station (players hold E). When the countdown ends, the team that holds the station banks $1,000.

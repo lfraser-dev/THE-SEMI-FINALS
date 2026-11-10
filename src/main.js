@@ -15,7 +15,7 @@ import { Thumbs } from './thumbs.js';
 import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
 import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
-import stadium from './maps/fortuneStadium.js';
+import stadium from './maps/skyDocks.js';
 import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager } from './bots.js';
@@ -402,6 +402,7 @@ function die(name) {
 }
 
 function respawnPlayer() {
+  fallTop = null;
   const A = map.deck.area, P = player.pos;
   const onDeck = botMgr.running || (P[0] > A.min[0] && P[0] < A.max[0] && P[1] > A.min[1] && P[1] < A.max[1] && P[2] > A.min[2] && P[2] < A.max[2]);
   const r = onDeck ? map.deck.respawn : { pos: player.spawnPoint, yaw: player.spawnYaw };
@@ -741,7 +742,14 @@ function updateHud(dt, fovRad) {
 
   const lb = playing && !player.dead && inStadium() ? lookLiftButton() : null;
   const ca = cashout.active && playing && !player.dead ? cashout.playerAction(true) : null;
-  if (lb) {
+  const hk = settings.grappleKey.replace(/^Key/, '');
+  if (inStadium() && stadium.hook && playing && !player.dead && player.grapple?.anchor) {
+    hud.prompt.innerHTML = `<kbd>${hk}</kbd> CUT THE LINE <span>OR JUMP</span>`;
+    hud.prompt.style.opacity = 1;
+  } else if (inStadium() && stadium.hook && playing && !player.dead && !player.grounded && player.vel[1] < -5 && fallTop != null && fallTop - player.pos[1] > 5) {
+    hud.prompt.innerHTML = `<kbd>${hk}</kbd> <b>HOOK A CONTAINER</b> <span>BREAK YOUR FALL</span>`;
+    hud.prompt.style.opacity = 1;
+  } else if (lb) {
     hud.prompt.innerHTML = `<kbd>E</kbd> ${lb.car ? (lb.dir > 0 ? 'GO UP' : 'GO DOWN') : 'CALL LIFT'} <b>${lb.dir > 0 ? '▲' : '▼'}</b>`;
     hud.prompt.style.opacity = 1;
   } else if (ca) {
@@ -841,7 +849,7 @@ function enterStadium() {
     player.spawn(stadium.spawn.pos, stadium.spawn.yaw);
     Object.assign(player, { hp: player.maxHp, dead: false, press: null });
     slots.forEach((w) => { w.ammo = w.def.mag; w.reload = null; });
-    banner('FORTUNE STADIUM', 'SEMI-FINALS', '', 2.4);
+    banner(stadium.name, 'SEMI-FINALS', '', 2.4);
     document.body.classList.add('stadium');
     $('mapname').lastChild.textContent = stadium.name;
   }
@@ -985,7 +993,7 @@ function refreshGuns() {
   cases.forEach((c) => { c.def = defFor(c.def.id); });
   showroomKey = '';
 }
-// PLAY: matchmaking → loadout (30 s) → team intro → Fortune Stadium. Once you're in a match, PLAY resumes it.
+// PLAY: matchmaking → loadout (30 s) → team intro → the arena. Once you're in a match, PLAY resumes it.
 let match = null;
 const mmk = new Matchmaking({
   root: $('mmk'), classLo, sounds,
@@ -1049,7 +1057,7 @@ function showMatchEnd() {
   const el = $('matchend');
   const card = document.createElement('div');
   card.className = 'me-card';
-  const h = document.createElement('small'); h.textContent = 'THE SEMI-FINALS · FORTUNE STADIUM';
+  const h = document.createElement('small'); h.textContent = `THE SEMI-FINALS · ${stadium.name}`;
   const t = document.createElement('b'); t.textContent = place < 2 ? 'YOU ADVANCE TO THE FINAL' : 'ELIMINATED';
   t.className = place < 2 ? 'win' : 'lose';
   card.append(h, t);
@@ -1158,7 +1166,7 @@ function renderMenu() {
   if (menuTab === 'shop') renderShop();
   $('mm-name').replaceChildren(el('b', null, c.name), el('span', null, `${WEAPONS[sel.weapon].name} · ${ABILITIES[sel.ability].short}`));
   $('mm-range-sub').textContent = sessionStarted && !classDirty && !inStadium() ? 'RESUME YOUR SESSION' : 'GUNS · MOVEMENT · PARKOUR · BOTS';
-  $('mm-play-sub').textContent = match && inStadium() && !classDirty ? 'RESUME · FORTUNE STADIUM' : 'SEMI-FINALS · FIND A MATCH';
+  $('mm-play-sub').textContent = match && inStadium() && !classDirty ? `RESUME · ${stadium.name}` : 'SEMI-FINALS · FIND A MATCH';
   // play page summary
   const sum = $('mm-sum');
   const cell = (k, v) => { const d = el('div'); d.append(el('small', null, k), el('b', null, v)); return d; };
@@ -1449,7 +1457,40 @@ function launch(pad) {
   effects.dust(player.pos, 6, [0, 6, 0]);
   padCd = 0.6;
 }
+// ---------- Sky Docks: the container hook and fall damage ----------
+let fallTop = null;
+// the container to hook: the nearest one in front of you within 45 m, else the nearest one at all
+function hookTarget() {
+  const eye = player.eye(), f = player.forward();
+  let best = null, bs = Infinity;
+  for (const b of world.boxes) {
+    if (b.tag !== 'cargo') continue;
+    // nearest point on the container's top
+    const p = [clamp(eye[0], b.min[0] + 0.8, b.max[0] - 0.8), b.max[1] + 0.2, clamp(eye[2], b.min[2] + 0.8, b.max[2] - 0.8)];
+    const d = [p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]], L = Math.hypot(...d);
+    if (L > 45 || L < 1.5) continue;
+    const facing = (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / L;
+    const sc = L * (facing > 0.5 ? 1 : facing > 0 ? 1.8 : 3);
+    if (sc < bs) { bs = sc; best = { box: b, point: p }; }
+  }
+  return best;
+}
+function updateFall() {
+  if (!stadium.fallLethal || player.dead) { fallTop = null; return; }
+  const y = player.pos[1];
+  if (player.grapple && player.grapple.phase === 'pull') { fallTop = y; return; }   // hanging on a line resets the fall
+  if (player.grounded) {
+    if (fallTop != null) {
+      const drop = fallTop - y;
+      if (drop > stadium.fallLethal) { damagePlayer(9999, player.pos, 'THE DROP'); banner('TOO FAR', `A ${Math.round(drop)} M DROP`, 'bad', 1.4); }
+      else if (drop > stadium.fallHurt) { damagePlayer(Math.round((drop - stadium.fallHurt) * 18), [player.pos[0], player.pos[1] - 1, player.pos[2]], 'THE DROP'); }
+    }
+    fallTop = null;
+  } else fallTop = Math.max(fallTop ?? y, y);
+}
+
 function updateStadium(dt) {
+  updateFall();
   if (cashout.active) player.speedMul = CLASSES[classLo.cls].speed * (cashout.box.carrier === cashout.you ? 0.9 : 1);
   const shoe = stadium.refs?.shoe;
   if (shoe) {
@@ -1467,7 +1508,7 @@ function updateStadium(dt) {
   if (player.pos[1] < stadium.voidY && voidT <= 0) {
     voidT = 0.35;
     sounds.fail?.();
-    banner('OUT', 'FELL INTO THE VOID', 'bad', 1.3);
+    banner(...(stadium.voidText || ['OUT', 'FELL INTO THE VOID']), 'bad', 1.3);
   }
   if (voidT > 0) {
     voidT -= dt;
@@ -1502,6 +1543,7 @@ function frame(now) {
       deathT -= dt;
       if (deathT <= 0) respawnPlayer();
     }
+    if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
     updateCombat(dt);
     updateCamera();
   } else if (playing && !bench.open) {
@@ -1522,13 +1564,22 @@ function frame(now) {
     else if (nearBench && input.hit('KeyE')) openBench();
     w = weapon();
     // only your class's equipped specialisation works
+    let hooked = false;
+    if (inStadium() && stadium.hook && input.hit(settings.grappleKey)) {
+      if (player.grapple && player.grapple.phase !== 'miss') { player.releaseGrapple(false); sounds.grappleRelease(); hooked = true; }
+      else {
+        const t = hookTarget();
+        if (t) { player.hookTo(t.box, t.point); hooked = true; fallTop = null; }
+      }
+    }
     const act = {
       dash: equippedAbility === 'dash' && input.hit(settings.dashKey),
-      grapple: equippedAbility === 'grapple' && input.hit(settings.grappleKey),
+      grapple: !hooked && equippedAbility === 'grapple' && input.hit(settings.grappleKey),
       slam: equippedAbility === 'slam' && input.hit(settings.slamKey),
     };
     elevator.update(dt, player, sounds);
     for (const l of lifts) l.update(dt, player, sounds);
+    if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     if (inStadium()) updateStadium(dt);
     updateCombat(dt);
@@ -1645,4 +1696,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { map, stadium, lifts, cashout, hooks: botHooks, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { map, stadium, lifts, cashout, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

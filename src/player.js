@@ -567,6 +567,15 @@ export class Player {
     }
   }
 
+  // hook a box (a shipping container) at a point on it; the hook point moves with the box
+  hookTo(box, point) {
+    const e = this.eye(), d = Math.hypot(point[0] - e[0], point[1] - e[1], point[2] - e[2]);
+    this.grapple = { phase: 'fire', t: 0, point: [...point], normal: [0, 1, 0], travel: d / GRAPPLE_SPEED, dist: d,
+      anchor: box, off: point.map((v, i) => v - box.center[i]) };
+    this.slam = null; this.dash = null;
+    this.events.push('grapplefire');
+  }
+
   releaseGrapple(boost) {
     if (boost) this.vel[1] = Math.max(this.vel[1], 0) + 6;
     this.grapple = null;
@@ -577,6 +586,7 @@ export class Player {
   updateGrapple(dt, wx, wz, wl) {
     const g = this.grapple;
     g.t += dt;
+    if (g.anchor) g.point = g.anchor.center.map((v, i) => v + g.off[i]);
     if (g.phase === 'miss') { if (g.t > 0.32) this.grapple = null; return; }
     if (g.phase === 'fire') {
       if (g.t >= g.travel) { g.phase = 'pull'; g.t = 0; this.events.push('grapplehit'); this.vel[1] = Math.max(this.vel[1], 2); }
@@ -586,7 +596,18 @@ export class Player {
     const to = [g.point[0] - c[0], g.point[1] - c[1], g.point[2] - c[2]];
     const d = Math.hypot(...to);
     if (this.jumpBuffer > 0) { this.jumpBuffer = 0; this.releaseGrapple(true); return; }
-    if (d < 1.7 || g.t > GRAPPLE_MAX) { this.releaseGrapple(to[1] > -0.5); return; }
+    // hooked onto a container: reaching it pulls you up onto its roof
+    if (g.anchor && d < 2.4) {
+      const b = g.anchor;
+      this.pos = [clamp(g.point[0], b.min[0] + 0.5, b.max[0] - 0.5), b.max[1] + 0.002, clamp(g.point[2], b.min[2] + 0.5, b.max[2] - 0.5)];
+      this.vel = [0, 0, 0];
+      this.grounded = true;
+      this.grapple = null;
+      this.abil.grapple.cd = Math.min(this.abil.grapple.cd, 1);
+      this.events.push('grapplerelease', 'land');
+      return;
+    }
+    if (d < 1.7 || g.t > GRAPPLE_MAX * (g.anchor ? 2 : 1)) { this.releaseGrapple(to[1] > -0.5); return; }
     const dir = to.map((v) => v / d);
     const acc = 46;
     for (let k = 0; k < 3; k++) this.vel[k] += dir[k] * acc * dt;

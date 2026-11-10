@@ -18,6 +18,7 @@ export class Nav {
     const addNode = (x, y, z) => { X.push(x); Y.push(y); Z.push(z); adj.push([]); return X.length - 1; };
     const link = (a, b) => { if (a !== b && !adj[a].includes(b)) { adj[a].push(b); adj[b].push(a); } };
     this.levels = levels.map((l) => l.y);
+    this.chainIds = [];
     levels.forEach((lv, li) => {
       const seen = new Map();
       for (const [x0, z0, x1, z1] of lv.rects) {
@@ -53,6 +54,7 @@ export class Nav {
     this.N = X.length;
     for (const ch of chains) {
       const ids = ch.map(([x, y, z]) => addNode(x, y, z));
+      (this.chainIds = this.chainIds || []).push(ids);
       for (let i = 0; i < ids.length - 1; i++) link(ids[i], ids[i + 1]);
       for (const end of [ids[0], ids[ids.length - 1]]) {
         const li = this.levelOfY(Y[end], levels);
@@ -66,6 +68,13 @@ export class Nav {
         near.sort((p, q) => p[0] - q[0]);
         for (const [d, n] of near.slice(0, 3)) if (d < 3) link(end, n);
       }
+    }
+    // chain ends that meet (one flight's top and the next flight's start, approach routes) join up
+    const ends = [];
+    for (const ch of this.chainIds || []) ends.push(ch[0], ch[ch.length - 1]);
+    for (let i = 0; i < ends.length; i++) for (let j = i + 1; j < ends.length; j++) {
+      const p = ends[i], q = ends[j];
+      if (Math.hypot(X[p] - X[q], Z[p] - Z[q]) < 2.5 && Math.abs(Y[p] - Y[q]) < 0.3) link(p, q);   // across a landing
     }
     this.X = Float32Array.from(X); this.Y = Float32Array.from(Y); this.Z = Float32Array.from(Z);
     this.adj = adj;
