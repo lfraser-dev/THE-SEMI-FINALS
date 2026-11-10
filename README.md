@@ -15,6 +15,8 @@ python3 -m http.server 8000
 
 Then open http://localhost:8000.
 
+**After pulling an update**, hard-refresh (Ctrl+Shift+R, or Cmd+Shift+R on Mac). The home screen shows the build number (top left, e.g. `BUILD 0.21`) so you can check you're on the latest. Every script is loaded with a version stamp (an import map in `index.html`), so a refresh always gets a matching set. After changing files in `src/`, run `python3 tools/stamp.py` to update the stamp.
+
 ## Controls
 
 | Key | Action |
