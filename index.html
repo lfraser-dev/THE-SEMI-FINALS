@@ -450,6 +450,7 @@
     #mmk { overflow-y: auto; } .mk-intro-top b { font-size: 52px; }
   }
   /* team strip on the HUD in the stadium */
+  body.stadium #killfeed { top: 170px; }
   #teams { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
   body:not(.stadium) #teams { display: none; }
   #teams .tm { background: rgba(17,18,22,.82); color: #fff; border-top: 4px solid var(--t); padding: 4px 12px 5px; min-width: 120px; display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
@@ -458,6 +459,39 @@
   #teams .tm span { font: 800 13px var(--font); color: #ffd04a; }
   #teams .tm.mine { background: rgba(255,255,255,.92); color: var(--ink); }
   #teams .tm.mine span { color: #b07a00; }
+
+  /* ---------- cashout HUD ---------- */
+  #objective { position: absolute; top: 122px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+  #objective b { display: block; font: 800 italic 30px var(--font); letter-spacing: .02em; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45), 0 0 18px rgba(0,0,0,.35); }
+  #objective span { display: inline-block; margin-top: 2px; font: 800 13px var(--font); letter-spacing: .22em; color: #fff; background: rgba(17,18,22,.75); padding: 3px 12px; }
+  #objective span:empty { display: none; }
+  #objective i { --p: 0; display: block; width: 240px; height: 6px; margin: 6px auto 0; background: linear-gradient(90deg, #ffd04a calc(var(--p) * 100%), rgba(255,255,255,.2) 0); transition: opacity .2s; }
+  #markers, #tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .mkr { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; margin: -18px 0 0 -60px; width: 120px; color: var(--c); }
+  .mkr i { font-style: normal; font-size: 26px; line-height: 1; text-shadow: 0 0 10px rgba(0,0,0,.6), 0 0 2px #000; }
+  .mkr b { font: 800 italic 14px var(--font); letter-spacing: .06em; color: #fff; background: rgba(17,18,22,.72); padding: 1px 8px; border-bottom: 2px solid var(--c); white-space: nowrap; }
+  .mkr small { font: 800 11px var(--font); letter-spacing: .14em; color: #fff; text-shadow: 0 1px 2px #000; }
+  .mkr.edge { opacity: .8; }
+  .mkr.box i { animation: mkrpulse 1s infinite; }
+  @keyframes mkrpulse { 50% { transform: scale(1.25); } }
+  .tag { position: absolute; left: 0; top: 0; margin: -30px 0 0 -60px; width: 120px; text-align: center; color: var(--c); }
+  .tag i { display: block; font-style: normal; font-size: 12px; line-height: 1; }
+  .tag b { display: block; font: 800 13px var(--font); letter-spacing: .06em; color: var(--c); text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,.6); white-space: nowrap; }
+  .tag small { display: block; height: 3px; margin: 2px auto 0; max-width: 60px; background: var(--c); box-shadow: 0 0 0 1px rgba(0,0,0,.5); }
+  .tag:not(.ally) b::before { content: '◆ '; }
+  .tag.carrier b::after { content: ' $'; color: #ffd04a; }
+  #matchend { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, rgba(30,30,36,.82), rgba(6,6,8,.95) 70%); color: #fff; font-family: var(--font); }
+  .me-card { width: min(520px, 92vw); text-align: center; }
+  .me-card > small { display: block; font: 800 14px var(--font); letter-spacing: .34em; color: var(--red); }
+  .me-card > b { display: block; font: 800 italic 64px var(--font); line-height: .95; margin: 8px 0 22px; }
+  .me-card > b.win { color: #4dff7a; } .me-card > b.lose { color: #ff5a4a; }
+  .me-row { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; padding: 10px 16px; margin-top: 6px; background: rgba(255,255,255,.06); border-left: 6px solid var(--t); text-align: left; }
+  .me-row i { font: 800 italic 26px var(--font); font-style: normal; opacity: .7; }
+  .me-row b { font: 800 italic 24px var(--font); color: var(--t); }
+  .me-row span { font: 800 22px var(--font); color: #ffd04a; }
+  .me-row.mine { background: rgba(255,255,255,.14); }
+  .me-row.adv i { color: #4dff7a; opacity: 1; }
+  .me-card button { all: unset; cursor: pointer; margin-top: 24px; display: inline-block; padding: 12px 40px; font: 800 italic 28px var(--font); background: var(--red); clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
 </style>
 </head>
 <body>
@@ -496,6 +530,9 @@
     <div class="ab" id="ab-slam"><kbd>Z</kbd><b>SLAM</b><span class="cd"></span></div>
   </div>
   <div id="teams"></div>
+  <div id="objective" class="hidden"><b></b><span></span><i></i></div>
+  <div id="markers" class="hidden"></div>
+  <div id="tags" class="hidden"></div>
   <div id="mapname"><div class="small">THE SEMI-FINALS</div><div class="big">TEST RANGE</div></div>
   <div id="slots"><div id="slot1"></div><div id="slot2"></div></div>
   <div id="weapontype"></div>
@@ -504,6 +541,7 @@
 </div>
 
 <div id="mmk" class="hidden"></div>
+<div id="matchend" class="hidden"></div>
 
 <div id="menu">
   <header class="mm-top">
@@ -523,7 +561,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.20</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.21</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FORTUNE STADIUM</span>

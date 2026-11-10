@@ -20,6 +20,8 @@ import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager } from './bots.js';
 import { Matchmaking } from './matchmaking.js';
+import { Lift } from './lift.js';
+import { Cashout, cashBoxParts } from './cashout.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -65,8 +67,8 @@ const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
 const elevator = new Elevator(world, map.elevator);
-const towerLift = new Elevator(world, stadium.lift);   // glass-free cage lift up the tower in sector 3
-towerLift.dur = stadium.liftDur || 7;
+const lifts = stadium.lifts.map((o) => new Lift(world, o));   // the tower's two passenger lifts
+const cashout = new Cashout(world, stadium);                    // the cashout match
 let where = 'range';       // 'range' or 'stadium'
 const inStadium = () => where === 'stadium';
 let padCd = 0, voidT = 0;
@@ -203,11 +205,18 @@ function fire(w) {
     const a = Math.random() * Math.PI * 2;
     const r = spread * (d.pellets > 1 ? Math.sqrt(Math.random()) : Math.sqrt(Math.random()));
     const dir = norm([0, 1, 2].map((k) => camFwd[k] + camRight[k] * Math.cos(a) * r + camUp[k] * Math.sin(a) * r));
-    const hit = world.raycast(camEye, dir, 300);
-    const end = hit ? hit.point : [0, 1, 2].map((k) => camEye[k] + dir[k] * 300);
+    // bullets smash glass and carry on through it
+    let o = camEye, left = 300, hit = null;
+    for (let k = 0; k < 4; k++) {
+      hit = world.raycast(o, dir, left);
+      if (hit && hit.box.tag === 'glass') { breakGlass(hit.box, dir); o = hit.point.map((c, j) => c + dir[j] * 0.02); left -= hit.t; hit = null; continue; }
+      break;
+    }
+    const end = hit ? hit.point : [0, 1, 2].map((k) => o[k] + dir[k] * left);
     if (i < 4) effects.tracer(muzzle, end);
     if (!hit) continue;
     const b = hit.box;
+    if (b.tag === 'bot' && cashout.active && b.ref.team === cashout.myTeam.idx) continue;   // no friendly fire
     if (b.tag === 'dummy' || b.tag === 'bot') {
       // damage falls off past the weapon's range (down to 55% at 2.2x range)
       const fall = 1 - 0.45 * clamp((hit.t - d.range) / (d.range * 1.2), 0, 1);
@@ -324,6 +333,37 @@ function slamShockwave(h) {
       if (dist < R * 0.75) stats.chunks += w.hit(b, norm([dx, 0.4, dz]));
     }
   }
+  // the shockwave blows out nearby windows
+  for (const g of stadium.glassBoxes) {
+    if (!g.world) continue;
+    const dx = g.center[0] - p[0], dy = g.center[1] - p[1], dz = g.center[2] - p[2];
+    if (Math.hypot(dx, dz) < R + 2 && dy > -3 && dy < 5) breakGlass(g, norm([dx, 0.5, dz]));
+  }
+}
+
+// ---------- breakable glass ----------
+const GLASS_SHARD = [0.72, 0.86, 0.93];
+function breakGlass(b, dir = [0, 0, 0]) {
+  if (!b.world) return;
+  world.remove(b);
+  const n = Math.min(26, 8 + Math.round(b.scale[0] * b.scale[1] * b.scale[2] * 0 + (b.scale[0] + b.scale[2]) * b.scale[1] * 1.2));
+  for (let i = 0; i < n; i++) {
+    const p = [b.min[0] + Math.random() * b.scale[0], b.min[1] + Math.random() * b.scale[1], b.min[2] + Math.random() * b.scale[2]];
+    const s = 0.06 + Math.random() * 0.26, s2 = 0.06 + Math.random() * 0.26;
+    const thin = b.scale[0] < b.scale[2] ? [0.025, s, s2] : b.scale[1] < 0.2 ? [s, 0.025, s2] : [s, s2, 0.025];
+    const v = [dir[0] * 5 + (Math.random() - 0.5) * 3, dir[1] * 3 + Math.random() * 2, dir[2] * 5 + (Math.random() - 0.5) * 3];
+    effects.spawnPiece(p, thin, v, GLASS_SHARD, 1.4 + Math.random() * 1.2, 0.25);
+  }
+  sounds.glass?.();
+}
+function resetGlass() {
+  for (const g of stadium.glassBoxes) if (g.world) world.remove(g);
+  stadium.glassBoxes = stadium.spawnGlass(world);
+}
+// the lift button you're looking at (within reach)
+function lookLiftButton() {
+  const hit = world.raycast(player.eye(), player.forward(), 3.2, false);
+  return hit && hit.box.tag === 'liftbtn' ? hit.box.ref : null;
 }
 
 // ---------- combat deck: health, bots, console, cutscene ----------
@@ -375,7 +415,11 @@ const botHooks = {
   player,
   hitPlayer: (dmg, bot, from) => damagePlayer(dmg, from, bot.name),
   shot: (bot, from, end, dist) => { effects.tracer(from, end); sounds.botShot(dist); },
-  impact: (hit) => { effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal); },
+  impact: (hit, u) => {
+    if (hit.box.tag === 'glass') { breakGlass(hit.box, u || [0, 0, 0]); return; }
+    effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal);
+  },
+  onBotKill: (killer, victim) => { killFeed(killer.name, 'RIFLE', victim.name, false); },
   whiz: (from, end) => {
     // did the round pass close to your head?
     const e = player.eye(), d = [end[0] - from[0], end[1] - from[1], end[2] - from[2]];
@@ -393,7 +437,9 @@ const botHooks = {
   onShatter: (bot) => {
     const s = bot.sc, f = bot.fallSign;
     const lay = (c) => bot.toWorld([c[0], 0.25, c[2] + f * c[1] * 0.9]);
-    for (const [c, sz, col] of [[[0, 0.45, 0], [0.4, 0.3, 0.9], [0.55, 0.06, 0.05]], [[0, 1.25, 0], [0.55, 0.32, 0.55], [0.92, 0.1, 0.08]], [[0, 1.64, 0], [0.3, 0.3, 0.3], [1, 0.22, 0.16]]]) {
+    const tc = bot.pal ? [...bot.pal.values()] : null;     // team colours: [body, head, dark]
+    for (const [c, sz, col0, ti] of [[[0, 0.45, 0], [0.4, 0.3, 0.9], [0.55, 0.06, 0.05], 2], [[0, 1.25, 0], [0.55, 0.32, 0.55], [0.92, 0.1, 0.08], 0], [[0, 1.64, 0], [0.3, 0.3, 0.3], [1, 0.22, 0.16], 1]]) {
+      const col = tc ? tc[ti] : col0;
       const w = lay(c), sc = sz.map((v) => v * s);
       effects.shatter({ min: w.map((v, i) => v - sc[i] / 2), max: w.map((v, i) => v + sc[i] / 2), scale: sc, center: w, color: col }, bot.killDir || [0, 0, 0], 3, 2.5, 0.12);
     }
@@ -496,6 +542,10 @@ function updateCutscene(dt) {
 let lastCount = 0;
 function updateCombat(dt) {
   botMgr.update(dt, botHooks);
+  if (cashout.active) {
+    cashout.update(dt, botHooks, playing && !player.dead && input.down('KeyE') && cashout.playerAction(true) === 'steal');
+    cashoutEvents();
+  }
   if (botMgr.state === 'countdown') {
     const n = Math.ceil(botMgr.timer);
     if (n !== lastCount && n > 0) { lastCount = n; banner(String(n), 'GET READY', '', 0.9); sounds.beep(false); }
@@ -606,6 +656,7 @@ function findCase() {
 let fpsAcc = 0, fpsFrames = 0;
 function updateHud(dt, fovRad) {
   const w = weapon();
+  updateMatchHud(dt);
   hud.ammo.textContent = w.reloading && !w.reload.shell ? '--' : w.ammo;
   hud.ammo.classList.toggle('low', w.ammo <= Math.ceil(w.def.mag * 0.2));
   hud.reserve.textContent = `/ ${w.def.mag}`;
@@ -688,7 +739,16 @@ function updateHud(dt, fovRad) {
   hud.cross.classList.toggle('shotgun', w.def.pellets > 1);
   hud.scope.style.opacity = w.scoped ? 1 : 0;
 
-  if (nearConsole() && !pressSeq && !cutscene && !player.dead) {
+  const lb = playing && !player.dead && inStadium() ? lookLiftButton() : null;
+  const ca = cashout.active && playing && !player.dead ? cashout.playerAction(true) : null;
+  if (lb) {
+    hud.prompt.innerHTML = `<kbd>E</kbd> ${lb.car ? (lb.dir > 0 ? 'GO UP' : 'GO DOWN') : 'CALL LIFT'} <b>${lb.dir > 0 ? '▲' : '▼'}</b>`;
+    hud.prompt.style.opacity = 1;
+  } else if (ca) {
+    hud.prompt.innerHTML = ca === 'pickup' ? '<kbd>E</kbd> PICK UP <b>CASH BOX</b>' : ca === 'deposit' ? '<kbd>E</kbd> DEPOSIT <b>CASH BOX</b> <span>START CASHOUT</span>'
+      : ca === 'steal' ? 'HOLD <kbd>E</kbd> <b>STEAL CASHOUT</b>' : `<b>VAULT LOCKED</b> <span>OPENS IN ${Math.ceil(cashout.box.t)} S</span>`;
+    hud.prompt.style.opacity = 1;
+  } else if (nearConsole() && !pressSeq && !cutscene && !player.dead) {
     hud.prompt.innerHTML = botMgr.running ? '<kbd>E</kbd> END SESSION' : `<kbd>E</kbd> START <b>COMBAT</b> <span>BEST WAVE ${botMgr.best}</span>`;
     hud.prompt.style.opacity = 1;
   } else if (nearBench && !nearCase) {
@@ -752,6 +812,7 @@ function start() {
 let sessionStarted = false;
 function enterRange() {
   if (where !== 'range') {
+    if (cashout.active) endMatch(false);
     where = 'range';
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
@@ -936,6 +997,7 @@ const mmk = new Matchmaking({
     where = 'none';            // arrive fresh
     classDirty = true;
     enterStadium();
+    startMatch(m);
   },
 });
 function setTeamsHud(m) {
@@ -948,6 +1010,131 @@ function setTeamsHud(m) {
     d.append(b, c);
     return d;
   }));
+}
+// ---------- cashout match: start / end, events, HUD ----------
+function startMatch(m) {
+  resetGlass();
+  walls.forEach((w) => w.reset());
+  cashout.start(m, player, classLo.cls);
+  setTeamsHud(m);
+  const sp = stadium.spawns[cashout.myTeam.idx];
+  player.spawn(sp.pos, sp.yaw);
+  Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1 });
+  $('matchend').classList.add('hidden');
+}
+function endMatch(toMenu) {
+  cashout.stop();
+  match = null;
+  $('matchend').classList.add('hidden');
+  if (toMenu && playing) setPlaying(false);
+  renderMenu();
+}
+function cashoutEvents() {
+  for (const ev of cashout.events) {
+    const mine = ev.team ? ev.team === cashout.myTeam : ev.who?.team === cashout.myTeam;
+    if (ev.type === 'round') { banner(`ROUND ${ev.round}`, 'VAULT OPENS IN 30 · FIRST TO $2,000', '', 2.6); sounds.startRun?.(); }
+    else if (ev.type === 'unlock') { banner('VAULT OPEN', 'GRAB THE CASH BOX', 'good', 1.8); sounds.checkpoint?.(); }
+    else if (ev.type === 'pickup') { sounds.pickup(); }
+    else if (ev.type === 'drop') { sounds.crumble(); }
+    else if (ev.type === 'deposit') { banner(mine ? 'CASHOUT STARTED' : `${ev.team.name} ARE CASHING OUT`, mine ? 'DEFEND THE STATION' : 'STEAL IT', mine ? 'good' : 'bad', 2.2); sounds.magIn?.(); }
+    else if (ev.type === 'steal') { banner(mine ? 'CASHOUT STOLEN!' : `${ev.team.name} STOLE THE CASHOUT`, mine ? 'NOW HOLD IT' : 'TAKE IT BACK', mine ? 'good' : 'bad', 2.2); sounds.alarm?.(); }
+    else if (ev.type === 'cashout') { banner(`${ev.team.name} +$1,000`, `${ev.team.name} · $${ev.team.cash.toLocaleString('en-GB')}`, mine ? 'good' : 'bad', 2.8); sounds.finish?.(); }
+    else if (ev.type === 'end') setTimeout(showMatchEnd, 2600);
+  }
+  cashout.events.length = 0;
+}
+function showMatchEnd() {
+  if (!cashout.over) return;
+  const st = cashout.over.standings, place = st.indexOf(cashout.myTeam);
+  const el = $('matchend');
+  const card = document.createElement('div');
+  card.className = 'me-card';
+  const h = document.createElement('small'); h.textContent = 'THE SEMI-FINALS · FORTUNE STADIUM';
+  const t = document.createElement('b'); t.textContent = place < 2 ? 'YOU ADVANCE TO THE FINAL' : 'ELIMINATED';
+  t.className = place < 2 ? 'win' : 'lose';
+  card.append(h, t);
+  st.forEach((tm, i) => {
+    const r = document.createElement('div');
+    r.className = `me-row${tm === cashout.myTeam ? ' mine' : ''}${i < 2 ? ' adv' : ''}`;
+    r.style.setProperty('--t', tm.col);
+    r.innerHTML = `<i>${i + 1}</i><b></b><span>$${tm.cash.toLocaleString('en-GB')}</span>`;
+    r.querySelector('b').textContent = tm.name;
+    card.append(r);
+  });
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.textContent = 'BACK TO LOBBY';
+  btn.onclick = () => endMatch(true);
+  card.append(btn);
+  el.replaceChildren(card);
+  el.classList.remove('hidden');
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+const markerEls = [], tagEls = [];
+let tagT = 0;
+function poolEl(pool, parent, cls, i) {
+  if (!pool[i]) { const d = document.createElement('div'); d.className = cls; d.innerHTML = '<i></i><b></b><small></small>'; parent.append(d); pool[i] = d; }
+  return pool[i];
+}
+function updateMatchHud(dt) {
+  const on = cashout.active && inStadium() && (playing || !!cashout.over);
+  $('objective').classList.toggle('hidden', !on);
+  $('markers').classList.toggle('hidden', !on);
+  $('tags').classList.toggle('hidden', !on);
+  if (!on) return;
+  const o = cashout.objective();
+  const obj = $('objective');
+  obj.children[0].textContent = o?.text || '';
+  obj.children[0].style.color = o?.col || '#fff';
+  obj.children[1].textContent = o?.sub || '';
+  obj.children[2].style.setProperty('--p', (o?.steal || 0).toFixed(3));
+  obj.children[2].style.opacity = o?.steal ? 1 : 0;
+  [...$('teams').children].forEach((d, i) => { const c = `$${cashout.teams[i].cash.toLocaleString('en-GB')}`; if (d.lastChild.textContent !== c) d.lastChild.textContent = c; });
+  // objective markers, pinned to the screen edge when off screen
+  const ms = cashout.markers(), eye = player.eye();
+  ms.forEach((m, i) => {
+    const el = poolEl(markerEls, $('markers'), 'mkr', i);
+    let sp = project(m.pos);
+    const W = innerWidth, H = innerHeight, pad = 46;
+    let edge = false;
+    if (!sp) { const f = player.forward(); const side = (m.pos[0] - eye[0]) * -f[2] + (m.pos[2] - eye[2]) * f[0]; sp = [side > 0 ? W - pad : pad, H * 0.55]; edge = true; }
+    if (sp[0] < pad || sp[0] > W - pad || sp[1] < pad + 80 || sp[1] > H - 190) edge = true;
+    sp = [clamp(sp[0], pad + 120, W - pad - 120), clamp(sp[1], pad + 80, H - 190)];
+    el.style.transform = `translate(${sp[0].toFixed(1)}px, ${sp[1].toFixed(1)}px)`;
+    el.style.setProperty('--c', m.col);
+    el.className = `mkr ${m.kind}${edge ? ' edge' : ''}`;
+    el.children[0].textContent = m.kind === 'station' ? '⬢' : m.kind === 'box' ? '◆' : '▼';
+    el.children[1].textContent = m.label;
+    el.children[2].textContent = `${Math.round(Math.hypot(m.pos[0] - eye[0], m.pos[1] - eye[1], m.pos[2] - eye[2]))} M`;
+    el.style.display = '';
+  });
+  for (let i = ms.length; i < markerEls.length; i++) markerEls[i].style.display = 'none';
+  // name tags: teammates always, enemies when you can see them
+  tagT -= dt;
+  const agents = cashout.agents;
+  if (tagT <= 0) {
+    tagT = 0.2;
+    for (const a of agents) {
+      if (!a.alive || a.team === cashout.myTeam) continue;
+      const h = [a.pos[0], a.pos[1] + 1.6, a.pos[2]], d = [h[0] - eye[0], h[1] - eye[1], h[2] - eye[2]], L = Math.hypot(...d);
+      a.seen = L < 45 && !world.raycast(eye, d.map((v) => v / L), L - 0.5, true, (b) => b.tag === 'glass' || b.tag === 'bot');
+    }
+  }
+  let n = 0;
+  for (const a of agents) {
+    const ally = a.team === cashout.myTeam;
+    if (!a.alive || (!ally && !a.seen)) continue;
+    const sp = project([a.pos[0], a.pos[1] + 2.2 * a.bot.sc, a.pos[2]]);
+    if (!sp || sp[0] < 0 || sp[0] > innerWidth || sp[1] < 0 || sp[1] > innerHeight) continue;
+    const el = poolEl(tagEls, $('tags'), 'tag', n++);
+    el.className = `tag${ally ? ' ally' : ''}${cashout.box.carrier === a ? ' carrier' : ''}`;
+    el.style.setProperty('--c', a.team.col);
+    el.style.transform = `translate(${sp[0].toFixed(1)}px, ${sp[1].toFixed(1)}px)`;
+    el.children[0].textContent = ally ? '▼' : '';
+    el.children[1].textContent = a.name;
+    el.children[2].style.width = `${Math.round(clamp(a.hpFrac, 0, 1) * 100)}%`;
+    el.style.display = '';
+  }
+  for (let i = n; i < tagEls.length; i++) tagEls[i].style.display = 'none';
 }
 $('mm-play').addEventListener('click', () => {
   if (match && inStadium() && !classDirty) { enterStadium(); return; }
@@ -1263,6 +1450,7 @@ function launch(pad) {
   padCd = 0.6;
 }
 function updateStadium(dt) {
+  if (cashout.active) player.speedMul = CLASSES[classLo.cls].speed * (cashout.box.carrier === cashout.you ? 0.9 : 1);
   const shoe = stadium.refs?.shoe;
   if (shoe) {
     if (!shoe.base) shoe.base = shoe.map((b) => [...b.center]);
@@ -1292,6 +1480,7 @@ function updateStadium(dt) {
 
 // ---------- main loop ----------
 const proj = mat4(), view = mat4(), vmProj = mat4(), identity = mat4();
+const vmBoxM = Array.from({ length: 6 }, () => mat4());
 let last = performance.now(), time = 0, fovKick = 0, timeScale = 1;
 const weaponCtx = { fire, sounds };
 
@@ -1304,7 +1493,7 @@ function frame(now) {
 
   if (playing && !bench.open && (cutscene || pressSeq || player.dead)) {
     // the player isn't in control right now
-    if (input.hit('KeyT')) resetRange();
+    if (input.hit('KeyT') && !cashout.active) resetRange();
     if (cutscene) updateCutscene(dt);
     else if (pressSeq) {
       updatePress(dt);
@@ -1319,12 +1508,16 @@ function frame(now) {
     let w = weapon();
     const sens = settings.sens * 0.0022 * (1 - w.adsT * (1 - w.def.adsZoom) * 0.9);
     player.look(input.dx, input.dy, sens);
-    if (input.hit('KeyT')) resetRange();
+    if (input.hit('KeyT') && !cashout.active) resetRange();
     if (input.hit('Digit1')) switchTo(0);
     if (input.hit('Digit2')) switchTo(1);
     nearCase = findCase();
     nearBench = findBench();
-    if (nearConsole() && input.hit('KeyE')) pressConsole();
+    const liftBtn = lookLiftButton();
+    const cashAct = cashout.active ? cashout.playerAction(true) : null;
+    if (liftBtn && input.hit('KeyE')) liftBtn.lift.press(liftBtn, sounds);
+    else if ((cashAct === 'pickup' || cashAct === 'deposit') && input.hit('KeyE')) cashout.playerAction(false);
+    else if (nearConsole() && input.hit('KeyE')) pressConsole();
     else if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
     else if (nearBench && input.hit('KeyE')) openBench();
     w = weapon();
@@ -1335,7 +1528,7 @@ function frame(now) {
       slam: equippedAbility === 'slam' && input.hit(settings.slamKey),
     };
     elevator.update(dt, player, sounds);
-    towerLift.update(dt, player, sounds);
+    for (const l of lifts) l.update(dt, player, sounds);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     if (inStadium()) updateStadium(dt);
     updateCombat(dt);
@@ -1372,7 +1565,7 @@ function frame(now) {
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   worldVfov = vfov; worldAspect = aspect;
   const vmParts = bench.open || cutscene || player.dead ? [] : w.viewmodel(player, time);
-  const botParts = botMgr.drawParts();
+  const botParts = cashout.active && inStadium() ? [...botMgr.drawParts(), ...cashout.drawParts(time)] : botMgr.drawParts();
   const beams = worldBeams(w);
 
   // shadow pass
@@ -1439,6 +1632,10 @@ function frame(now) {
     for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.drawPart(p);
   } else {
     for (const p of vmParts) renderer.drawPart(p);
+    if (cashout.active && cashout.box.carrier === cashout.you && !player.dead && !cutscene) {
+      const sw = Math.sin(time * 6) * 0.01 * Math.min(1, player.hSpeed / 6);
+      for (const p of cashBoxParts(vmBoxM, [-0.5, -0.42 + sw, -0.85], [0.15, 0.55, 0.06], false)) renderer.drawPart(p);
+    }
   }
 
   updateHud(dt, vfov);
@@ -1448,4 +1645,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { map, stadium, towerLift, enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { map, stadium, lifts, cashout, hooks: botHooks, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

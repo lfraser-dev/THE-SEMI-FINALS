@@ -1,13 +1,13 @@
-// "Fortune Stadium": the semi-finals arena, at full arena scale (~280 m x 180 m of play space).
-// Six floating sectors hang over the void inside a real stadium bowl, joined by bridges and launch pads.
-// Front row (nearest spawn), left to right:  1 the court building · 2 the electric building · 3 THE TOWER
-// Back row:                                  6 the maze building  · 5 the vault           · 4 the giant atrium building
-// Every building can be entered and has real floors you can climb (switchback stairs on every level).
-// Surfaces use the renderer's procedural materials (glass, concrete, paving, metal, office facade, asphalt, seats, LED).
+// "Fortune Stadium": the semi-finals arena — one white tower on a test-range style plaza.
+// The tower: a big glass lobby in front (a three-storey atrium with catwalks and railings overlooking it),
+// a business building above (offices, meeting rooms, server rooms), the back stepping in as it rises,
+// then two wings at the top joined by catwalks, each wing crowned with fins that lean back in.
+// Two indoor lifts with call buttons run up the core; switchback stairs run all the way up.
+// Lower-floor windows and the lobby glass are real, see-through and breakable. Cashout stations and
+// vault spots for the cashout mode are listed below (cashout.js runs the match).
 import { makeBox } from '../world.js';
 import { digitBoxes } from '../props.js';
 
-// origin: chosen so floors (every 4.5 m) and panel seams line up with the procedural textures
 const OX = 0, OZ = -702, Y0 = 63;
 const FH = 4.5;                                 // storey height
 const TX = { GLASS: 2, CONC: 3, PAVE: 4, METAL: 5, OFFICE: 6, ASPH: 7, SEATS: 8, LED: 9, PLASTER: 10, TILE: 11, WOOD: 12, BRICK: 13 };
@@ -17,51 +17,83 @@ const C = {
   glass: [0.38, 0.52, 0.6], steel: [0.58, 0.6, 0.63], dark: [0.16, 0.17, 0.19], white: [0.9, 0.9, 0.9],
   wood: [0.5, 0.35, 0.22], grass: [0.32, 0.46, 0.2], leaf: [0.25, 0.42, 0.18], fabric: [0.26, 0.28, 0.33],
   yellow: [0.95, 0.72, 0.1], light: [1, 0.96, 0.88], office: [0.8, 0.78, 0.74], metalClad: [0.66, 0.66, 0.64],
+  tower: [0.94, 0.94, 0.93], towerShade: [0.86, 0.87, 0.88], pane: [0.62, 0.78, 0.86],
 };
-// sponsor accents per sector (used sparingly: signage, awnings, painted bands)
-const ACC = { 1: [0.9, 0.3, 0.14], 2: [0.98, 0.74, 0.12], 3: [0.1, 0.72, 0.66], 4: [0.85, 0.22, 0.5], 5: [0.25, 0.5, 0.98], 6: [0.58, 0.36, 0.95] };
-// sector centres (each sector is 76 m square)
-const SEC = { 1: [-100, 50], 2: [0, 50], 3: [100, 50], 6: [-100, -50], 5: [0, -50], 4: [100, -50] };
-const HS = 38;
-
 const L = (x, y, z) => [OX + x, Y0 + y, OZ + z];
 
-// launch pads: plate centre and where they throw you (local); vy = minimum launch speed upward
-const PADS = [
-  { at: [-11, 0, 110], to: [-84, 18, 68], vy: 32, col: ACC[1] },      // spawn → sector 1 roof
-  { at: [11, 0, 110], to: [78, 0, 63], vy: 24, col: ACC[3] },         // spawn → the tower courtyard
-  { at: [-92, 0, 58], to: [-121, 36, 29], vy: 40, col: ACC[1] },      // sector 1 court → the high rooftop
-  { at: [100, 0, -50], to: [100, 22.5, -74], vy: 36, col: ACC[4] },   // sector 4 atrium → roof
-  { at: [120, 117, 40], to: [112, 22.5, -28], vy: 12, col: ACC[3] },  // tower roof → sector 4 roof
-];
+// ---- the tower's shape (local metres; +z is the front, toward the main spawn)
+const TOP = 28;                                     // storeys; the wing roofs are at 126 m
+const POD = { x0: -36, x1: 36, z0: 20, z1: 44 };    // the lobby podium in front, 3 storeys
+const SHAFTS = [[-6.5, -3.6, -3.1, -0.4], [3.1, -3.6, 6.5, -0.4]];
+const LIFT_STOPS = [0, 1, 2, 3, 5, 8, 11, 14, 17, 21];
+const backZ = (k) => (k < 10 ? -20 : k < 18 ? -12 : -8);       // the back steps in as it rises
+// footprint(s) of storey k: one block, or two wings at the top
+function footprint(k) {
+  const z0 = backZ(k);
+  if (k < 22) return [[-24, z0, 24, 20]];
+  const o = k < 25 ? 24 : 21;
+  return [[-o, z0, -5, 20], [5, z0, o, 20]];
+}
+
+// cashout stations and vault (cash box) spots
+const STATIONS = [[-60, 0, 30], [60, 0, 30], [-26, 9, 34], [0, 0, -55]];
+const VAULTS = [[0, 0, 14], [26, 4.5, 34], [50, 0, -45], [22, 13.5, 32]];
+const NAV_CHAINS = [];
+const GLASS = [];
 
 export default {
   name: 'FORTUNE STADIUM',
   origin: [OX, Y0, OZ],
-  spawn: { pos: L(0, 0, 115), yaw: 0 },          // facing into the arena; the tower is on your right
-  voidY: Y0 - 30,                                 // fall below this and you're out
+  spawn: { pos: L(0, 0, 88), yaw: 0 },
+  // one spawn per team (team i uses spawns[i])
+  spawns: [
+    { pos: L(0, 0, 88), yaw: 0 }, { pos: L(80, 0, 12), yaw: Math.PI / 2 },
+    { pos: L(0, 0, -72), yaw: Math.PI }, { pos: L(-80, 0, 12), yaw: -Math.PI / 2 },
+  ],
+  voidY: Y0 - 30,
   area: { min: [OX - 320, Y0 - 160, OZ - 320], max: [OX + 320, Y0 + 260, OZ + 320] },
-  fog: 0.0026,
-  shadowHalf: 80,
-  pads: PADS.map((p) => ({ at: L(...p.at), to: L(...p.to), vy: p.vy })),
-  lift: { x: OX + 89.6, z: OZ + 37, w: 3, d: 3, top: Y0 + 117, bottom: Y0 },
-  liftDur: 11,
-  dummies: [
-    { pos: L(-100, 0, 44) }, { pos: L(-96, 18, 66) }, { pos: L(-121, 4.5, 60) }, { pos: L(-84, 9, 26) },
-    { pos: L(-6, 0, 70) }, { pos: L(15, 4.5, 60) }, { pos: L(-11.5, 0, 36) }, { pos: L(10, 9, 22) }, { pos: L(-20, 13.5, 30) },
-    { pos: L(70, 0, 40) }, { pos: L(70, 0, 22), move: { axis: 0, range: 5, speed: 3 } },
-    { pos: L(112, 27, 34) }, { pos: L(100, 54, 56) }, { pos: L(120, 90, 44) }, { pos: L(112, 117, 52) },
-    { pos: L(96, 0, -46) }, { pos: L(80, 13.5, -34) }, { pos: L(118, 22.5, -70) },
-    { pos: L(-16, 0, -26) }, { pos: L(2, 0, -61) }, { pos: L(16, 0, -75), move: { axis: 0, range: 6, speed: 3.5 } },
-    { pos: L(-100, 0, -44) }, { pos: L(-118, 4.5, -32) }, { pos: L(-82, 13.5, -66) },
+  fog: 0.0042,
+  shadowHalf: 70,
+  pads: [],
+  lifts: [
+    { x: OX - 4.8, z: OZ - 2.0, w: 3, d: 2.8, doorZ: OZ, stops: LIFT_STOPS.map((k) => Y0 + k * FH), panelSide: 1 },
+    { x: OX + 4.8, z: OZ - 2.0, w: 3, d: 2.8, doorZ: OZ, stops: LIFT_STOPS.map((k) => Y0 + k * FH), panelSide: -1 },
   ],
+  stations: STATIONS.map((p) => L(...p)),
+  vaults: VAULTS.map((p) => L(...p)),
+  dummies: [],
   walls: [
-    { origin: L(-72.37, 0, 64), cols: 12, rows: 6, axis: 2, color: [0.62, 0.4, 0.32] },    // sector 1, east face
-    { origin: L(-92, 0, -16.37), cols: 12, rows: 6, axis: 0, color: [0.66, 0.64, 0.6] },    // sector 6, south face
-    { origin: L(66.03, 0, -30), cols: 12, rows: 6, axis: 2, color: [0.78, 0.76, 0.72] },    // sector 4, west face
-    { origin: L(96, 0, 30.03), cols: 8, rows: 6, axis: 0, color: [0.7, 0.72, 0.74] },       // tower lobby, north face
+    { origin: L(-24.2, 4.5, 24), cols: 12, rows: 6, axis: 2, color: [0.88, 0.87, 0.84] },
+    { origin: L(23.8, 4.5, 36), cols: 12, rows: 6, axis: 2, color: [0.88, 0.87, 0.84] },
+    { origin: L(-30, 9, 31.6), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
+    { origin: L(24, 9, 26), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
+    { origin: L(-30, 0, 30), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
+    { origin: L(24, 0, 35.5), cols: 12, rows: 6, axis: 0, color: [0.88, 0.87, 0.84] },
+    { origin: L(-50, 0, -30), cols: 12, rows: 6, axis: 0 }, { origin: L(44, 0, -30), cols: 12, rows: 6, axis: 0 },
+    { origin: L(-56, 0, 60), cols: 12, rows: 6, axis: 2 }, { origin: L(56, 0, 52), cols: 12, rows: 6, axis: 2 },
   ],
-  build(world) { this.refs = buildStadium(world); },
+  // where the bots can walk: sampled levels, the stair routes between them, and places to keep out of
+  nav: {
+    levels: [
+      { y: Y0, rects: [[OX - 88, OZ - 78, OX + 88, OZ + 98]] },
+      { y: Y0 + 4.5, rects: [[OX - 36, OZ + 20, OX + 36, OZ + 44], [OX - 24, OZ - 20, OX + 24, OZ + 20]] },
+      { y: Y0 + 9, rects: [[OX - 36, OZ + 20, OX + 36, OZ + 44], [OX - 24, OZ - 20, OX + 24, OZ + 20]] },
+      { y: Y0 + 13.5, rects: [[OX - 36, OZ + 20, OX + 36, OZ + 44]] },
+    ],
+    chains: [],
+    exclude: SHAFTS.map(([a, b, c, d]) => [OX + a - 0.4, OZ + b, OX + c + 0.4, OZ + d + 1.2]),
+  },
+  build(world) {
+    this.refs = buildTower(world);
+    this.nav.chains = NAV_CHAINS.filter((ch) => ch[0][1] < 13.6).map((ch) => ch.map((p) => L(...p)));
+    this.glassBoxes = this.spawnGlass(world);
+  },
+  // (re)create every glass pane; returns the boxes
+  spawnGlass(world) {
+    return GLASS.map(([min, max]) => world.add(makeBox(min, max, {
+      color: C.pane, alpha: 0.24, mat: [0.65, 0.04], grid: false, edges: false, noShadow: true, tag: 'glass',
+    })));
+  },
 };
 
 // ================================================================ geometry helpers
@@ -157,6 +189,12 @@ function stairCore(ax, az, dir, y0, floors, fh = FH) {
     rect(LA + RUN + LB, LA + RUN + LB + 0.08, -0.08, 2 * LW + 0.08, yt, yt + 1.05, rail);
   }
   rect(LA, LA + RUN, LW - 0.06, LW + 0.06, y0, y0 + floors * fh + 1.05, rail);   // the divider between the lanes
+  // the walking route up each flight, for the bots
+  for (let k = 0; k < floors; k++) {
+    const yb = y0 + k * fh;
+    NAV_CHAINS.push([[0.6, LW / 2, yb], [LA, LW / 2, yb], [LA + RUN, LW / 2, yb + half], [LA + RUN + LB / 2, LW, yb + half],
+      [LA + RUN, LW * 1.5, yb + half], [LA, LW * 1.5, yb + fh], [0.6, LW * 1.5, yb + fh]].map(([u, v, y]) => { const q = P(u, v); return [q[0], y, q[1]]; }));
+  }
   const a = P(LA, 0), b = P(LA + RUN + LB, 2 * LW);
   return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
 }
@@ -389,649 +427,241 @@ function bigNum(n, x, y, z, h, col) {
 }
 
 // ================================================================ the arena
-function buildStadium(world) {
+function buildTower(world) {
   W = world;
   seed = 20261110;
+  GLASS.length = 0;
+  NAV_CHAINS.length = 0;
   const refs = {};
-  for (const n of [1, 2, 3, 4, 5, 6]) island(n);
-  // bridges between the sectors
-  bridge(-62, 47, -38, 53);     // 1 ↔ 2
-  bridge(38, 47, 62, 53);       // 2 ↔ 3
-  bridge(-3, 12, 3, -12);       // 2 ↔ 5
-  bridge(-62, -53, -38, -47);   // 6 ↔ 5
-  bridge(38, -53, 62, -47);     // 5 ↔ 4
-  bridge(-103, 12, -97, -12);   // 1 ↔ 6
-  bridge(-3, 88, 3, 104);       // spawn ↔ 2
-  for (const p of PADS) pad(p);
-  spawnDeck();
-  sector1();
-  sector2();
-  sector3();
-  sector4();
-  sector5();
-  sector6();
-  refs.shoe = bowl();
+  plaza();
+  tower();
+  lobby();
+  refs.stations = STATIONS.map((p) => station(...p));
+  refs.vaults = VAULTS.map((p) => vault(...p));
   return refs;
 }
 
-// ---------------------------------------------------------------- islands, bridges, pads
-const GAPS = {
-  1: { e: [[47, 53]], n: [[-103, -97]] },
-  2: { w: [[47, 53]], e: [[47, 53]], n: [[-3, 3]], s: [[-3, 3]] },
-  3: { w: [[47, 53]] },
-  6: { s: [[-103, -97]], e: [[-53, -47]] },
-  5: { s: [[-3, 3]], w: [[-53, -47]], e: [[-53, -47]] },
-  4: { w: [[-53, -47]] },
-};
-function island(n) {
-  const [cx, cz] = SEC[n], x0 = cx - HS, x1 = cx + HS, z0 = cz - HS, z1 = cz + HS;
-  box(x0, -3, z0, x1, 0, z1, { color: C.pave, tex: TX.PAVE });
-  // the floating structure underneath: stepped machinery with thrusters
-  box(x0 + 4, -10, z0 + 4, x1 - 4, -3, z1 - 4, { color: C.concDark, tex: TX.CONC });
-  box(x0 + 12, -17, z0 + 12, x1 - 12, -10, z1 - 12, { color: [0.3, 0.31, 0.34], tex: TX.METAL });
-  box(cx - 12, -23, cz - 12, cx + 12, -17, cz + 12, { color: C.dark, tex: TX.METAL });
-  glow(cx - 8, -23.3, cz - 8, cx + 8, -23, cz + 8, [0.6, 0.85, 1], 1);
-  // accent light line under the rim
-  glow(x0 - 0.05, -1.6, z0 - 0.05, x1 + 0.05, -1.2, z1 + 0.05, ACC[n], 0.7);
-  // kerb round the edge, open where bridges land
-  const g = GAPS[n], o = { color: C.concDark, tex: TX.CONC };
-  const holes = (k) => (g[k] || []).map(([a, b]) => [a, b, 0, 1]);
-  wallX(x0, x1, z0 + 0.25, 0.5, 0, 0.6, holes('n'), o);
-  wallX(x0, x1, z1 - 0.25, 0.5, 0, 0.6, holes('s'), o);
-  wallZ(z0 + 0.5, z1 - 0.5, x0 + 0.25, 0.5, 0, 0.6, holes('w'), o);
-  wallZ(z0 + 0.5, z1 - 0.5, x1 - 0.25, 0.5, 0, 0.6, holes('e'), o);
-}
-function bridge(x0, z0, x1, z1) {
-  const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
-  const ax0 = Math.min(x0, x1), ax1 = Math.max(x0, x1), az0 = Math.min(z0, z1), az1 = Math.max(z0, z1);
-  box(ax0, -0.5, az0, ax1, 0, az1, { color: C.steel, tex: TX.METAL });
-  const rail = { color: [0.7, 0.85, 0.9], alpha: 0.3, mat: [0.6, 0.05], noShadow: true };
-  if (alongX) {
-    const mz = (az0 + az1) / 2;
-    box(ax0, -2.6, mz - 1.2, ax1, -0.5, mz + 1.2, { color: C.dark, tex: TX.METAL });
-    for (const z of [az0, az1 - 0.08]) { box(ax0, 0, z, ax1, 1.05, z + 0.08, rail); box(ax0, 1.05, z - 0.02, ax1, 1.12, z + 0.1, { color: C.dark, mat: 'metal' }); }
-    glow(ax0, -0.55, az0, ax1, -0.5, az0 + 0.2, C.light, 0.8);
-    glow(ax0, -0.55, az1 - 0.2, ax1, -0.5, az1, C.light, 0.8);
-  } else {
-    const mx = (ax0 + ax1) / 2;
-    box(mx - 1.2, -2.6, az0, mx + 1.2, -0.5, az1, { color: C.dark, tex: TX.METAL });
-    for (const x of [ax0, ax1 - 0.08]) { box(x, 0, az0, x + 0.08, 1.05, az1, rail); box(x - 0.02, 1.05, az0, x + 0.1, 1.12, az1, { color: C.dark, mat: 'metal' }); }
-    glow(ax0, -0.55, az0, ax0 + 0.2, -0.5, az1, C.light, 0.8);
-    glow(ax1 - 0.2, -0.55, az0, ax1, -0.5, az1, C.light, 0.8);
+// ---------------------------------------------------------------- the plaza: test-range floor and walls
+function plaza() {
+  const WALLC = [0.91, 0.91, 0.93], CHAR = [0.27, 0.28, 0.31], RED = [0.95, 0.15, 0.1];
+  const G = { color: [0.94, 0.94, 0.95], grid: true, edges: true };
+  box(-90, -1, -80, 90, 0, 100, G);
+  const H = 12;
+  box(-91, 0, -81, 91, H, -80, { ...G, color: WALLC }); box(-91, 0, 100, 91, H, 101, { ...G, color: WALLC });
+  box(-91, 0, -80, -90, H, 100, { ...G, color: WALLC }); box(90, 0, -80, 91, H, 100, { ...G, color: WALLC });
+  for (const [y0, y1, d, o] of [[0, 0.45, 0.12, { color: CHAR }], [3.4, 3.5, 0.06, { color: RED, emissive: 0.9, solid: false, noShadow: true }], [H - 0.35, H, 0.25, { color: CHAR }]]) {
+    box(-90, y0, -80, 90, y1, -80 + d, { grid: false, ...o }); box(-90, y0, 100 - d, 90, y1, 100, { grid: false, ...o });
+    box(-90, y0, -80, -90 + d, y1, 100, { grid: false, ...o }); box(90 - d, y0, -80, 90, y1, 100, { grid: false, ...o });
   }
-}
-function pad({ at: [x, y, z], col }) {
-  box(x - 1.6, y, z - 1.6, x + 1.6, y + 0.22, z + 1.6, { color: C.dark, tex: TX.METAL, shape: 0.08 });
-  glow(x - 1.25, y + 0.22, z - 1.25, x + 1.25, y + 0.24, z + 1.25, col, 0.85);
-  glow(x - 0.7, y + 0.24, z - 0.7, x + 0.7, y + 0.26, z + 0.7, [1, 1, 1], 0.9);
-  for (const [a, b] of [[-1.62, -1.5], [1.5, 1.62]]) {
-    glow(x + a, y + 0.05, z - 1.62, x + b, y + 0.18, z + 1.62, col, 1);
-    glow(x - 1.62, y + 0.05, z + a, x + 1.62, y + 0.18, z + b, col, 1);
+  for (const [cx, cz] of [[-88, -78], [88, -78], [-88, 98], [88, 98]]) {
+    box(cx - 0.8, 0, cz - 0.8, cx + 0.8, 22, cz + 0.8, { color: CHAR });
+    box(cx - 2, 22, cz - 2, cx + 2, 24, cz + 2, { color: CHAR });
+    glow(cx - 1.8, 21.8, cz - 1.8, cx + 1.8, 22, cz + 1.8, [1, 1, 0.96], 1);
   }
+  // cover blocks, test-range style
+  const blk = (x, z, sx, h, sz, c = [0.94, 0.94, 0.95]) => box(x - sx / 2, 0, z - sz / 2, x + sx / 2, h, z + sz / 2, { color: c, grid: true, edges: true });
+  const ACC = [0.86, 0.87, 0.9], CH = [0.27, 0.28, 0.31];
+  blk(-30, 66, 6, 1.2, 1); blk(30, 66, 6, 1.2, 1); blk(-14, 74, 1, 2.4, 4, ACC); blk(14, 74, 1, 2.4, 4, ACC);
+  blk(-48, 46, 3, 3.2, 3, CH); blk(48, 46, 3, 3.2, 3, CH); blk(-70, 40, 8, 1.1, 1, ACC); blk(70, 40, 8, 1.1, 1, ACC);
+  blk(-60, 8, 1, 2.2, 8); blk(60, 8, 1, 2.2, 8); blk(-44, -10, 4, 1.6, 4, ACC); blk(44, -10, 4, 1.6, 4, ACC);
+  blk(-30, -48, 6, 1.2, 1); blk(30, -48, 6, 1.2, 1); blk(-18, -64, 1, 2.6, 6, CH); blk(18, -64, 1, 2.6, 6, CH);
+  blk(-66, -56, 6, 0.6, 6, ACC); blk(66, -56, 6, 0.6, 6, ACC); blk(-74, 78, 4, 7, 4, CH); blk(74, 78, 4, 7, 4, CH);
+  blk(0, -36, 10, 1.0, 1.2, ACC); blk(-36, 86, 2, 1.6, 6); blk(36, 86, 2, 1.6, 6);
+  // team spawn pads
+  for (const [x, z] of [[0, 88], [80, 12], [0, -72], [-80, 12]]) deco(x - 3, 0.001, z - 3, x + 3, 0.02, z + 3, { color: [0.3, 0.31, 0.34] });
 }
 
-// ---------------------------------------------------------------- spawn deck (behind sector 2, facing in)
-function spawnDeck() {
-  box(-18, -3, 104, 18, 0, 126, { color: C.pave, tex: TX.PAVE });
-  box(-14, -9, 108, 14, -3, 124, { color: C.concDark, tex: TX.CONC });
-  glow(-18.05, -1.6, 103.95, 18.05, -1.2, 126.05, [1, 0.25, 0.18], 0.8);
-  const rail = { color: [0.7, 0.85, 0.9], alpha: 0.3, mat: [0.6, 0.05], noShadow: true };
-  box(-18, 0, 104, -17.9, 1.1, 126, rail); box(17.9, 0, 104, 18, 1.1, 126, rail);
-  box(-18, 0, 104, -3, 1.1, 104.1, rail); box(3, 0, 104, 18, 1.1, 104.1, rail);
-  // the team gate: a big portal frame with an LED wall behind
-  box(-16, 0, 124, 16, 16, 126, { color: C.dark, tex: TX.METAL });
-  deco(-14, 2, 123.9, 14, 14, 124, { color: [0.95, 0.25, 0.2], tex: TX.LED, emissive: 0.55 });
-  box(-17, 0, 121, -15, 18, 123, { color: C.dark, tex: TX.METAL });
-  box(15, 0, 121, 17, 18, 123, { color: C.dark, tex: TX.METAL });
-  box(-17, 18, 121, 17, 20, 123, { color: C.dark, tex: TX.METAL });
-  glow(-15, 17.6, 120.9, 15, 18, 121, [1, 0.25, 0.18], 1);
-  deco(-2, 0.001, 113, 2, 0.02, 117, { color: [0.3, 0.31, 0.34] });
-  for (const x of [-6, 6]) prop('barrier', x, 0, 107);
+// ---------------------------------------------------------------- the tower
+function glassWall(axis, a0, a1, c, k0, k1, openings = [], bay = 4) {
+  // a curtain wall of real glass panes between white mullions, with a white spandrel at each slab
+  const y0 = k0 * FH, y1 = (k1 + 1) * FH;
+  const along = (s0, s1, yb, yt, t0, t1, o) => (axis === 'x' ? box(s0, yb, t0, s1, yt, t1, o) : box(t0, yb, s0, t1, yt, s1, o));
+  const M = { color: C.tower, tex: TX.CONC };
+  for (let s = a0; s <= a1 + 1e-6; s += bay) along(s - 0.16, s + 0.16, y0, y1, c - 0.22, c + 0.22, M);
+  for (let k = k0; k <= k1; k++) {
+    along(a0, a1, (k + 1) * FH - 0.3, (k + 1) * FH, c - 0.25, c + 0.25, M);
+    for (let s = a0; s < a1 - 1e-6; s += bay) {
+      if (openings.some(([o0, o1, ok]) => ok === k && s >= o0 - 1e-6 && s + bay <= o1 + 1e-6)) continue;
+      const yb = k * FH + (k === 0 ? 0 : 0), yt = (k + 1) * FH - 0.3;
+      const mn = axis === 'x' ? [s + 0.16, yb, c - 0.03] : [c - 0.03, yb, s + 0.16];
+      const mx = axis === 'x' ? [s + bay - 0.16, yt, c + 0.03] : [c + 0.03, yt, s + bay - 0.16];
+      GLASS.push([[OX + mn[0], Y0 + mn[1], OZ + mn[2]], [OX + mx[0], Y0 + mx[1], OZ + mx[2]]]);
+    }
+  }
+}
+function rail(axis, a0, a1, c, y, holes = []) {
+  const r = { color: [0.7, 0.85, 0.9], alpha: 0.25, mat: [0.6, 0.05], noShadow: true };
+  const hs = holes.map(([h0, h1]) => [h0, h1, y - 1, y + 3]);
+  if (axis === 'x') { wallX(a0, a1, c, 0.05, y, y + 1.0, hs, r); wallX(a0, a1, c, 0.1, y + 1.0, y + 1.08, hs, { color: C.steel, mat: 'steel' }); }
+  else { wallZ(a0, a1, c, 0.05, y, y + 1.0, hs, r); wallZ(a0, a1, c, 0.1, y + 1.0, y + 1.08, hs, { color: C.steel, mat: 'steel' }); }
 }
 
-// ---------------------------------------------------------------- sector 1: the court building (ring, 4 storeys, high rooftop)
-function sector1() {
-  const col = ACC[1];
-  const court = [-114, 36, -86, 64];
-  const hNW = [-124.5, 24, -119.9, 27.2];        // stairwell up to the high rooftop
-  const winRow = (cs, w) => [1, 2, 3].flatMap((k) => cs.map((c) => win(c, w, k * FH)));
-  building({
-    x0: -128, z0: 22, x1: -72, z1: 78, floors: 4, tex: TX.BRICK, color: C.brick, slabTex: TX.WOOD,
-    holes: {
-      s: [[-103, -97, 0, 4.2], door(-120, 3, 0, 3.2), door(-80, 3, 0, 3.2), ...winRow([-121, -79], 3)],
-      n: [door(-100, 3, 0, 3.2), ...winRow([-90, -110], 3)],
-      w: [door(54, 3, 0, 3.2), ...winRow([60], 3)],
-      e: [door(44, 3, 0, 3.2), [64, 70, 0, 3], ...winRow([30], 3)],
-    },
-    voids: () => [court],
-    cores: [{ ax: -127, az: 44, dir: '+z' }, { ax: -77.6, az: 56, dir: '-z' }],
-    extraHoles: (k) => (k === 4 ? [hNW] : []),
-    parapetHoles: {},
-    inner: (k, y) => {
-      const pt = { color: C.plaster, tex: TX.PLASTER };
-      const top = y + FH - 0.3;
-      wallZ(22.4, 35.6, -107, 0.2, y, top, [door(29, 1.6, y)], pt);
-      wallZ(22.4, 35.6, -93, 0.2, y, top, [door(29, 1.6, y)], pt);
-      wallZ(64.4, 77.6, -107, 0.2, y, top, [door(71, 1.6, y)], pt);
-      wallZ(64.4, 77.6, -93, 0.2, y, top, [door(71, 1.6, y)], pt);
-      wallX(-127.6, -114.4, 57, 0.2, y, top, [door(-121, 1.6, y)], pt);
-      wallX(-85.6, -72.4, 42, 0.2, y, top, [door(-79, 1.6, y)], pt);
-      const kinds = ['lounge', 'bedroom', 'kitchen', 'office', 'dining', 'library', 'storage'];
-      for (const [x, z, r] of [[-120, 30, false], [-100, 28, false], [-80, 30, true], [-121, 71, false], [-100, 72, false], [-80, 71, false], [-121, 40, true], [-79, 62, true]]) {
-        if (k === 0 && x === -100) continue;                 // keep the ground-floor passages clear
-        if (rnd() < 0.8) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, r);
-      }
-      for (const [x0, z0, x1, z1] of [[-124, 28, -76, 29], [-124, 71, -76, 72], [-121.5, 38, -120.5, 62], [-79.5, 38, -78.5, 62]]) ceilingLight(x0, z0, x1, z1, y + FH);
-    },
-  });
-  // the inner walls round the court
-  const cw = [1, 2, 3].flatMap((k) => [win(-108, 2.4, k * FH), win(-92, 2.4, k * FH)]);
-  const cz = [1, 2, 3].flatMap((k) => [win(42, 2.4, k * FH), win(58, 2.4, k * FH)]);
-  walls4(-114.4, 35.6, -85.6, 64.4, 0, 18, {
-    n: [[-103, -97, 0, 4.2], ...cw], s: [[-103, -97, 0, 4.2], ...cw],
-    w: [door(50, 2.4, 0, 3.2), ...cz], e: [door(50, 2.4, 0, 3.2), ...cz],
-  }, { color: [0.72, 0.5, 0.4], tex: TX.BRICK });
-  walls4(-114.4, 35.6, -85.6, 64.4, 18, 19.1, {}, { color: C.concDark, tex: TX.CONC }, 0.3);
-  // the high rooftop: a 4-storey block on the north-west corner, its own stair continuing up
-  walls4(-128, 22, -114, 36, 18, 36, { e: [win(29, 3, 18 + FH), win(29, 3, 18 + 2 * FH)], s: [win(-121, 3, 18 + FH), win(-121, 3, 18 + 3 * FH)] }, { color: C.brick, tex: TX.BRICK });
-  const nwHole = stairCore(-126, 24, '+x', 18, 4);
-  for (let k = 1; k <= 4; k++) slab(-127.6, 22.4, -114.4, 35.6, 18 + k * FH - 0.3, 18 + k * FH, [nwHole], { color: C.floor, tex: TX.WOOD });
-  walls4(-128, 22, -114, 36, 36, 37.1, {}, { color: C.concDark, tex: TX.CONC }, 0.3);
-  box(-118, 36, 29, -115, 40, 32, { color: C.steel, tex: TX.METAL, shape: 'cyl' });               // water tank
-  box(-118.3, 40, 28.7, -114.7, 40.3, 32.3, { color: C.dark, shape: 'cyl' });
-  box(-127, 36, 33, -126.8, 46, 33.2, { color: C.dark });                                            // antenna
-  glow(-127.1, 46, 32.9, -126.7, 46.4, 33.3, [1, 0.15, 0.1], 1);
-  // rooftop kit on the ring
-  for (const [x, z] of [[-122, 70], [-80, 26], [-78, 70]]) box(x - 1.5, 18, z - 1.2, x + 1.5, 19.6, z + 1.2, { color: C.steel, tex: TX.METAL });
-  // billboard on the south roof, facing the spawn
-  for (const x of [-110, -90]) box(x - 0.2, 18, 75.5, x + 0.2, 21, 75.9, { color: C.dark });
-  box(-112, 21, 75.5, -88, 30, 75.9, { color: C.dark, tex: TX.METAL });
-  deco(-111.5, 21.5, 75.9, -88.5, 29.5, 76, { color: col, tex: TX.LED, emissive: 0.5 });
-  bigNum(1, -84, 21, 77.4, 7, col);
-  // the court: asphalt, lines, hoops, bleachers, floodlights
-  deco(-113.6, 0.001, 36.4, -86.4, 0.03, 63.6, { color: [0.3, 0.34, 0.42], tex: TX.ASPH });
-  const line = (x0, z0, x1, z1) => deco(x0, 0.03, z0, x1, 0.035, z1, { color: C.white });
-  line(-112, 38, -88, 38.12); line(-112, 61.88, -88, 62); line(-112, 38, -111.88, 62); line(-88.12, 38, -88, 62); line(-112, 49.94, -88, 50.06);
-  for (const [z, s] of [[38.6, 1], [61.4, -1]]) {
-    box(-100.12, 0, z - 0.12, -99.88, 3.4, z + 0.12, { color: C.dark, mat: 'metal' });
-    box(-100.9, 2.9, z + s * 0.15, -99.1, 3.95, z + s * 0.22, { color: [0.95, 0.95, 0.97], alpha: 0.7, noShadow: true });
-    deco(-100.23, 3.02, z + s * 0.25, -99.77, 3.06, z + s * 0.7, { color: [0.95, 0.45, 0.1], shape: 'cyl' });
-  }
-  for (let i = 0; i < 3; i++) box(-113.6 + i * 0.9, 0, 42, -112.7 + i * 0.9, 0.5 + i * 0.5, 58, { color: C.steel, mat: 'metal' });
-  for (const [x, z] of [[-113, 37], [-87, 37], [-113, 63], [-87, 63]]) {
-    box(x - 0.15, 0, z - 0.15, x + 0.15, 12, z + 0.15, { color: C.dark, mat: 'metal' });
-    box(x - 0.8, 12, z - 0.5, x + 0.8, 12.8, z + 0.5, { color: C.dark });
-    glow(x - 0.7, 11.97, z - 0.4, x + 0.7, 12, z + 0.4, C.light, 1);
-  }
-  // street side: trees, lamps, benches along the south and west
-  for (const x of [-124, -110, -90, -76]) { prop('tree', x, 0, 83); prop('lamp', x + 6, 0, 84); }
-  for (const z of [30, 70]) prop('tree', -133, 0, z);
-  for (const x of [-117, -83]) prop('bench', x, 0, 85);
-  prop('barrier', -66, 0, 30, true); prop('barrier', -66, 0, 70, true); prop('vending', -71, 0, 82);
-}
+function tower() {
+  const WT = { color: C.tower, tex: TX.OFFICE };
+  const stairHole = stairCore(-20.6, 5, '+z', 0, TOP);
+  const podW = stairCore(-33.2, 22, '+z', 0, 3), podE = stairCore(30, 22, '+z', 0, 3);
+  const atrT = [-16, 4, 16, 20], atrP = [-16, 20, 16, 44];
 
-// ---------------------------------------------------------------- sector 2: open two-level deck → the electric building
-function sector2() {
-  const col = ACC[2];
-  const inner = [-26, 20, 26, 40], well = [-12, 24, 12, 36];
-  const band = (y) => [[-26, -14, y + 1.2, y + 3.4], [-10, 6, y + 1.2, y + 3.4], [14, 21, y + 1.2, y + 3.4]];
-  building({
-    x0: -30, z0: 16, x1: 30, z1: 44, floors: 3, tex: TX.METAL, color: C.metalClad,
-    holes: {
-      s: [[-4, 4, 0, 6], door(-18, 3, 0, 3.2), door(18, 3, 0, 3.2), [8, 12, 4.5, 7.6], ...band(9)],
-      n: [door(0, 3, 0, 3.2), ...band(9)],
-      w: [door(30, 3, 0, 3.2), [22, 38, 10.2, 12.4]],
-      e: [door(26, 3, 0, 3.2), [18, 34, 10.2, 12.4]],
-    },
-    voids: (k) => (k === 1 ? [inner] : k === 2 ? [well] : []),
-    cores: [{ ax: 22, az: 43.6, dir: '-z' }],
-    inner: (k, y) => {
-      if (k === 0) {
-        // the hall: transformers, tanks, switchgear
-        for (const x of [-17, -6]) transformer(x, y, 29);
-        for (const x of [6, 12]) { box(x - 1.6, y, 23, x + 1.6, y + 5, 26.2, { color: [0.55, 0.57, 0.6], tex: TX.METAL, shape: 'cyl' }); }
-        for (let x = -25; x < 18; x += 2.2) if (x + 2 < -2 || x > 2) box(x, y, 16.4, x + 2, y + 2.3, 17.2, { color: [0.62, 0.64, 0.66], mat: 'paint' });
-        glow(-25, y + 1.6, 17.21, 18, y + 1.7, 17.25, [0.4, 1, 0.5], 0.8);
-        for (const z of [21, 39]) deco(-24, 0.03, z, 18, 0.04, z + 0.15, { color: C.yellow });
-        glow(-25, y + 8.3, 29.9, 25, y + 8.45, 30.1, col, 0.9);   // cable tray light
-      }
-      if (k === 1) {
-        // mezzanine railings round the hall (gap where the stairs come up)
-        const r = { color: C.dark, mat: 'metal' };
-        wallX(-26, 26, 20, 0.08, y, y + 1.05, [], r);
-        wallX(-26, 26, 40, 0.08, y, y + 1.05, [[21.9, 25.3, y, y + 2]], r);
-        wallZ(20, 40, -26, 0.08, y, y + 1.05, [], r);
-        wallZ(20, 40, 26, 0.08, y, y + 1.05, [], r);
-        for (const x of [-22, -10, 2, 14]) prop('lockers', x, y, 18.4);
-      }
-      if (k === 2) {
-        // control room round the light well
-        const r = { color: C.dark, mat: 'metal' };
-        wallX(-12, 12, 24, 0.08, y, y + 1.05, [], r); wallX(-12, 12, 36, 0.08, y, y + 1.05, [], r);
-        wallZ(24, 36, -12, 0.08, y, y + 1.05, [], r); wallZ(24, 36, 12, 0.08, y, y + 1.05, [], r);
-        for (const [x, z] of [[-22, 22], [-22, 30], [-22, 38], [17, 20], [-4, 41], [4, 19]]) prop('office', x, y, z);
-        for (let x = -26; x < -16; x += 2.6) prop('servers', x + 1.2, y, 41.5);
-        wallZ(16.4, 23.8, 0, 0.2, y, y + FH - 0.3, [door(20.5, 1.6, y)], { color: C.plaster, tex: TX.PLASTER });
-      }
-      ceilingLight(-24, 18, 24, 18.6, y + FH); ceilingLight(-24, 41.4, 20, 42, y + FH);
-    },
-  });
-  // glass in the window bands
-  const glass = { color: [0.55, 0.7, 0.78], alpha: 0.32, mat: [0.7, 0.05], noBullet: true, noShadow: true };
-  for (const [a, b] of [[-26, -14], [-10, 6], [14, 21]]) { box(a, 10.2, 43.75, b, 12.4, 43.85, glass); box(a, 10.2, 16.15, b, 12.4, 16.25, glass); }
-  box(-29.85, 10.2, 22, -29.75, 12.4, 38, glass); box(29.75, 10.2, 18, 29.85, 12.4, 34, glass);
-  // painted sponsor band round the top, roof plant, the sign
-  for (const [x0, z0, x1, z1] of [[-30.05, 43.95, 30.05, 44.05], [-30.05, 15.95, 30.05, 16.05]]) deco(x0, 12.7, z0, x1, 13.3, z1, { color: col });
-  for (const x of [-20, -8, 4]) { box(x, 13.5, 20, x + 6, 16, 26, { color: C.steel, tex: TX.METAL }); box(x + 1, 16, 21, x + 5, 16.4, 25, { color: C.dark, shape: 'cyl' }); }
-  for (const x of [-25, -22]) box(x, 13.5, 34, x + 1, 19, 35, { color: C.steel, shape: 'cyl' });
-  bigNum(2, -22, 15, 42.8, 6, col);
-  // outside transformer yard (east)
-  transformer(34, 0, 22); transformer(34, 0, 34);
-  // the open two-level deck at 4.5 m, columns, a big double-height opening, stairs up the front
-  const DY = 4.5, deckVoid = [-12, 62, 12, 76];
-  slab(-32, 54, 32, 82, DY - 0.35, DY, [deckVoid], { color: C.pave, tex: TX.PAVE });
-  for (const x of [-30, -20, -12.6, 12.6, 20, 30]) for (const z of [55, 68, 81]) box(x - 0.5, 0, z - 0.5, x + 0.5, DY - 0.35, z + 0.5, { color: C.conc, tex: TX.CONC });
-  const par = { color: [0.7, 0.85, 0.9], alpha: 0.3, mat: [0.6, 0.05], noShadow: true };
-  wallX(-32, 32, 82, 0.1, DY, DY + 1.05, [[-28, -22, DY, DY + 2], [22, 28, DY, DY + 2]], par);
-  wallX(-32, 32, 54, 0.1, DY, DY + 1.05, [[8, 12, DY, DY + 2]], par);
-  wallZ(54, 82, -32, 0.1, DY, DY + 1.05, [], par); wallZ(54, 82, 32, 0.1, DY, DY + 1.05, [], par);
-  wallX(-12, 12, 62, 0.1, DY, DY + 1.05, [], par); wallX(-12, 12, 76, 0.1, DY, DY + 1.05, [], par);
-  wallZ(62, 76, -12, 0.1, DY, DY + 1.05, [], par); wallZ(62, 76, 12, 0.1, DY, DY + 1.05, [], par);
-  for (const x of [-25, 25]) stairs(x, 87.4, '-z', 6, 0, DY);
-  // footbridge from the deck into the building's mezzanine
-  box(8, DY - 0.3, 44, 12, DY, 54, { color: C.steel, tex: TX.METAL });
-  box(8, DY, 44, 8.08, DY + 1.05, 54, par); box(11.92, DY, 44, 12, DY + 1.05, 54, par);
-  // on the deck: seating, planters, a kiosk
-  for (const [x, z] of [[-24, 60], [24, 60], [-24, 74], [24, 74]]) prop('planter', x, DY, z);
-  for (const [x, z] of [[-18, 66], [18, 66]]) prop('bench', x, DY, z, true);
-  box(-30, DY, 70, -26, DY + 3, 78, { color: C.white, tex: TX.METAL });
-  deco(-30.05, DY + 2.6, 69.95, -25.95, DY + 3.1, 78.05, { color: col });
-  // ground level under the deck: kiosks, vending, cover, a sculpture in the opening
-  for (const [x, z] of [[-26, 64], [26, 72]]) { box(x - 2, 0, z - 3, x + 2, 3, z + 3, { color: [0.82, 0.82, 0.8], tex: TX.METAL }); deco(x - 2.05, 2.5, z - 3.05, x + 2.05, 3, z + 3.05, { color: col }); }
-  for (const [x, z] of [[-15, 58], [15, 58], [-15, 80], [15, 80]]) prop('vending', x, 0, z);
-  for (const [x, z, r] of [[-6, 58, false], [6, 80, false], [-20, 70, true], [20, 64, true]]) prop('barrier', x, 0, z, r);
-  box(-2, 0, 67, 2, 1, 71, { color: C.conc, tex: TX.CONC });
-  box(-0.8, 1, 68.2, 0.8, 7, 69.8, { color: [0.85, 0.7, 0.3], mat: 'steel', shape: 0.3 });
-  box(-1.8, 7, 68, 1.8, 9.2, 70, { color: [0.85, 0.7, 0.3], mat: 'steel', shape: 'sphere' });
-  for (const x of [-34, 34]) for (const z of [50, 86]) prop('lamp', x, 0, z);
-}
-function transformer(x, y, z) {
-  box(x - 2.5, y, z - 2, x + 2.5, y + 3.6, z + 2, { color: [0.48, 0.52, 0.5], tex: TX.METAL });
-  for (const dz of [-2.4, 2.1]) box(x - 2.2, y + 0.3, z + dz, x + 2.2, y + 3.2, z + dz + 0.3, { color: [0.4, 0.43, 0.42], tex: TX.METAL });
-  for (const dx of [-1.4, 0, 1.4]) {
-    box(x + dx - 0.2, y + 3.6, z - 0.2, x + dx + 0.2, y + 5, z + 0.2, { color: [0.62, 0.38, 0.22], shape: 'cyl' });
+  // ---- facades: real glass on storeys 0-6 (and the podium), white ribbon-window facade above
+  glassWall('z', -20, 20, -24, 0, 6, [[12, 16, 0]]);
+  glassWall('z', -20, 20, 24, 0, 6, [[12, 16, 0]]);
+  glassWall('x', -24, 24, -20, 0, 6, [[-4, 4, 0]]);
+  glassWall('x', -24, 24, 20, 3, 6, [[-8, -4, 3], [4, 8, 3]]);
+  glassWall('x', -36, 36, 44, 0, 2, [[-4, 4, 0], [-28, -24, 0], [24, 28, 0]]);
+  glassWall('z', 20, 44, -36, 0, 2, [[28, 32, 0]]);
+  glassWall('z', 20, 44, 36, 0, 2, [[28, 32, 0]]);
+  glassWall('x', -36, -24, 20, 0, 2); glassWall('x', 24, 36, 20, 0, 2);     // podium back corners, beside the tower
+  // the solid upper facade, section by section
+  const sections = [[7, 9], [10, 17], [18, 21], [22, 24], [25, TOP - 1]];
+  for (const [k0, k1] of sections) {
+    const y0 = k0 * FH, y1 = (k1 + 1) * FH;
+    for (const [x0, z0, x1, z1] of footprint(k0)) {
+      const doorBack = k0 === 10 || k0 === 18 ? [door((x0 + x1) / 2, 2.4, y0, 2.8)] : [];
+      const inner = k0 >= 22 ? [22, 23, 25, 27].filter((k) => k >= k0 && k <= k1).map((k) => [4.5, 6.5, k * FH, k * FH + 2.7]) : [];
+      walls4(x0, z0, x1, z1, y0, y1, {
+        n: doorBack,
+        e: x1 === -5 ? inner : [], w: x0 === 5 ? inner : [],
+      }, WT);
+    }
   }
-  for (let i = 0; i < 4; i++) deco(x - 2.51, y + 0.2 + i * 0.4, z - 2.01, x - 2.49, y + 0.4 + i * 0.4, z - 1.2, { color: i % 2 ? C.dark : C.yellow });
-}
-
-// ---------------------------------------------------------------- sector 3: THE TOWER + the courtyard beside it
-function sector3() {
-  const col = ACC[3], F = 26, T = F * FH;   // 26 storeys, roof at 117 m
-  const balS = [], balW = [];
-  for (let k = 2; k < F - 1; k += 3) balS.push(k);
-  for (let k = 3; k < F - 1; k += 3) balW.push(k);
-  building({
-    x0: 92, z0: 30, x1: 126, z1: 64, floors: F, tex: TX.GLASS, color: C.glass, slabTex: TX.WOOD,
-    holes: {
-      s: [[104, 114, 0, 4.2], ...balS.map((k) => [98, 120, k * FH, k * FH + 3.2])],
-      w: [door(46, 3, 0, 3.2), ...balW.map((k) => [41, 56, k * FH, k * FH + 3.2])],
-      e: [door(47, 3, 0, 3.2), ...[4, 11, 17, 22].map((k) => win(40, 4, k * FH, 1, 2))],
-      n: [[96, 100, 0, 3], door(118.5, 3, 0, 3.2), ...[6, 13, 20].map((k) => win(110, 4, k * FH, 1, 2))],
-    },
-    cores: [{ ax: 105, az: 51.4, dir: '+x' }],
-    parapetHoles: { w: [[35.5, 38.5, T, T + 2]] },
-    inner: (k, y) => {
-      const top = y + FH - 0.3, pt = { color: C.plaster, tex: TX.PLASTER };
-      if (k === 0) {
-        // the lobby: reception, seating, lift doors on the core
-        prop('counter', 109, y, 58);
-        prop('sofa', 98, y, 58); prop('sofa', 120, y, 40, true); prop('plant', 95, y, 61); prop('plant', 123, y, 61);
-        for (const x of [106, 109.5]) deco(x, y, 42.9, x + 2.2, y + 2.8, 43, { color: [0.7, 0.72, 0.75], mat: 'steel' });
-        glow(105, y + 3, 42.89, 113, y + 3.2, 42.9, col, 0.9);
-      } else {
-        // apartments: partitions round the core with doorways (layout alternates floor to floor)
-        const a = k % 2;
-        wallX(92.4, 105, a ? 37 : 39, 0.2, y, top, [door(a ? 99 : 101, 1.6, y)], pt);
-        wallZ(30.4, 43, a ? 118 : 116, 0.2, y, top, [door(37, 1.6, y)], pt);
-        wallX(113, 125.6, a ? 58 : 56, 0.2, y, top, [door(a ? 119 : 121, 1.6, y)], pt);
-        wallZ(51, 63.6, a ? 99 : 101, 0.2, y, top, [door(57, 1.6, y)], pt);
-        const kinds = ['lounge', 'bedroom', 'kitchen', 'dining', 'office', 'library'];
-        for (const [x, z, r] of [[97, 33.5, false], [122, 35, true], [120, 61, false], [95.5, 57, true]]) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, r);
-        art(106.3, y + 1.3, 42.96, 108.9, y + 2.5, 42.97, rnd());
-        art(104.96, y + 1.3, 44.5, 104.97, y + 2.5, 47.5, rnd());
-      }
-      ceilingLight(95, 46.8, 103, 47.3, y + FH); ceilingLight(115, 46.8, 123, 47.3, y + FH);
-      ceilingLight(108, 33, 110, 40, y + FH);
-    },
-  });
-  // the service core (lift shafts) through every floor
-  box(105, 0, 43, 113, T + 3, 51, { color: C.conc, tex: TX.CONC });
-  // structural corner columns standing proud of the glass, and a crown band per 10 floors
-  for (const [x, z] of [[92, 30], [126, 30], [92, 64], [126, 64]]) box(x - 0.9, 0, z - 0.9, x + 0.9, T + 1.1, z + 0.9, { color: C.conc, tex: TX.CONC });
-  for (const y of [45, 90]) walls4(91.8, 29.8, 126.2, 64.2, y - 0.6, y, {}, { color: C.concDark, tex: TX.CONC }, 0.25);
-  // balconies (south: facing the spawn, west: over the courtyard)
-  const rail = { color: [0.7, 0.85, 0.9], alpha: 0.3, mat: [0.6, 0.05], noShadow: true };
-  for (const k of balS) {
+  // ---- floor slabs (each covers the storey below it, so set-backs become terraces)
+  for (let k = 1; k <= TOP; k++) {
     const y = k * FH;
-    box(98, y - 0.3, 64, 120, y, 66.8, { color: C.conc, tex: TX.CONC });
-    box(98, y, 66.7, 120, y + 1.1, 66.8, rail); box(98, y, 64, 98.1, y + 1.1, 66.8, rail); box(119.9, y, 64, 120, y + 1.1, 66.8, rail);
-    glow(98, y - 0.35, 66.6, 120, y - 0.3, 66.8, col, 0.8);
+    for (const fp of footprint(k - 1)) {
+      const [x0, z0, x1, z1] = fp;
+      const holes = [];
+      if (k <= 21) holes.push(...SHAFTS);
+      holes.push(stairHole);
+      if (k <= 2) holes.push(atrT);
+      slab(x0 + 0.4, z0 + 0.4, x1 - 0.4, Math.min(z1, 20), y - 0.3, y, holes.filter((h) => h[0] < x1 && h[2] > x0), { color: C.floor, tex: k === TOP ? TX.CONC : TX.TILE });
+    }
   }
-  for (const k of balW) {
+  // podium floors (1, 2) and roof (3), the atrium open through them
+  for (let k = 1; k <= 3; k++) {
     const y = k * FH;
-    box(89.2, y - 0.3, 41, 92, y, 56, { color: C.conc, tex: TX.CONC });
-    box(89.2, y, 41, 89.3, y + 1.1, 56, rail); box(89.2, y, 41, 92, y + 1.1, 41.1, rail); box(89.2, y, 55.9, 92, y + 1.1, 56, rail);
+    const holes = [podW, podE, k < 3 ? atrP : [-16.01, 20, 16.01, 44]];
+    slab(-35.6, 20, 35.6, 43.6, y - 0.3, y, holes, { color: C.floor, tex: k === 3 ? TX.CONC : TX.TILE });
   }
-  // entrance canopy
-  box(101, 4.2, 64, 117, 4.6, 70, { color: C.dark, tex: TX.METAL });
-  for (const x of [101.5, 116.5]) box(x - 0.15, 0, 69.4, x + 0.15, 4.2, 69.7, { color: C.dark, mat: 'metal' });
-  glow(101, 4.15, 64, 117, 4.2, 70, C.light, 0.7);
-  // LED banner down the south face
-  deco(120.6, 30, 64, 124.6, 100, 64.35, { color: col, tex: TX.LED, emissive: 0.55 });
-  bigNum(3, 109, 101, 64.6, 10, col);
-  // the crown: steel fins, ring frames, helipad, antenna with a beacon
-  const M = { color: C.steel, tex: TX.METAL };
-  for (const [x, z] of [[92, 30], [126, 30], [92, 64], [126, 64]]) box(x - 0.6, T + 1.1, z - 0.6, x + 0.6, T + 20, z + 0.6, M);
-  for (const y of [T + 9, T + 19]) {
-    box(91.4, y, 29.4, 126.6, y + 1, 30.6, M); box(91.4, y, 63.4, 126.6, y + 1, 64.6, M);
-    box(91.4, y, 30.6, 92.6, y + 1, 63.4, M); box(125.4, y, 30.6, 126.6, y + 1, 63.4, M);
-    glow(91.35, y - 0.12, 29.35, 126.65, y, 64.65, col, 0.9);
+  // parapets on the podium roof and the terraces, the wing roofs and the crown
+  walls4(-36, 20, 36, 44, 13.5, 14.6, { n: [[-8, -4, 13.5, 15], [4, 8, 13.5, 15]] }, { color: C.tower, tex: TX.CONC }, 0.3);
+  wallX(-24, 24, -19.85, 0.3, 45, 46.1, [], { color: C.tower }); wallX(-24, 24, -11.85, 0.3, 81, 82.1, [], { color: C.tower });
+  wallZ(-20, -12, -23.85, 0.3, 45, 46.1, [], { color: C.tower }); wallZ(-20, -12, 23.85, 0.3, 45, 46.1, [], { color: C.tower });
+  wallZ(-12, -8, -23.85, 0.3, 81, 82.1, [], { color: C.tower }); wallZ(-12, -8, 23.85, 0.3, 81, 82.1, [], { color: C.tower });
+  for (const [x0, , x1] of footprint(TOP - 1)) walls4(x0, -8, x1, 20, TOP * FH, TOP * FH + 1.1, { e: x1 === -5 ? [[4, 7, 0, 999]] : [], w: x0 === 5 ? [[4, 7, 0, 999]] : [] }, { color: C.tower, tex: TX.CONC }, 0.3);
+  // the terrace between the wings at storey 22, and catwalks across the gap
+  rail('x', -5, 5, 19.8, 22 * FH); rail('x', -5, 5, -7.8, 22 * FH);
+  for (const k of [23, 25, 27, TOP]) {
+    const y = k * FH;
+    box(-5, y - 0.3, 4, 5, y, 7, { color: C.steel, tex: TX.METAL });
+    rail('x', -5, 5, 4.05, y); rail('x', -5, 5, 6.95, y);
+    glow(-5, y - 0.35, 3.9, 5, y - 0.3, 4.1, [0.6, 0.85, 1], 0.9); glow(-5, y - 0.35, 6.9, 5, y - 0.3, 7.1, [0.6, 0.85, 1], 0.9);
   }
-  deco(100, T + 0.001, 41, 118, T + 0.03, 59, { color: [0.2, 0.21, 0.23], tex: TX.ASPH });
-  for (const [x0, z0, x1, z1] of [[105, 46, 106, 54], [112, 46, 113, 54], [106, 49.5, 112, 50.5]]) deco(x0, T + 0.03, z0, x1, T + 0.04, z1, { color: C.white });
-  for (const [x0, z0, x1, z1] of [[100, 41, 118, 41.2], [100, 58.8, 118, 59], [100, 41, 100.2, 59], [117.8, 41, 118, 59]]) glow(x0, T + 0.03, z0, x1, T + 0.05, z1, C.yellow, 0.7);
-  box(122, T, 32, 124, T + 2, 34, { color: C.dark, tex: TX.METAL });
-  box(122.8, T + 2, 32.8, 123.2, T + 40, 33.2, { color: C.dark, mat: 'metal' });
-  glow(122.6, T + 40, 32.6, 123.4, T + 40.8, 33.4, [1, 0.15, 0.1], 1);
-  // the outside lift (the car is built in main.js): landing plate at the roof, rails down the west face
-  box(91.1, T - 0.3, 35.5, 92.4, T, 38.5, { color: C.steel, tex: TX.METAL });
-  for (const z of [35.3, 38.6]) box(87.6, 0, z - 0.1, 87.8, T + 3.4, z + 0.1, { color: C.dark, solid: false, mat: 'metal' });
-  for (let y = 9; y < T; y += 9) box(87.6, y, 35.2, 87.8, y + 0.25, 38.8, { color: C.dark, solid: false });
-  glow(87.55, 0, 36.9, 87.6, T, 37.1, col, 0.8);
+  // the crown: on each wing, fins stepping back in toward the middle, a beacon on top
+  for (const s of [-1, 1]) {
+    const o = 21;
+    const fin = (a, b, y0, y1, z0, z1) => box(Math.min(s * a, s * b), y0, z0, Math.max(s * a, s * b), y1, z1, { color: C.tower, tex: TX.CONC });
+    fin(o, o - 1.2, TOP * FH, TOP * FH + 12, -8, 20);
+    fin(o - 2.4, o - 3.6, TOP * FH + 12, TOP * FH + 20, -4, 16);
+    fin(o - 5, o - 6.2, TOP * FH + 20, TOP * FH + 26, 0, 12);
+    fin(o - 7.8, o - 9, TOP * FH + 26, TOP * FH + 30, 3, 9);
+    glow(s * (o - 8.4) - 0.3, TOP * FH + 30, 5.7, s * (o - 8.4) + 0.3, TOP * FH + 30.6, 6.3, [1, 0.15, 0.1], 1);
+    for (const y of [TOP * FH + 6, TOP * FH + 16]) glow(Math.min(s * o, s * (o - 1.25)), y, -8.05, Math.max(s * o, s * (o - 1.25)), y + 0.3, 20.05, [0.6, 0.85, 1], 0.9);
+  }
+  // ---- the core (two lift shafts with landing doors at every stop)
+  const CORE = { color: [0.86, 0.86, 0.85], tex: TX.CONC };
+  const coreTop = 22 * FH;
+  box(-7.6, 0, -7.6, 7.6, coreTop, -3.6, CORE);
+  box(-7.6, 0, -3.6, -6.5, coreTop, 0, CORE); box(-3.1, 0, -3.6, 3.1, coreTop, 0, CORE); box(6.5, 0, -3.6, 7.6, coreTop, 0, CORE);
+  for (const cx of [-4.8, 4.8]) wallX(cx - 1.7, cx + 1.7, -0.2, 0.4, 0, coreTop, LIFT_STOPS.map((k) => [cx - 0.9, cx + 0.9, k * FH, k * FH + 2.6]), CORE);
+  // floor numbers over the lift lobby at each stop
+  for (const k of LIFT_STOPS) digitBoxes(String(k), OX - 0.45 * (String(k).length > 1 ? 1.4 : 0.5), Y0 + k * FH + 3.0, OZ + 0.05, 0.8, 1, [0.2, 0.22, 0.25], 0).forEach((b) => W.add(b));
 
-  // the courtyard: paving with planting beds, a fountain, trees, a café pavilion with a roof terrace
-  deco(63, 0.001, 13, 90, 0.02, 87, { color: [0.74, 0.72, 0.68], tex: TX.PAVE });
-  box(70, 0, 44, 80, 0.7, 54, { color: C.conc, tex: TX.CONC, shape: 'cyl' });
-  glow(70.8, 0.7, 44.8, 79.2, 0.72, 53.2, [0.45, 0.75, 0.9], 0.35, { alpha: 0.8 });
-  box(74.5, 0.7, 48.5, 75.5, 3.2, 49.5, { color: C.steel, mat: 'steel', shape: 'cyl' });
-  for (const [x, z] of [[67, 20], [83, 20], [67, 34], [83, 34], [67, 62], [86, 62]]) prop('tree', x, 0, z);
-  for (const [x, z] of [[75, 28], [75, 40], [85, 46]]) prop('planter', x, 0, z);
-  for (const [x, z, r] of [[66, 49, true], [84, 49, true], [75, 58, false]]) prop('bench', x, 0, z, r);
-  for (const [x, z] of [[64, 16], [64, 44], [88, 16], [88, 70]]) prop('lamp', x, 0, z);
-  building({
-    x0: 64, z0: 70, x1: 80, z1: 86, floors: 1, tex: TX.GLASS, color: [0.55, 0.66, 0.68],
-    holes: { e: [door(78, 3, 0, 3.2)], s: [door(72, 3, 0, 3.2)], n: [door(68, 2, 0, 3)] },
-    parapetHoles: { e: [[79.6, 82.6, 4.5, 6]] },
-    inner: (k, y) => { prop('counter', 72, y, 73); for (const [x, z] of [[67, 80], [71, 82], [76, 79]]) prop('table', x, y, z); ceilingLight(66, 77, 78, 78, y + FH); },
-  });
-  box(80, 4.2, 79.6, 84, 4.5, 82.6, { color: C.conc, tex: TX.CONC });
-  stairs(82.5, 87.4, '-z', 3, 0, 4.5);
-  deco(63.9, 3.2, 69.9, 80.1, 3.6, 86.1, { color: ACC[3] });
-  for (const [x, z] of [[68, 74], [75, 82]]) { box(x - 0.05, 4.5, z - 0.05, x + 0.05, 6.8, z + 0.05, { color: C.dark }); box(x - 1.4, 6.8, z - 1.4, x + 1.4, 7.1, z + 1.4, { color: C.white, solid: false, shape: 0.12 }); }
-  // the plaza in front of the tower and along the east edge
-  for (const [x, z, r] of [[100, 78, false], [118, 78, false], [131, 40, true], [131, 56, true]]) prop('barrier', x, 0, z, r);
-  for (const [x, z] of [[96, 84], [122, 84], [132, 20]]) prop('tree', x, 0, z);
-  for (const [x, z] of [[104, 82], [114, 82]]) prop('planter', x, 0, z);
-}
-
-// ---------------------------------------------------------------- sector 4: the giant building, a launch pad in the atrium
-function sector4() {
-  const col = ACC[4], F = 5, T = F * FH;
-  const atrium = [88, -62, 112, -38];
-  const upS = [1, 2, 3, 4].flatMap((k) => [win(83, 6, k * FH), win(117, 6, k * FH)]);
-  const upW = [1, 2, 3, 4].flatMap((k) => [win(-68, 6, k * FH), win(-50, 4, k * FH)]);
-  building({
-    x0: 66, z0: -84, x1: 134, z1: -16, floors: F, tex: TX.OFFICE, color: C.office,
-    holes: {
-      n: [door(86, 4, 0, 4), door(114, 4, 0, 4), ...upS],
-      s: [[96, 104, 0, 4.5], door(74, 4, 0, 4), door(118, 4, 0, 4), ...upS],
-      w: [door(-50, 4, 0, 4), [-30, -24, 0, 3], ...upW],
-      e: [door(-50, 4, 0, 4), door(-28, 4, 0, 4), ...upW],
-    },
-    voids: () => [atrium],
-    cores: [{ ax: 70, az: -82, dir: '+x' }, { ax: 130, az: -21.4, dir: '-x' }],
-    inner: (k, y) => {
-      const top = y + FH - 0.3, pt = { color: C.plaster, tex: TX.PLASTER };
-      wallZ(-83.6, -62, 88, 0.2, y, top, [door(-72, 1.8, y)], pt);
-      wallZ(-83.6, -62, 112, 0.2, y, top, [door(-72, 1.8, y)], pt);
-      wallZ(-38, -16.4, 88, 0.2, y, top, [door(-28, 1.8, y)], pt);
-      wallZ(-38, -16.4, 112, 0.2, y, top, [door(-28, 1.8, y)], pt);
-      wallX(66.4, 88, -50, 0.2, y, top, [door(80, 1.8, y)], pt);
-      wallX(112, 133.6, -50, 0.2, y, top, [door(120, 1.8, y)], pt);
-      if (k > 0) {
-        // balconies round the atrium on every floor
-        const r = { color: [0.7, 0.85, 0.9], alpha: 0.3, mat: [0.6, 0.05], noShadow: true };
-        wallX(88, 112, -62, 0.08, y, y + 1.05, [], r); wallX(88, 112, -38, 0.08, y, y + 1.05, [], r);
-        wallZ(-62, -38, 88, 0.08, y, y + 1.05, [], r); wallZ(-62, -38, 112, 0.08, y, y + 1.05, [], r);
-        glow(88, y - 0.35, -62.1, 112, y - 0.3, -61.9, col, 0.8);
-      }
-      for (const [x, z, r] of [[76, -70, false], [100, -76, false], [124, -70, false], [76, -30, false], [100, -24, false], [124, -30, false], [76, -44, true], [124, -56, true]]) {
-        if (rnd() < 0.85) prop(rnd() < 0.6 ? 'office' : ['library', 'lounge', 'kitchen', 'storage', 'meeting'][Math.floor(rnd() * 5)], x, y, z, r);
-      }
-      for (const [x0, z0, x1, z1] of [[70, -73, 130, -72.4], [70, -27.6, 130, -27], [76.5, -60, 77.1, -40], [122.9, -60, 123.5, -40]]) ceilingLight(x0, z0, x1, z1, y + FH);
-    },
-  });
-  for (const [x, z] of [[88, -62], [112, -62], [88, -38], [112, -38]]) box(x - 0.5, 0, z - 0.5, x + 0.5, T, z + 0.5, { color: C.conc, tex: TX.CONC });
-  glow(87.9, T - 0.4, -62.1, 112.1, T - 0.25, -37.9, col, 0.9);
-  walls4(88, -62, 112, -38, T, T + 1.1, {}, { color: C.concDark, tex: TX.CONC }, 0.3);
-  // the atrium floor: pad in the middle, planters round it
-  deco(89, 0.001, -61, 111, 0.025, -39, { color: [0.62, 0.6, 0.58], tex: TX.PAVE });
-  for (const [x, z] of [[92, -58], [108, -58], [92, -42], [108, -42]]) prop('planter', x, 0, z);
-  // corner glass towers on the facade and a sponsor band
-  for (const [x0, z0] of [[65.8, -84.2], [131.2, -84.2], [65.8, -18.8], [131.2, -18.8]]) box(x0, 0, z0, x0 + 3, T + 2, z0 + 3, { color: C.glass, tex: TX.GLASS });
-  for (const [x0, z0, x1, z1] of [[66, -16.05, 134, -15.9], [66, -84.1, 134, -83.95]]) deco(x0, T - 1.6, z0, x1, T - 0.9, z1, { color: col });
-  // roof: plant, a big LED billboard facing the spawn, the sign
-  for (const [x, z] of [[74, -76], [124, -76], [74, -50], [126, -44]]) box(x - 2, T, z - 1.5, x + 2, T + 2, z + 1.5, { color: C.steel, tex: TX.METAL });
-  for (const x of [80, 120]) box(x - 0.25, T, -21, x + 0.25, T + 4, -20.5, { color: C.dark });
-  box(76, T + 4, -21, 122, T + 16, -20.5, { color: C.dark, tex: TX.METAL });
-  deco(77, T + 5, -20.5, 121, T + 15, -20.4, { color: col, tex: TX.LED, emissive: 0.5 });
-  bigNum(4, 129, T + 5, -20.3, 7, col);
-  // outside: cover on the open ground
-  for (const [x, z, r] of [[78, -10, false], [100, -6, false], [122, -10, false], [137, -50, true]]) prop('barrier', x, 0, z, r);
-  for (const [x, z] of [[70, -8], [130, -8]]) prop('tree', x, 0, z);
-  for (const [x, z] of [[90, -10], [110, -10]]) prop('lamp', x, 0, z);
-}
-
-// ---------------------------------------------------------------- sector 5: the vault (bank building on an open plaza)
-function sector5() {
-  const col = ACC[5], stone = [0.82, 0.78, 0.7];
-  const hall = [-19.6, -52, 19.6, -40.4];
-  building({
-    x0: -20, z0: -70, x1: 20, z1: -40, floors: 2, tex: TX.CONC, color: stone,
-    holes: {
-      s: [door(-8, 3, 0, 4), door(0, 3, 0, 4), door(8, 3, 0, 4), [-17, -13, 1, 8], [13, 17, 1, 8]],
-      n: [door(0, 3, 0, 3.2), win(-12, 3, 4.5, 1, 2), win(12, 3, 4.5, 1, 2)],
-      w: [door(-58, 3, 0, 3.2), [-48, -44, 1, 8], win(-64, 3, 4.5, 1, 2)],
-      e: [[-48, -44, 1, 8], win(-64, 3, 4.5, 1, 2), win(-58, 3, 0, 1, 2)],
-    },
-    voids: (k) => (k === 1 ? [hall] : []),
-    cores: [{ ax: 12, az: -53, dir: '-z' }],
-    inner: (k, y) => {
-      if (k === 0) {
-        // banking hall: teller counter, queue posts, benches
-        prop('counter', -6, y, -50); prop('counter', 6, y, -50, false);
-        for (const x of [-12, 12]) prop('bench', x, y, -44);
-        for (let x = -4; x <= 4; x += 2) box(x - 0.06, y, -46.06, x + 0.06, y + 1, -45.94, { color: [0.8, 0.7, 0.35], mat: 'steel' });
-        // the vault: thick steel walls, an open door, the cashout station and its beam
-        const V = { color: [0.3, 0.32, 0.36], tex: TX.METAL };
-        walls4(-8, -68, 8, -55, y, y + 4.2, { s: [door(0, 3, y, 3.2)] }, V, 1);
-        box(1.6, y, -55, 2.2, y + 3.6, -51.4, { color: [0.55, 0.57, 0.6], mat: 'steel', shape: 0.25 });
-        for (let i = 0; i < 6; i++) {
-          const c = i % 2 ? C.dark : C.yellow;
-          deco(-2, y + i * 0.55, -54.98, -1.6, y + (i + 1) * 0.55, -54.9, { color: c });
-          deco(1.6, y + i * 0.55, -54.98, 2, y + (i + 1) * 0.55, -54.9, { color: c });
+  // ---- fitting out the office floors
+  for (let k = 0; k < TOP; k++) {
+    const y = k * FH;
+    for (const [x0, z0, x1] of footprint(k)) {
+      const cx = (x0 + x1) / 2;
+      if (k >= 3) {
+        const kinds = ['office', 'office', 'meeting', 'lounge', 'library', 'servers', 'kitchen', 'storage'];
+        const spots = k < 22 ? [[-15, z0 + 3.2], [15, z0 + 3.2], [-13, 14], [13, 14], [0, 13]] : [[cx, z0 + 3.4], [cx, 14]];
+        for (const [x, z] of spots) if (rnd() < 0.8) prop(kinds[Math.floor(rnd() * kinds.length)], x, y, z, false);
+        // a row of offices along the back with doors
+        if (k < 22) {
+          wallX(-23.6, -8, z0 + 7, 0.2, y, y + FH - 0.3, [door(-12, 1.8, y), door(-19, 1.8, y)], { color: C.plaster, tex: TX.PLASTER });
+          wallX(8, 23.6, z0 + 7, 0.2, y, y + FH - 0.3, [door(12, 1.8, y), door(19, 1.8, y)], { color: C.plaster, tex: TX.PLASTER });
         }
-        glow(-2, y + 3.4, -54.98, 2, y + 3.6, -54.9, col, 1);
-        box(-1.2, y, -62.2, 1.2, y + 1.1, -59.8, { color: C.dark, tex: TX.METAL });
-        glow(-0.9, y + 1.1, -61.9, 0.9, y + 1.16, -60.1, col, 1);
-        glow(-0.5, y + 1.16, -61.5, 0.5, y + 60, -60.5, col, 1, { alpha: 0.25, noBullet: true });
-        for (const [x, z] of [[-5, -66], [5, -66], [-5, -58]]) prop('crates', x, y, z);
-        glow(-7, y + 4.15, -67, 7, y + 4.2, -66.6, C.light, 0.9);
-        ceilingLight(-16, -46.5, 16, -45.9, y + 2 * FH);
-      } else {
-        // offices over the vault, a gallery overlooking the hall
-        wallX(-19.6, 19.6, -52, 0.08, y, y + 1.05, [], { color: C.dark, mat: 'metal' });
-        wallZ(-69.6, -52, -6, 0.2, y, y + FH - 0.3, [door(-60, 1.6, y)], { color: C.plaster, tex: TX.PLASTER });
-        for (const [x, z] of [[-14, -64], [-14, -57], [0, -64], [4, -58]]) prop('office', x, y, z);
-        prop('shelf', -18, y, -68, false); prop('plant', 18, y, -68);
       }
-      ceilingLight(-16, -62, 10, -61.4, y + FH);
-    },
-  });
-  // portico on the plaza side: columns, entablature, the sign
-  for (const x of [-15, -9, -3, 3, 9, 15]) {
-    box(x - 0.7, 0, -37.7, x + 0.7, 8.4, -36.3, { color: stone, shape: 'cyl' });
-    box(x - 0.9, 0, -37.9, x + 0.9, 0.4, -36.1, { color: stone, tex: TX.CONC });
+      if (k >= 3) ceilingLight(cx - 8, 10, cx + 8, 10.6, y + FH);
+      if (k < 22) ceilingLight(-20, z0 + 3.5, 20, z0 + 4.1, y + FH);
+    }
   }
-  box(-18, 8.4, -40, 18, 9.9, -35, { color: stone, tex: TX.CONC });
-  box(-16, 9.9, -40, 16, 11, -36.5, { color: stone, tex: TX.CONC });
-  deco(-14, 8.9, -34.98, 14, 9.5, -34.9, { color: col });
-  bigNum(5, 0, 12, -38, 5, col);
-  box(-6, 9, -66, 6, 9.6, -56, { color: [0.6, 0.75, 0.82], alpha: 0.45, mat: [0.6, 0.05], noShadow: true });   // skylight
-  // the open ground round the vault: cover, an armoured truck, a statue, lamps
-  for (const [x, z, r] of [[-30, -24, false], [30, -24, false], [-30, -78, false], [30, -78, false], [-26, -55, true], [26, -55, true], [-10, -26, false], [10, -26, false]]) prop('barrier', x, 0, z, r);
-  for (const [x, z] of [[-32, -40], [32, -40], [-32, -66], [32, -66], [-12, -80], [12, -80]]) prop('planter', x, 0, z);
-  box(18, 0, -30, 25, 2.8, -27.2, { color: [0.3, 0.33, 0.3], tex: TX.METAL, shape: 0.2 });
-  box(25, 0, -30, 27.5, 2.2, -27.2, { color: [0.3, 0.33, 0.3], tex: TX.METAL, shape: 0.2 });
-  box(25.5, 1.3, -30.02, 27.3, 2.0, -27.18, { color: [0.15, 0.2, 0.24], mat: [0.8, 0.1], solid: false });
-  for (const x of [19.5, 23.5, 26.3]) for (const z of [-30.15, -27.05]) box(x - 0.5, 0, z - 0.1, x + 0.5, 1, z + 0.1, { color: C.dark, solid: false });
-  box(-24, 0, -32, -20, 1.6, -28, { color: stone, tex: TX.CONC });
-  box(-23, 1.6, -31, -21, 2.4, -29, { color: [0.75, 0.6, 0.3], mat: 'steel' });
-  box(-22.6, 2.4, -30.6, -21.4, 4.6, -29.4, { color: [0.75, 0.6, 0.3], mat: 'steel', shape: 0.3 });
-  box(-22.5, 4.6, -30.5, -21.5, 5.5, -29.5, { color: [0.75, 0.6, 0.3], mat: 'steel', shape: 'sphere' });
-  for (const [x, z] of [[-34, -20], [34, -20], [-34, -84], [34, -84], [0, -84]]) prop('lamp', x, 0, z);
-  for (const x of [-6, -2, 2, 6]) box(x - 0.2, 0, -33.2, x + 0.2, 0.9, -32.8, { color: C.dark, shape: 'cyl', mat: 'metal' });
 }
 
-// ---------------------------------------------------------------- sector 6: the maze (tight corridors, many rooms, 3 storeys)
-function sector6() {
-  const col = ACC[6], F = 3;
-  const GX = [-122.67, -111.33, -88.67, -77.33], GZ = [-72.67, -61.33, -38.67, -27.33];
-  const CX = [-101.4, -98.6], CZ = [-51.4, -48.6];       // the two crossing corridors
-  building({
-    x0: -134, z0: -84, x1: -66, z1: -16, floors: F, tex: TX.OFFICE, color: [0.64, 0.62, 0.6],
-    holes: {
-      s: [door(-116.5, 3, 0, 3.2), door(-83.5, 3, 0, 3.2), [CX[0], CX[1], 0, 3], [-92, -86, 0, 3], win(-128, 3, 4.5), win(-72, 3, 9)],
-      n: [[CX[0], CX[1], 0, 3], door(-118.5, 3, 0, 3.2), win(-80, 3, 4.5), win(-128, 3, 9)],
-      w: [[CZ[0], CZ[1], 0, 3], win(-30, 3, 4.5), win(-70, 3, 9)],
-      e: [[CZ[0], CZ[1], 0, 3], win(-24, 3, 9), win(-76, 3, 4.5)],
-    },
-    cores: [{ ax: -132, az: -82, dir: '+x' }, { ax: -68, az: -21.6, dir: '-x' }],
-    inner: (k, y) => {
-      const top = y + FH - 0.3, pt = { color: [0.82, 0.8, 0.76], tex: TX.PLASTER };
-      // the corridors: lined both sides, a door into every room, ceiling lights down the middle
-      const segZ = [-83.6, ...GZ.slice(0, 2), CZ[0], CZ[1], ...GZ.slice(2), -16.4];
-      const segX = [-133.6, ...GX.slice(0, 2), CX[0], CX[1], ...GX.slice(2), -66.4];
-      const corrDoors = (segs, cross) => {
-        const h = [[cross[0], cross[1], y, top]];
-        for (let i = 0; i < segs.length - 1; i++) {
-          const a = segs[i], b = segs[i + 1];
-          if (a === cross[0]) continue;
-          h.push(door(a + 1.6 + rnd() * (b - a - 3.2), 1.4, y, 2.6));
-        }
-        return h;
-      };
-      for (const x of CX) wallZ(-83.6, -16.4, x, 0.25, y, top, corrDoors(segZ, CZ), pt);
-      for (const z of CZ) wallX(-133.6, -66.4, z, 0.25, y, top, corrDoors(segX, CX), pt);
-      // room walls on the grid: each stretch gets a doorway, is left open, or is solid
-      const roomHoles = (segs, cross) => {
-        const h = [[cross[0] - 0.01, cross[1] + 0.01, y, top]];
-        for (let i = 0; i < segs.length - 1; i++) {
-          const a = segs[i], b = segs[i + 1];
-          if (a === cross[0]) continue;
-          const r = rnd();
-          if (r < 0.62) { const c = a + 1.4 + rnd() * (b - a - 2.8); h.push([c - 0.7, c + 0.7, y, top]); }
-          else if (r < 0.8) h.push([a + 1.5, b - 1.5, y, top]);
-        }
-        return h;
-      };
-      for (const x of GX) wallZ(-83.6, -16.4, x, 0.25, y, top, roomHoles(segZ, CZ), pt);
-      for (const z of GZ) wallX(-133.6, -66.4, z, 0.25, y, top, roomHoles(segX, CX), pt);
-      ceilingLight(-100.3, -83, -99.7, -17, y + FH); ceilingLight(-133, -50.3, -67, -49.7, y + FH);
-      // the rooms: crates, shelves, desks, racks
-      const kinds = ['storage', 'library', 'office', 'servers', 'lockers', 'dining', 'bedroom', 'lounge', 'crates'];
-      for (let i = 0; i < 12; i++) {
-        const cx = [-128, -117, -106, -94, -83, -72][Math.floor(rnd() * 6)], cz = [-78, -67, -56, -44, -33, -22][Math.floor(rnd() * 6)];
-        if ((cx === -128 && cz === -78) || (cx === -72 && cz === -22)) continue;   // stairwells
-        prop(kinds[Math.floor(rnd() * kinds.length)], cx + (rnd() - 0.5) * 4, y, cz + (rnd() - 0.5) * 4, rnd() < 0.5);
-      }
-      for (const [cx, cz] of [[-117, -67], [-83, -33], [-117, -33], [-83, -67]]) ceilingLight(cx - 2, cz - 0.3, cx + 2, cz + 0.3, y + FH);
-    },
-  });
-  // roof: plant, skylights, a water tower, the sign
-  const T = F * FH;
-  for (const [x, z] of [[-124, -74], [-80, -70], [-120, -30]]) box(x - 2, T, z - 1.5, x + 2, T + 2, z + 1.5, { color: C.steel, tex: TX.METAL });
-  for (const [x, z] of [[-110, -60], [-90, -40]]) box(x - 3, T, z - 3, x + 3, T + 0.8, z + 3, { color: [0.55, 0.7, 0.78], alpha: 0.45, mat: [0.6, 0.05] });
-  for (const [dx, dz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) box(-75 + dx - 0.15, T, -78 + dz - 0.15, -75 + dx + 0.15, T + 5, -78 + dz + 0.15, { color: C.dark });
-  box(-77.5, T + 5, -80.5, -72.5, T + 9, -75.5, { color: [0.45, 0.32, 0.22], shape: 'cyl' });
-  deco(-134.05, T - 1.6, -16.1, -65.95, T - 0.9, -15.95, { color: col });
-  bigNum(6, -100, T + 1.5, -17.5, 6, col);
-  // outside
-  for (const [x, z, r] of [[-120, -9, false], [-80, -9, false], [-137, -30, true], [-137, -70, true]]) prop('barrier', x, 0, z, r);
-  for (const [x, z] of [[-130, -10], [-70, -10]]) prop('tree', x, 0, z);
+// ---------------------------------------------------------------- the lobby: atrium, catwalks, grand stairs
+function lobby() {
+  // L1 catwalk across the atrium, the grand stairs up to it, the L2 catwalk at the front
+  box(-16, 4.2, 28, 16, 4.5, 31.6, { color: C.steel, tex: TX.METAL });
+  box(-16, 8.7, 38, 16, 9, 41, { color: C.steel, tex: TX.METAL });
+  for (const x of [-13, 13]) {
+    stairs(x, 36.6, '-z', 3, 0, 4.5, { color: C.tower, tex: TX.CONC });
+    NAV_CHAINS.push([[x, 0, 38], [x, 0, 37], [x, 4.5, 31.2], [x, 4.5, 30]]);
+  }
+  rail('x', -16, 16, 28.05, 4.5);
+  rail('x', -16, 16, 31.55, 4.5, [[-14.5, -11.5], [11.5, 14.5]]);
+  rail('x', -16, 16, 38.05, 9); rail('x', -16, 16, 40.95, 9);
+  // railings along the atrium edges on L1 and L2 (gaps where the catwalks join)
+  for (const [y, gaps] of [[4.5, [[28, 31.6]]], [9, [[38, 41]]]]) {
+    rail('z', 4, 44, -16, y, gaps); rail('z', 4, 44, 16, y, gaps);
+    rail('x', -16, 16, 4, y);
+  }
+  // atrium ceiling over the tower part, skylight of breakable glass over the podium part
+  for (let x = -16; x < 16; x += 8) for (let z = 20; z < 44; z += 8) {
+    GLASS.push([[OX + x + 0.1, Y0 + 13.38, OZ + z + 0.1], [OX + x + 7.9, Y0 + 13.46, OZ + z + 7.9]]);
+  }
+  for (const x of [-16, -8, 0, 8, 16]) box(x - 0.15, 13.0, 20, x + 0.15, 13.5, 44, { color: C.tower, tex: TX.CONC });
+  for (const z of [20, 28, 36, 44]) box(-16, 13.0, z - 0.15, 16, 13.5, z + 0.15, { color: C.tower, tex: TX.CONC });
+  // reception, seating, planters with trees, a hanging light sculpture, an LED wall
+  prop('counter', -1.6, 0, 36.6); prop('counter', 1.6, 0, 36.6);
+  glow(-3.2, 1.0, 36.95, 3.2, 1.25, 37.0, [0.55, 0.85, 1], 0.9);
+  for (const [x, z] of [[-8, 24], [8, 24], [-8, 42], [8, 42]]) prop('planter', x, 0, z);
+  for (const [x, z] of [[-26, 40], [26, 40]]) prop('lounge', x, 0, z);
+  for (const [x, z, r] of [[-26, 24, false], [26, 24, false]]) prop('office', x, 0, z, r);
+  for (const [s, y, r] of [[1, 10.5, 5], [-1, 8.5, 3.6], [1, 6.8, 2.4]]) {
+    const z = 30;
+    glow(-r, y, z - r, r, y + 0.12, z - r + 0.12, [0.6, 0.85, 1], 0.9);
+    glow(-r, y, z + r - 0.12, r, y + 0.12, z + r, [0.6, 0.85, 1], 0.9);
+    glow(-r, y, z - r, -r + 0.12, y + 0.12, z + r, [0.6, 0.85, 1], 0.9);
+    glow(r - 0.12, y, z - r, r, y + 0.12, z + r, [0.6, 0.85, 1], 0.9);
+    void s;
+  }
+  deco(-10, 9.6, 4.25, 10, 13.0, 4.35, { color: [0.95, 0.3, 0.2], tex: TX.LED, emissive: 0.5 });
+  // mezzanine offices in the podium wings and the tower part of L1 and L2
+  for (const y of [4.5, 9]) {
+    for (const [x, z] of [[-25, 26], [28, 40], [-18, -14], [18, -14], [-14, -2], [14, -2]]) if (rnd() < 0.85) prop(['office', 'meeting', 'lounge', 'library'][Math.floor(rnd() * 4)], x, y, z);
+    ceilingLight(-34, 30, -18, 30.6, y + FH); ceilingLight(18, 30, 34, 30.6, y + FH);
+  }
+  ceilingLight(-34, 30, -18, 30.6, 4.5); ceilingLight(18, 30, 34, 30.6, 4.5);
+  ceilingLight(-12, 12, 12, 12.6, 13.5); ceilingLight(-20, -12, 20, -11.4, 4.5);
+  // entrance canopy and big letters on the podium
+  box(-8, 4.6, 44, 8, 5.0, 49, { color: C.tower, tex: TX.CONC });
+  glow(-8, 4.55, 44, 8, 4.6, 49, C.light, 0.7);
 }
 
-// ---------------------------------------------------------------- the stadium bowl round the void
-function bowl() {
-  const XI = 178, ZN = -132, ZS = 152, N = 22, DEP = 2.6, RISE = 1.6, YB = -14, BACK = N * DEP + 4;
-  const seat = { color: [0.24, 0.26, 0.31], tex: TX.SEATS };
-  for (let i = 0; i < N; i++) {
-    const top = YB + (i + 1) * RISE, o = i * DEP;
-    box(-XI - BACK, -60, ZN - o, -XI - o, top, ZS + o, seat);
-    box(XI + o, -60, ZN - o, XI + BACK, top, ZS + o, seat);
-    box(-XI - o, -60, ZN - BACK, XI + o, top, ZN - o, seat);
-    box(-XI - o, -60, ZS + o, XI + o, top, ZS + BACK, seat);
-  }
-  // LED ribbon boards along the front of the lower tier
-  const rib = { tex: TX.LED, emissive: 0.5 };
-  deco(-XI - 0.1, YB - 0.2, ZN, -XI, YB + 1.5, ZS, { color: [0.95, 0.3, 0.2], ...rib });
-  deco(XI, YB - 0.2, ZN, XI + 0.1, YB + 1.5, ZS, { color: [0.95, 0.3, 0.2], ...rib });
-  deco(-XI, YB - 0.2, ZN - 0.1, XI, YB + 1.5, ZN, { color: [0.95, 0.3, 0.2], ...rib });
-  deco(-XI, YB - 0.2, ZS, XI, YB + 1.5, ZS + 0.1, { color: [0.95, 0.3, 0.2], ...rib });
-  // hospitality boxes round the top, the back wall, the roof canopy with floodlights under its edge
-  const TOPY = YB + N * RISE, CAN = TOPY + 26, IN = 30;
-  const xo = XI + BACK, zn = ZN - BACK, zs = ZS + BACK;
-  const back = { color: [0.3, 0.31, 0.34], tex: TX.METAL };
-  box(-xo - 2, TOPY - 4, zn - 2, -xo, CAN, zs + 2, back); box(xo, TOPY - 4, zn - 2, xo + 2, CAN, zs + 2, back);
-  box(-xo, TOPY - 4, zn - 2, xo, CAN, zn, back); box(-xo, TOPY - 4, zs, xo, CAN, zs + 2, back);
-  const boxes = { color: C.glass, tex: TX.GLASS };
-  box(-xo, TOPY, zn, -xo + 6, TOPY + 9, zs, boxes); box(xo - 6, TOPY, zn, xo, TOPY + 9, zs, boxes);
-  box(-xo + 6, TOPY, zn, xo - 6, TOPY + 9, zn + 6, boxes); box(-xo + 6, TOPY, zs - 6, xo - 6, TOPY + 9, zs, boxes);
-  const roof = { color: [0.86, 0.87, 0.9], tex: TX.METAL, noShadow: true };
-  const ix = XI + IN, izn = ZN - IN, izs = ZS + IN;
-  box(-xo - 2, CAN, zn - 2, -ix, CAN + 2, zs + 2, roof); box(ix, CAN, zn - 2, xo + 2, CAN + 2, zs + 2, roof);
-  box(-ix, CAN, zn - 2, ix, CAN + 2, izn, roof); box(-ix, CAN, izs, ix, CAN + 2, zs + 2, roof);
-  glow(-ix, CAN - 0.4, izn, -ix + 2, CAN, izs, C.light, 1); glow(ix - 2, CAN - 0.4, izn, ix, CAN, izs, C.light, 1);
-  glow(-ix, CAN - 0.4, izn, ix, CAN, izn + 2, C.light, 1); glow(-ix, CAN - 0.4, izs - 2, ix, CAN, izs, C.light, 1);
-  for (let x = -ix + 20; x < ix; x += 40) { deco(x - 0.6, CAN - 3, zn, x + 0.6, CAN, izn + 2, { color: C.dark }); deco(x - 0.6, CAN - 3, izs - 2, x + 0.6, CAN, zs, { color: C.dark }); }
-  for (let z = izn + 20; z < izs; z += 40) { deco(-xo, CAN - 3, z - 0.6, -ix + 2, CAN, z + 0.6, { color: C.dark }); deco(ix - 2, CAN - 3, z - 0.6, xo, CAN, z + 0.6, { color: C.dark }); }
-  // giant screens hung under the canopy at both ends
-  for (const [z, s] of [[izn + 6, 1], [izs - 6, -1]]) {
-    deco(-36, CAN - 30, z - 1, 36, CAN - 4, z + 1, { color: C.dark });
-    deco(-34, CAN - 28, z + s * 1.02, 34, CAN - 6, z + s * 1.08, { color: [0.25, 0.5, 1], tex: TX.LED, emissive: 0.55 });
-  }
-  // the centre-hung scoreboard
-  const cy = 74;
-  box(-11, cy, -11, 11, cy + 13, 11, { color: C.dark, tex: TX.METAL, noShadow: true });
-  for (const [a, b, c, d] of [[-10, 11, 10, 11.1], [-10, -11.1, 10, -11]]) deco(a, cy + 1, b, c, cy + 12, d, { color: [0.3, 0.55, 1], tex: TX.LED, emissive: 0.6 });
-  for (const [a, b, c, d] of [[11, -10, 11.1, 10], [-11.1, -10, -11, 10]]) deco(a, cy + 1, b, c, cy + 12, d, { color: [0.3, 0.55, 1], tex: TX.LED, emissive: 0.6 });
-  glow(-11.05, cy - 0.4, -11.05, 11.05, cy, 11.05, [1, 0.25, 0.18], 1);
-  // the holographic sneaker floating over the arena
-  const H = (x0, y0, z0, x1, y1, z1, c, shape) => glow(x0, y0, z0, x1, y1, z1, c, 0.85, { alpha: 0.3, noBullet: true, shape });
-  const sy = 44, cyan = [0.35, 0.9, 1], pink = [1, 0.35, 0.8];
-  const shoe = [
-    H(-15, sy, -5, 15, sy + 2.4, 5, [0.85, 0.95, 1], 1.1),
-    H(-15, sy + 2.4, -5.1, 15, sy + 3.2, 5.1, pink, 0.35),
-    H(-12, sy + 3.2, -4.6, 8, sy + 10, 4.6, cyan, 2),
-    H(5, sy + 2.6, -4.7, 15.4, sy + 7.6, 4.7, cyan, 'sphere'),
-    H(-15.3, sy + 2.8, -4.2, -8, sy + 13, 4.2, cyan, 1.6),
-    H(-6, sy + 9, -3.2, 1, sy + 14.5, 3.2, [0.6, 0.95, 1], 1.2),
-    H(-8, sy + 5, -4.75, 4, sy + 7, 4.75, pink, 0.5),
-    ...[-3.5, -1, 1.5, 4].map((x) => H(x - 0.3, sy + 10.1, -3.4, x + 0.3, sy + 10.5, 3.4, [1, 1, 1], 0.12)),
-  ];
-  // the void: a dark floor far below with faint seams
-  deco(-400, -120, -400, 400, -118, 420, { color: [0.05, 0.06, 0.08] });
-  for (const z of [-60, 0, 60]) glow(-400, -118, z - 0.5, 400, -117.9, z + 0.5, [0.85, 0.2, 0.15], 0.5);
-  for (const x of [-100, 0, 100]) glow(x - 0.5, -118, -400, x + 0.5, -117.9, 420, [0.85, 0.2, 0.15], 0.5);
-  return shoe;
+// ---------------------------------------------------------------- cashout stations and vault spots
+function station(x, y, z) {
+  box(x - 1, y, z - 1, x + 1, y + 0.18, z + 1, { color: C.dark, tex: TX.METAL });
+  box(x - 0.45, y + 0.18, z - 0.45, x + 0.45, y + 1.25, z + 0.45, { color: [0.85, 0.86, 0.88], tex: TX.METAL, shape: 0.06 });
+  box(x - 0.55, y + 1.25, z - 0.55, x + 0.55, y + 1.4, z + 0.55, { color: C.dark, shape: 0.05 });
+  const ring = glow(x - 1.05, y + 0.05, z - 1.05, x + 1.05, y + 0.14, z + 1.05, [0.85, 0.85, 0.9], 0.7);
+  const top = glow(x - 0.42, y + 1.4, z - 0.42, x + 0.42, y + 1.43, z + 0.42, [0.85, 0.85, 0.9], 0.8);
+  const beam = glow(x - 0.3, y + 1.43, z - 0.3, x + 0.3, y + 40, z + 0.3, [1, 1, 1], 1, { alpha: 0 });
+  return { ring, top, beam, pos: L(x, y, z) };
+}
+function vault(x, y, z) {
+  box(x - 0.9, y, z - 0.9, x + 0.9, y + 0.5, z + 0.9, { color: C.tower, tex: TX.CONC, shape: 0.05 });
+  for (const [a, b] of [[-0.85, -0.85], [0.85, -0.85], [-0.85, 0.85], [0.85, 0.85]]) box(x + a - 0.07, y + 0.5, z + b - 0.07, x + a + 0.07, y + 2.1, z + b + 0.07, { color: C.dark, mat: 'metal' });
+  box(x - 0.95, y + 2.1, z - 0.95, x + 0.95, y + 2.2, z + 0.95, { color: C.dark, mat: 'metal' });
+  const ring = glow(x - 0.92, y + 0.5, z - 0.92, x + 0.92, y + 0.53, z + 0.92, [1, 0.2, 0.15], 0.9);
+  const cap = glow(x - 0.8, y + 2.05, z - 0.8, x + 0.8, y + 2.1, z + 0.8, [1, 0.2, 0.15], 0.9);
+  return { ring, cap, pos: L(x, y + 0.5, z) };
 }

@@ -113,6 +113,7 @@ export class Sounds {
   beep(hi = false) { this.click(hi ? 2600 : 1900, hi ? 0.4 : 0.25, 5); }   // dry tick, no melody
   waveClear() { [0, 110, 220].forEach((d, i) => setTimeout(() => this.tone(523 * [1, 1.25, 1.5][i], 523 * [1, 1.25, 1.5][i], 0.25, 0.1, 'triangle'), d)); }
   launch() { this.burst(0.35, 700, 0.3); this.tone(220, 1100, 0.32, 0.1, 'sawtooth'); this.burst(0.4, 3200, 0.07, 'highpass'); }
+  glass() { this.burst(0.22, 5200, 0.2, 'highpass'); this.burst(0.45, 3000, 0.1, 'bandpass', 3); for (let i = 0; i < 5; i++) setTimeout(() => this.click(3800 + Math.random() * 3200, 0.1, 7), 25 + i * 40 + Math.random() * 30); }
   spin() { this.burst(0.2, 1700, 0.13, 'bandpass', 1.4); this.burst(0.12, 3600, 0.04, 'highpass'); }
   catch() { this.burst(0.06, 500, 0.28); this.click(2400, 0.22, 3); }
   whoosh() { this.burst(0.9, 900, 0.12, 'bandpass', 0.6); }

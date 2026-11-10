@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.20: PLAY now goes through matchmaking, a 30-second loadout pick and a team intro before dropping you into Fortune Stadium. Buildings have furnished rooms and better walls, floors and ceilings.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
+**Build 0.21: Fortune Stadium is now one big white tower, with a glass lobby, catwalks, real lifts with call buttons and breakable windows. PLAY gives you a full cashout match with AI teammates and enemies, first to $2,000.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
 
 ## Run it
 
@@ -31,7 +31,8 @@ Then open http://localhost:8000.
 | Left mouse / F | Shoot |
 | Right mouse / V | Aim down sights (the sniper scopes in) |
 | R | Reload |
-| E | Take a gun from a case, or use the workbench |
+| E | Take a gun from a case, use the workbench, press a lift button, pick up / deposit the cash box |
+| Hold E | Steal another team's cashout (stand on their station) |
 | Q | Dash (2 charges, works in the air) |
 | G | Grapple (works in the air; press again or jump to let go) |
 | Z | Ground slam (dive and send out a shockwave; leaps first if you're on the ground) |
@@ -147,35 +148,29 @@ PLAY runs a match lobby before you drop in:
 
 After that, PLAY resumes your match until you change your loadout.
 
-## Fortune Stadium (builds 0.19–0.20)
+## Fortune Stadium: the tower (build 0.21)
 
-The semi-finals arena, at the scale of a real arena from The Finals: about 280 m × 180 m of play space, with six floating sectors over the void inside a full stadium bowl. Build 0.19 drops the white grid look here (that's only for the test range). Surfaces use realistic procedural materials: glass curtain walls, precast concrete, paving, ribbed metal, office facades with lit windows, asphalt, and crowd-filled seats. Every building can be entered, and every floor is reached by switchback stairs.
+The semi-finals map is now a single white tower standing on a big test-range style plaza (the white grid floor and walls from the range), with grid-block cover dotted around.
 
-Inside (build 0.20): painted plaster walls with skirting boards, oak plank floors in the apartments and the court building, tiled floors elsewhere, and ceiling tiles overhead. The court building is red brick with punched windows, stone lintels and sills, and white frames. Office windows have blinds pulled down at different heights, and concrete shows its formwork tie holes. Rooms are furnished in sets: lounges (sofa with cushions, coffee table, TV, rug, plant), bedrooms (bed with pillows and duvet, bedside lamps), kitchens (cabinets, sink, fridge, table and chairs), offices (desks with monitors and chairs, filing cabinets), meeting rooms with whiteboards, libraries full of books, server rooms with blinking racks, lockers, and storage with crates on pallets. The tower's apartments have framed art on the walls.
+- **The lobby.** A three-storey glass podium at the front. Inside is a tall atrium with a reception desk, planters and a hanging light sculpture. A catwalk crosses the atrium at the first floor, reached by grand stairs, and another runs along the front at the second floor. Glass railings and catwalks overlook the lobby from every side, with offices in the wings.
+- **The business building.** Above the lobby are floors of offices, meeting rooms, server rooms, libraries, kitchens and back offices. Storeys 0–6 (and the whole lobby) have real glass: you can see through it, and shooting it smashes it into shards. Above that the facade is white with ribbon windows.
+- **The shape.** The back of the tower steps in as it rises (with terraces at storeys 10 and 18). At storey 22 it splits into two wings joined by catwalks at storeys 23, 25 and 27 and a bridge across the roofs. Each wing is crowned with white fins that step back in toward the middle, with a beacon on top. The wing roofs are at 126 m.
+- **Lifts.** Two passenger lifts run up the core from the lobby (stops: 0, 1, 2, 3, 5, 8, 11, 14, 17, 21). Each landing has steel sliding doors, a floor number and a call panel. Look at ▲ or ▼ and press E. Inside the car there's a panel too: each press of ▲ or ▼ takes the trip one more stop. The doors stay open while you're standing in the doorway. Switchback stairs also run all the way to the roofs.
+- **Destruction.** Every lobby and lower-floor window breaks: from bullets (yours or the bots'), and ground slams blow out the windows around you. The skylight over the atrium is glass too, so you can drop through it. There are destructible walls in the lobby wings, on the mezzanines and out on the plaza. Debris and glass shards bounce on the floor.
 
-You spawn on the team gate behind sector 2, looking in. The tower is on your right.
+## Cashout (build 0.21)
 
-| Sector | What's there |
-| --- | --- |
-| 1 | **The court building.** A 4-storey brick ring wrapped round an outdoor basketball court with hoops, bleachers and floodlights. Rooms on every floor, windows onto the court, a billboard on the roof, and a 4-storey block on the corner for the high rooftop (36 m). A launch pad on the court throws you up to it |
-| 2 | **The electric building.** An open two-level deck on columns, with stairs up the front and a big double-height opening, leads by a footbridge into the electric building. Inside: a turbine hall with transformers, tanks and switchgear, a mezzanine, a control room with server racks, and a light well. More transformers stand in the yard outside |
-| 3 | **The tower.** 26 storeys of glass (117 m to the roof, about 160 m to the tip of the antenna). Every floor has apartments round a concrete core, stairs all the way up, and balconies every few floors on the spawn side and the courtyard side. On top: a helipad, a steel crown with lit ring frames, and a launch pad that throws you down onto sector 4's roof. An outside lift runs from the courtyard to the roof. Beside it is a courtyard with a fountain, trees and a café with a roof terrace |
-| 4 | **The giant building.** 5 storeys round an open atrium, with balconies on every floor looking into it and a launch pad in the middle that throws you onto the roof. Offices and rooms in all four wings, glass corner towers, and a huge LED billboard on the roof |
-| 5 | **The vault.** A stone bank with a columned portico. Inside is a double-height banking hall and a steel vault with its door open and the cashout station inside; its beam rises through the roof. Offices sit upstairs. It's surrounded by open ground with cover, an armoured truck and a statue |
-| 6 | **The maze.** A massive 3-storey block of tight corridors and small rooms: two crossing corridors with a door into every room, and room walls that are a different maze on each floor |
+PLAY → matchmaking → loadout → team intro → a cashout match in the tower. You and two AI teammates take on three AI teams of three.
 
-**Getting around.** Steel bridges join 1–2, 2–3, 2–5, 5–4, 5–6 and 1–6, and one runs from the spawn into sector 2. Launch pads aim their arc so you land on the target:
-- spawn → sector 1 roof
-- spawn → the tower courtyard
-- sector 1 court → the high rooftop
-- sector 4 atrium → its roof
-- tower roof → sector 4 roof
+1. **The vault.** A cash box spawns in one of four vaults (the lobby floor, a first-floor wing, the plaza, the podium roof), **locked for 30 seconds**. A ◆ marker shows where it is and counts down.
+2. **Grab it.** Press E at the vault once it opens. You can keep shooting while you carry it (it sits in your left hand), but you move about 10% slower. If the carrier dies, the box drops where they fell for anyone to pick up.
+3. **Cash it out.** Two of the four cashout stations (⬢ markers: plaza west, plaza east, plaza back, and the second-floor west wing) open each round. Press E at one to deposit the box, and a 45-second countdown starts.
+4. **Steals.** Any other team can steal a cashout by standing on the station for 4 seconds (you hold E). The bots do this too, and fight over the station. The team holding the station when the timer hits zero banks **$1,000**.
+5. **First to $2,000 wins.** Then the next round starts with a new vault, and so on. The top two teams advance to the final.
 
-To ride the tower lift, stand by its bottom gate in the courtyard (or by the top gate on the roof) and it comes to you.
+On the HUD: team cash along the top, the objective (vault timer, who has the box, cashout countdown, steal progress bar), markers for the vault, stations and the box carrier, pinned to the edge of the screen when they're off screen, with distances. Teammates always have their name and health shown in their team colour; enemies only when you can see them. Bots wear their team's colour, there's no friendly fire, and kills between bots show in the kill feed. You respawn at your team's corner of the plaza; dead bots come back after 8 seconds.
 
-**The void.** Fall off a sector and you're out: the screen fades and you're back at the spawn.
-
-**The stadium.** 22 tiers of seats packed with fans on all four sides, LED ribbon boards, glass hospitality boxes, a roof canopy with floodlights round its edge, giant screens at both ends, a centre-hung scoreboard, and Fortune Stadium's floating holographic sneaker bobbing over the middle. Training dummies are spread over every sector and up the tower, and there are destructible walls in sectors 1, 4 and 6 and the tower lobby.
+**The bots** find their way around with a walking grid built over the plaza, the lobby, both mezzanines and the podium roof, linked by the stairs. They queue round the locked vault, race for the box, escort their carrier, hunt enemy carriers, defend their station, and go after anyone else's. In a fight they strafe and shoot in bursts. They don't use the lifts or go above the podium roof.
 
 ## Underground arena
 
@@ -281,7 +276,7 @@ Lighting is done in linear space with ACES tone mapping. It has sun, sky and gro
 index.html            HUD, menu, styles
 src/main.js           game loop, shooting, HUD updates
 src/renderer.js       WebGL2 renderer + grid/edge shader (everything is a box)
-src/world.js          box list, collision queries, raycasts
+src/world.js          box list, spatial grid, collision queries, raycasts
 src/player.js         movement, vault/mantle/ledge grab/wall run, collision, camera springs
 src/course.js         parkour time trial: gates, checkpoints, hazards, best times
 src/classes.js        Light / Medium / Heavy data, ability list, saved loadout
@@ -297,7 +292,10 @@ src/effects.js        debris, tracers, decals
 src/props.js          dummies, destructible walls, weapon cases, 7-seg signs
 src/audio.js          procedural sound effects
 src/maps/testRange.js the test range (data + build function), incl. the parkour annex
-src/maps/fortuneStadium.js the semi-finals arena: six floating sectors, the tower, the stadium bowl
+src/maps/fortuneStadium.js the semi-finals arena: the white tower, lobby, plaza, cashout stations and vaults
+src/lift.js           passenger lifts: car, sliding doors, call buttons, floor stops
+src/cashout.js        cashout mode: vault box, stations, steals, scoring, team AI
+src/nav.js            bot navigation: walkable grid per level, stair links, A*
 src/matchmaking.js    PLAY flow: matchmaking, 30 s loadout pick, team intro
 ```
 

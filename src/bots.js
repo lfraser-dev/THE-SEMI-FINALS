@@ -43,6 +43,12 @@ const lean = (v, a) => [v[0], v[1] * Math.cos(a) + v[2] * Math.sin(a), -v[1] * M
 
 let nextId = 1;
 
+// recolour a bot's red armour into a team colour: bot.pal = teamPalette([r, g, b])
+export function teamPalette(c) {
+  const m = (k) => c.map((v) => Math.min(1, v * k));
+  return new Map([[RED, c], [RED_HEAD, m(1.18)], [RED_DARK, m(0.55)]]);
+}
+
 export class Bot {
   constructor(world, type, pos, yaw, dropDelay) {
     this.world = world;
@@ -131,19 +137,15 @@ export class Bot {
   // collision against the world, ignoring our own hitboxes
   blocked(p) {
     const r = 0.3 * this.sc, h = 1.75 * this.sc;
-    for (const b of this.world.boxes) {
-      if (!b.solid || b.ref === this) continue;
-      if (p[0] - r < b.max[0] && p[0] + r > b.min[0] && p[1] + 0.3 < b.max[1] && p[1] + h > b.min[1] &&
-          p[2] - r < b.max[2] && p[2] + r > b.min[2]) return true;
-    }
-    return false;
+    return !!this.world.firstOverlap([p[0] - r, p[1] + 0.3, p[2] - r], [p[0] + r, p[1] + h, p[2] + r], this);
   }
 
-  canSee(from, to) {
+  // line of sight: glass and other bots' hitboxes don't block it
+  canSee(from, to, ignore = null) {
     const d = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
     const dist = Math.hypot(...d);
-    const hit = this.world.raycast(from, d.map((v) => v / dist), dist);
-    return !hit || hit.t > dist - 0.4 || hit.box.ref === this;
+    const hit = this.world.raycast(from, d.map((v) => v / dist), dist, true, (b) => b.tag === 'glass' || b.tag === 'bot' || b.ref === this || (ignore && b.ref === ignore));
+    return !hit || hit.t > dist - 0.4;
   }
 
   update(dt, g) {
@@ -306,7 +308,7 @@ export class Bot {
     const lv = this.localVel, ls = Math.hypot(lv[0], lv[1]);
     const md = ls > 0.2 ? [lv[0] / ls, lv[1] / ls] : [0, -1];        // stride direction (bot space)
     const fl = this.flash > 0 ? 0.85 : 0;
-    const col = (c) => (fl ? c.map((v) => v + (1 - v) * fl) : c);
+    const col = (c0) => { const c = (this.pal && this.pal.get(c0)) || c0; return fl ? c.map((v) => v + (1 - v) * fl) : c; };
     const em = fl ? 0.9 : 0.1, emD = fl ? 0.9 : 0;
     // whole-body fall when dying
     const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.45 : 0, fs = this.fallSign;
