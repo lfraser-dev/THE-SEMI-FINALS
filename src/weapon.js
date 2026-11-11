@@ -862,9 +862,9 @@ export class Weapon {
       B.set([...ax, 0, ...ay, 0, ...az, 0, ...o, 1]);
       mul(H, F, B);
       // palm, the pads at its base, and the knuckle line
-      put(H, [0, 0, 0.004], [0, 0, 0], [0.078, 0.027, 0.086], G, 0.012, 'cloth');
-      capsule(H, [side * 0.026, -0.009, -0.03], [side * 0.03, -0.006, 0.012], 0.014, 0.012, G);       // thumb muscle
-      capsule(H, [-side * 0.03, -0.008, -0.028], [-side * 0.03, -0.006, 0.026], 0.011, 0.01, G);     // outer edge
+      // palm: one soft rounded block, a little narrower at the wrist (no separate pads sticking out of the sides)
+      put(H, [0, 0, 0.008], [0, 0, 0], [0.074, 0.028, 0.08], G, 0.0135, 'cloth');
+      put(H, [side * 0.006, -0.002, -0.026], [0, 0, 0], [0.058, 0.026, 0.03], G, 0.0125, 'cloth');
       if (L.tactical) put(H, [0, 0.016, 0.036], [0, 0, 0], [0.072, 0.009, 0.022], Gd, 0.004, 'rubber');
       // fingers
       FING.forEach(([kx, kz, lens, r], i) => {
@@ -886,7 +886,7 @@ export class Weapon {
         });
       });
       // thumb: three bones along the pose's directions
-      let p = [side * 0.034, -0.012, -0.012];
+      let p = [side * 0.024, -0.006, -0.018];      // the thumb grows out of the palm, not from its edge
       pose.t.forEach((d0, j) => {
         const d = [side * d0[0], d0[1], d0[2]], l = Math.hypot(...d), dir = d.map((v) => v / l);
         const len = [0.03, 0.027, 0.022][j], r = [0.0125, 0.011, 0.0098, 0.009];
@@ -955,7 +955,7 @@ export class Weapon {
       LH = drawHand(this.root, ax, ay, az, o, -1, pose);
     }
 
-    // forearms: tapered sleeves from wrist to elbow, glove cuff, rolled sleeve cuff (and a watch on the left wrist)
+    // forearms: one smooth tapered sleeve each, from the wrist to the elbow
     const xf = (M, v) => [0, 1, 2].map((i) => M[i] * v[0] + M[4 + i] * v[1] + M[8 + i] * v[2] + M[12 + i]);
     const lv = xf(LH, [0, 0, -0.04]);     // wrists
     const rv = xf(RH, [0, 0, -0.04]);
@@ -970,20 +970,10 @@ export class Weapon {
       const h = hand.map((v, k) => v + u[k] * 0.034);          // wrist
       const len = Math.max(0.05, l0 - 0.034);
       const ang = anglesFor(u);
-      put(I, hand.map((v, k) => v + u[k] * 0.012), ang, [0.056, 0.056, 0.06], L.glove, { cap: [0.028, 0.025] }, 'cloth');   // wrist
-      const rw = 0.029, re = isLeft && plant ? lerp(0.042, 0.036, plant.t) : 0.042;
-      // the sleeve, wrist end narrow (the capsule's back end points at the wrist)
-      const capS = [re * 2, re * 2, len];
-      put(I, h.map((v, k) => v + u[k] * len / 2), ang, capS, L.sleeve, { cap: [re, rw] }, 'cloth');
-      put(I, h.map((v, k) => v + u[k] * 0.006), ang, [0.064, 0.064, 0.04], Gd, { cap: [0.031, 0.031] }, 'rubber');      // glove cuff (soft band)
-      put(I, h.map((v, k) => v + u[k] * 0.07), ang, [0.08, 0.08, 0.04], L.sleeveDark, { cap: [0.039, 0.039] }, 'cloth');   // rolled sleeve
-      if (isLeft) {
-        put(I, h.map((v, k) => v + u[k] * 0.03), ang, [0.063, 0.063, 0.02], [0.08, 0.08, 0.09], { cap: [0.031, 0.031] }, 'rubber'); // watch strap
-        const face = [h[0] + u[0] * 0.03, h[1] + u[1] * 0.03 + 0.03, h[2] + u[2] * 0.03];
-        put(I, face, ang, [0.024, 0.012, 0.024], [0.12, 0.12, 0.13], 0.003, 'metal');
-        out.push({ ...out[out.length - 1], color: L.accent, emissive: 0.5, scale: [0.016, 0.004, 0.016],
-          model: (() => { const m = pm(); pi++; compose(this.tmp, [face[0], face[1] + 0.006, face[2]], ang, [0.016, 0.004, 0.016]); m.set(this.tmp); return m; })() });
-      }
+      // one smooth forearm: the glove's wrist runs into the sleeve, which tapers out to the elbow
+      put(I, hand.map((v, k) => v + u[k] * 0.02), ang, [0.052, 0.052, 0.07], L.glove, { cap: [0.026, 0.024] }, 'cloth');
+      const rw = 0.03, re = isLeft && plant ? lerp(0.042, 0.036, plant.t) : 0.042;
+      put(I, h.map((v, k) => v + u[k] * len / 2), ang, [re * 2, re * 2, len], L.sleeve, { cap: [re, rw] }, 'cloth');
     });
 
     const fs = d.flashScale ?? 1;
