@@ -298,3 +298,65 @@ export class Workbench {
     add([x - 1.6, y, z - 1.32], [x + 1.6, y + 0.02, z - 1.25], { color: [0.95, 0.15, 0.1], emissive: 0.7, solid: false, edges: false });
   }
 }
+
+// ---------------------------------------------------------------- gun crates
+// Two open wooden crates either side of the workbench, every gun jammed in muzzle-first with the stock sticking out.
+// Look at a gun and press E to take it. Returns the guns as pickable items: { def, aim, parts(time, hot) }.
+const WOOD = [0.5, 0.35, 0.22], WOOD_D = [0.36, 0.25, 0.16], IRON = [0.2, 0.2, 0.22], STENCIL = [0.12, 0.12, 0.12];
+export function gunCrates(world, defs, benchPos) {
+  const add = (min, max, o) => world.add(makeBox(min, max, { grid: false, ...o }));
+  const [bx, by, bz] = benchPos;
+  const W = 2.5, D = 1.25, Hh = 0.62, t = 0.05;
+  const crates = [[bx - 3.35, bz + 0.62], [bx + 3.35, bz + 0.62]];
+  const items = [];
+  const half = Math.ceil(defs.length / 2);
+  crates.forEach(([cx, cz], ci) => {
+    const x0 = cx - W / 2, x1 = cx + W / 2, z0 = cz - D / 2, z1 = cz + D / 2, y = by;
+    // planks: floor, walls (with a darker slat band), iron corner brackets and a stencil band
+    add([x0, y, z0], [x1, y + 0.08, z1], { color: WOOD_D, tex: 12 });
+    add([x0, y, z0], [x1, y + Hh, z0 + t], { color: WOOD, tex: 12 });
+    add([x0, y, z1 - t], [x1, y + Hh, z1], { color: WOOD, tex: 12 });
+    add([x0, y, z0], [x0 + t, y + Hh, z1], { color: WOOD, tex: 12 });
+    add([x1 - t, y, z0], [x1, y + Hh, z1], { color: WOOD, tex: 12 });
+    add([x0 - 0.01, y + Hh * 0.45, z0 - 0.012], [x1 + 0.01, y + Hh * 0.55, z0 + 0.001], { color: WOOD_D, solid: false, noShadow: true });
+    for (const xx of [x0, x1]) for (const zz of [z0, z1]) add([xx - 0.03, y, zz - 0.03], [xx + 0.03, y + Hh + 0.02, zz + 0.03], { color: IRON });
+    add([cx - 0.45, y + Hh * 0.62, z0 - 0.014], [cx + 0.45, y + Hh * 0.72, z0 - 0.004], { color: STENCIL, solid: false, noShadow: true });
+    // the lid, leant against the wall behind
+    add([x0 + 0.1, y, z1 + 0.06], [x1 - 0.1, y + 0.05, z1 + 0.12], { color: WOOD_D, tex: 12, solid: false });
+    // the guns: two rows, jammed in at odd angles
+    const mine = defs.slice(ci * half, ci * half + half);
+    const cols = Math.ceil(mine.length / 2);
+    mine.forEach((def, i) => {
+      const row = i % 2, col = Math.floor(i / 2);
+      const rnd = (k) => { const v = Math.sin((i + 1) * 12.9898 + (ci + 1) * 78.233 + k * 37.719) * 43758.5453; return v - Math.floor(v); };
+      const px = x0 + 0.3 + (col + 0.5) * ((W - 0.6) / cols) + (rnd(1) - 0.5) * 0.08;
+      const pz = row ? cz + 0.24 : cz - 0.2;
+      const len = Math.max(...def.parts.map((p) => -(p.c[2] - p.s[2] / 2)));   // how far the muzzle reaches
+      const py = y + Math.max(Hh + 0.08, 0.2 + len * 0.9);   // muzzle near the bottom, the rest sticking out
+      // local z (the stock end) points up, tilted; the gun's side faces you
+      const up = norm3([(rnd(2) - 0.5) * 0.7, 1, (rnd(3) - 0.5) * 0.35 - 0.12]);
+      const f = [Math.sin((rnd(4) - 0.5) * 0.8), 0, -Math.cos((rnd(4) - 0.5) * 0.8)];
+      const fd = f[0] * up[0] + f[1] * up[1] + f[2] * up[2];
+      const xa = norm3([f[0] - up[0] * fd, f[1] - up[1] * fd, f[2] - up[2] * fd]);
+      const ya = [up[1] * xa[2] - up[2] * xa[1], up[2] * xa[0] - up[0] * xa[2], up[0] * xa[1] - up[1] * xa[0]];
+      const m = mat4();
+      m.set([...xa, 0, ...ya, 0, ...up, 0, px, py, pz, 1]);
+      const item = {
+        def, base: m, lift: 0, crate: ci,
+        aim: [px + up[0] * 0.18, py + up[1] * 0.18, pz + up[2] * 0.18],
+        center: [px, y, pz],
+        parts(time, hot) {
+          this.lift += ((hot ? 0.14 : 0) - this.lift) * 0.2;
+          const mm = mat4();
+          mm.set(this.base);
+          mm[12] += up[0] * this.lift; mm[13] += up[1] * this.lift; mm[14] += up[2] * this.lift;
+          return Weapon.worldParts(this.def, mm).map((p) => (hot ? { ...p, emissive: Math.max(p.emissive, 0.12) } : p));
+        },
+      };
+      items.push(item);
+    });
+  });
+  return items;
+}
+const norm3 = (v) => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+

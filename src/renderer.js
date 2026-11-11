@@ -862,6 +862,7 @@ export class Renderer {
   }
 
   clearDepth() { this.gl.clear(this.gl.DEPTH_BUFFER_BIT); }
+  clearTo(c) { const gl = this.gl; gl.clearColor(c[0], c[1], c[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); }
 
   // the gun is lit by lamps instead of the sun when you're underground
   setUnder(on) { this.gl.uniform1f(this.u.uViewUnder, on ? 1 : 0); }

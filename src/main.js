@@ -6,7 +6,7 @@ import { Weapon } from './weapon.js';
 import { WEAPONS, CASE_ORDER } from './weapons.js';
 import { Effects } from './effects.js';
 import { Sounds } from './audio.js';
-import { Dummy, DestructibleWall, WeaponCase, Workbench } from './props.js';
+import { Dummy, DestructibleWall, Workbench, gunCrates } from './props.js';
 import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, anglesFor, clamp } from './math.js';
 import { buildDef, ratings } from './attachments.js';
 import { CLASSES, CLASS_ORDER, ABILITIES, loadLoadout, saveLoadout } from './classes.js';
@@ -14,6 +14,8 @@ import { Contestant } from './contestant.js';
 import { Thumbs } from './thumbs.js';
 import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
 import { Bench } from './bench.js';
+import { anchorsFor, optionsFor, SLOTS } from './attachments.js';
+const benchPV = mat4();
 import testRange from './maps/testRange.js';
 import { ARENAS } from './maps/arenas.js';
 import { Course, fmtTime } from './course.js';
@@ -74,7 +76,7 @@ try { loadouts = JSON.parse(localStorage.getItem('semifinals.loadouts') || '{}')
 const cosmetics = loadCosmetics();
 let skinClass = null;    // class whose weapon skin to show (defaults to the active class)
 const defFor = (id) => skinDef(buildDef(WEAPONS[id], loadouts[id] || {}), gunSkinFor(cosmetics, skinClass || classLo.cls));
-const cases = CASE_ORDER.map((id, i) => new WeaponCase(world, defFor(id), [map.cases.xs[i], 0, map.cases.z], i + 1));
+const cases = gunCrates(world, CASE_ORDER.map((id) => defFor(id)), map.bench.pos);   // guns jammed in two crates by the workbench
 const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
@@ -667,11 +669,11 @@ function findBench() {
 }
 function findCase() {
   const eye = player.eye(), fwd = player.forward();
-  let best = null, bestDot = 0.55;
+  let best = null, bestDot = 0.93;
   for (const c of cases) {
-    const to = [c.center[0] - eye[0], c.center[1] + 1.5 - eye[1], c.center[2] - eye[2]];
+    const to = [c.aim[0] - eye[0], c.aim[1] - eye[1], c.aim[2] - eye[2]];
     const dist = Math.hypot(...to);
-    if (dist > 3.2) continue;
+    if (dist > 3.4) continue;
     const dd = dot(norm(to), fwd);
     if (dd > bestDot) { bestDot = dd; best = c; }
   }
@@ -1362,6 +1364,80 @@ addEventListener('keydown', (e) => {
   else if (!playing && e.code === 'Enter') resume();
 });
 
+// ---------- plus menu: hold B to swap attachments mid-fight (like Battlefield 2042) ----------
+// Four arms: optic (up), underbarrel (left), muzzle (right), ammo (down). The mouse moves a cursor; click a part to fit it.
+const PLUS_ARMS = [['optic', 'top'], ['underbarrel', 'left'], ['muzzle', 'right'], ['ammo', 'bottom']];
+const plus = { open: false, cur: [0, 0], opts: [], hot: null, swapT: 0 };
+function plusOptions(id, slot) {
+  const all = optionsFor(id, slot), cur = (loadouts[id] || {})[slot];
+  const pick = all.slice(0, 4);
+  if (cur && !pick.some((o) => o.id === cur)) pick[3] = all.find((o) => o.id === cur);
+  return [null, ...pick];
+}
+function renderPlus() {
+  const root = $('plus'), w = weapon(), id = w.def.id, lo = loadouts[id] || {};
+  root.replaceChildren();
+  const head = document.createElement('div');
+  head.className = 'pl-head';
+  head.innerHTML = `<b></b><span>CLICK A PART · RELEASE B TO CLOSE</span>`;
+  head.firstChild.textContent = w.def.name;
+  root.append(head);
+  for (const [slot, side] of PLUS_ARMS) {
+    const opts = optionsFor(id, slot).length ? plusOptions(id, slot) : [];
+    const arm = document.createElement('div');
+    arm.className = `pl-arm ${side}${opts.length ? '' : ' empty'}`;
+    const t = document.createElement('small');
+    t.textContent = SLOTS.find((x) => x.id === slot).name;
+    arm.append(t);
+    for (const o of opts) {
+      const b = document.createElement('div');
+      const aid = o ? o.id : null;
+      b.className = `pl-opt${(lo[slot] || null) === aid ? ' on' : ''}`;
+      b.textContent = o ? o.name : 'FACTORY';
+      b.dataset.slot = slot; b.dataset.aid = aid || '';
+      arm.append(b);
+    }
+    if (!opts.length) { const n = document.createElement('div'); n.className = 'pl-opt none'; n.textContent = 'N/A'; arm.append(n); }
+    root.append(arm);
+  }
+  const c = document.createElement('i');
+  c.className = 'pl-cursor';
+  root.append(c);
+  root.classList.remove('hidden');
+  plus.opts = [...root.querySelectorAll('.pl-opt:not(.none)')].map((e) => ({ e, r: e.getBoundingClientRect() }));
+}
+function updatePlus() {
+  const want = input.down('KeyB') && !player.dead && !cutscene && !pressSeq;
+  if (want && !plus.open) { plus.open = true; plus.cur = [innerWidth / 2, innerHeight / 2]; renderPlus(); sounds.click?.(1800, 0.12); }
+  if (!want && plus.open) { plus.open = false; $('plus').classList.add('hidden'); }
+  if (!plus.open) return;
+  plus.cur[0] = clamp(plus.cur[0] + input.dx * 1.1, 0, innerWidth);
+  plus.cur[1] = clamp(plus.cur[1] + input.dy * 1.1, 0, innerHeight);
+  const c = $('plus').querySelector('.pl-cursor');
+  if (c) c.style.transform = `translate(${plus.cur[0]}px, ${plus.cur[1]}px)`;
+  let hot = null;
+  for (const o of plus.opts) {
+    const { r } = o;
+    if (plus.cur[0] >= r.left - 6 && plus.cur[0] <= r.right + 6 && plus.cur[1] >= r.top - 3 && plus.cur[1] <= r.bottom + 3) { hot = o; break; }
+  }
+  if (hot !== plus.hot) { plus.hot?.e.classList.remove('hot'); hot?.e.classList.add('hot'); plus.hot = hot; }
+  if (input.fireHit && hot) {
+    const w = weapon(), id = w.def.id, slot = hot.e.dataset.slot, aid = hot.e.dataset.aid || null;
+    const next = { ...(loadouts[id] || {}) };
+    if (aid) next[slot] = aid; else delete next[slot];
+    const ammo = w.ammo;
+    applyLoadout(id, next);
+    w.ammo = Math.min(ammo, w.def.mag);           // swapping parts doesn't refill the gun
+    w.equipT = Math.min(w.equipT, 0.55);          // a quick fiddle with the gun
+    sounds.magIn?.();
+    player.camPitchV += 0.15;
+    renderPlus();
+  }
+  // the menu has the mouse: no looking around or shooting while it's open
+  input.dx = 0; input.dy = 0;
+  input.clicked.delete(0); input.buttons.delete(0);
+}
+
 // ---------- workbench ----------
 const bench = new Bench({
   root: $('bench'),
@@ -1490,13 +1566,14 @@ function worldBeams(w) {
     const ldir = norm(far.map((c, i) => c - start[i]));
     const hit = world.raycast(start, ldir, 120);
     const end = hit ? hit.point : start.map((c, i) => c + ldir[i] * 120);
-    const r = w.adsT < 0.6 ? beam(2, start, end, 0.006, [1, 0.12, 0.08], 1, 0.35 * (1 - w.adsT / 0.6)) : null;
+    const lc = w.def.laserCol || [1, 0.12, 0.08];
+    const r = w.adsT < 0.6 ? beam(2, start, end, 0.006, lc, 1, 0.35 * (1 - w.adsT / 0.6)) : null;
     if (r) out.push(r);
     if (hit) {
       const sz = 0.025 + hit.t * 0.0012;
       const dm = beamPool[3];
       compose(dm, hit.point.map((c, i) => c + hit.normal[i] * 0.01), [0, 0, 0], [sz, sz, sz]);
-      out.push({ model: dm, scale: [sz, sz, sz], color: [1, 0.15, 0.1], emissive: 1, alpha: 0.9 });
+      out.push({ model: dm, scale: [sz, sz, sz], color: lc, emissive: 1, alpha: 0.9 });
     }
   }
   return out;
@@ -1628,6 +1705,7 @@ function frameBody(now) {
   } else if (playing && !bench.open) {
     let w = weapon();
     const sens = settings.sens * 0.0022 * (1 - w.adsT * (1 - w.def.adsZoom) * 0.9);
+    updatePlus();             // hold B: swap attachments on the fly (eats the mouse while it's open)
     player.look(input.dx, input.dy, sens);
     if (input.hit('KeyT') && !tdm.active) resetRange();
     if (input.hit('Digit1')) switchTo(0);
@@ -1687,7 +1765,7 @@ function frameBody(now) {
   lookDir(view, camEye, camFwd, [0, 1, 0], player.roll);
   mul(vp, proj, view);
 
-  const caseParts = cases.flatMap((c) => c.parts(time));
+  const caseParts = inStadium() ? [] : cases.flatMap((c) => c.parts(time, c === nearCase));
   // viewmodel first: the grapple rope and laser start from the hands / gun
   perspective(vmProjM, 58 * Math.PI / 180, aspect, 0.01, 10);
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
@@ -1781,9 +1859,23 @@ function frameBody(now) {
   renderer.setCamera(vmProjM, vmViewM, 0, [0, 0, 0], false);
   renderer.setUnder(camEye[1] < -1.2);
   if (bench.open) {
-    // gun preview on the right of the workbench menu
-    compose(previewM, [0.5, -0.02, -1.25], [0.12, bench.rotY + time * 0.25, 0], [1, 1, 1]);
-    for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.drawPart(p);
+    // the gunsmith: the gun side-on in the middle of a dark studio, with its slot labels pinned to it
+    renderer.clearTo([0.075, 0.08, 0.09]);
+    const bd = defFor(bench.weaponId);
+    const span = Math.max(0.5, Math.max(...bd.parts.filter((p) => !p.hidden).map((p) => p.c[2] + p.s[2] / 2)) - Math.min(...bd.parts.filter((p) => !p.hidden).map((p) => p.c[2] - p.s[2] / 2)));
+    const dist = clamp(span * 1.25, 0.75, 1.7) * Math.max(1, 1.5 / aspect);
+    compose(previewM, [-0.03 * dist, 0.02 * dist, -dist], [0.04, -Math.PI / 2 + bench.rotY, 0], [1, 1, 1]);
+    for (const p of Weapon.worldParts(bd, previewM)) renderer.drawPart(p);
+    mul(benchPV, vmProjM, vmViewM);
+    const a = anchorsFor(bd), pts = {};
+    for (const [k, v] of Object.entries(a)) {
+      const w = [0, 1, 2].map((i) => previewM[i] * v[0] + previewM[4 + i] * v[1] + previewM[8 + i] * v[2] + previewM[12 + i]);
+      const x = benchPV[0] * w[0] + benchPV[4] * w[1] + benchPV[8] * w[2] + benchPV[12];
+      const y = benchPV[1] * w[0] + benchPV[5] * w[1] + benchPV[9] * w[2] + benchPV[13];
+      const ww = benchPV[3] * w[0] + benchPV[7] * w[1] + benchPV[11] * w[2] + benchPV[15];
+      if (ww > 0.01) pts[k] = [(x / ww * 0.5 + 0.5) * innerWidth, (1 - (y / ww * 0.5 + 0.5)) * innerHeight];
+    }
+    bench.layout(pts);
   } else {
     for (const p of vmParts) renderer.drawPart(p);
   }

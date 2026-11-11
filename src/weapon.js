@@ -165,7 +165,15 @@ export class Weapon {
     if (trigger && this.reload?.shell && this.ammo > 0) this.reload.interrupt = true;
     // the show-off end of a draw never gets in the way: shoot or aim and it snaps straight to ready
     if (this.equipT >= 0.5 && this.equipT < 1 && (trigger || input.aiming)) this.equipT = 1;
-    const blocked = this.reload || this.equipT < 0.5 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3;
+    // miniguns spin up before they fire (holding aim keeps them spinning)
+    if (d.spin) {
+      const want = (input.fireDown || input.aiming) && !this.reload && this.equipT >= 0.5 && !tr;
+      const prev = this.spinT || 0;
+      this.spinT = Math.max(0, Math.min(1, prev + (want ? dt / d.spin : -dt / (d.spin * 1.6))));
+      this.spinAng = ((this.spinAng || 0) + dt * this.spinT * 40) % (Math.PI * 2);
+      if (want && prev === 0) ctx.sounds?.spin?.();
+    }
+    const blocked = this.reload || this.equipT < 0.5 || this.cycleT !== null || tr || this.mantleT + this.vaultT > 0.3 || (d.spin && (this.spinT || 0) < 1);
     if (trigger && !blocked && this.cool <= 0) {
       if (this.ammo > 0) this.shoot(ctx);
       else if (input.fireHit) { ctx.sounds?.dry(); this.startReload(ctx); }
@@ -590,11 +598,17 @@ export class Weapon {
       const rx = p.rx || 0, ry = p.ry || 0, rz = p.rz || 0;
       if (p.bolt) c = add3(c, [0, 0, (d.slide ? 0.04 : 0.05) * boltBack]);
       if (p.pump) c = add3(c, [0, 0, 0.09 * pumpBack]);
+      let rzs = rz;
+      if (p.spin && this.spinAng) {
+        const ca = Math.cos(this.spinAng), sa = Math.sin(this.spinAng);
+        c = [c[0] * ca - c[1] * sa, c[0] * sa + c[1] * ca, c[2]];
+        rzs = rz + this.spinAng;
+      }
       if (p.mag) {
         if (!magVisible) continue;
-        compose(this.tmp, [c[0] - mp[0], c[1] - mp[1], c[2] - mp[2]], [rx, ry, rz], p.s);
+        compose(this.tmp, [c[0] - mp[0], c[1] - mp[1], c[2] - mp[2]], [rx, ry, rzs], p.s);
         mul(p.local, this.magFrame, this.tmp);
-      } else compose(p.local, c, [rx, ry, rz], p.s);
+      } else compose(p.local, c, [rx, ry, rzs], p.s);
       mul(p.model, this.root, p.local);
       if (shine >= 0) {
         const zS = this.zBack + (this.zFront - this.zBack) * shine;

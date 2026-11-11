@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.27: ONLINE mode — host or join a room with a code and play 1v1 or 2v2 against friends. Five new guns (BR-3 burst rifle, FC-308 marksman rifle, MP-9 machine pistol, R-357 revolver, AS-20 auto shotgun), smarter AI, and TWIN TOWERS is now HIGH GROUND.** The semi-finals are 4v4 team deathmatch against AI (first to 10) on BLOCKYARD, THE SPLIT and HIGH GROUND. The Test Range, Parkour Course and underground bot arena are still there for warming up.
+**Build 0.28: 16 guns (new: KV-45 SMG, BX-56 bullpup, LV-44 lever rifle, ROTARY-X minigun, DB-2 double barrel), a Delta Force-style gunsmith with 8 slots and 49 attachments, a Battlefield 2042-style quick-swap menu (hold B), and the guns now sit jammed in two open crates by the workbench.** Online 1v1/2v2 with friends, 4v4 team deathmatch against AI (first to 10) on BLOCKYARD, THE SPLIT and HIGH GROUND, plus the Test Range, Parkour Course and underground bot arena.
 
 ## Run it
 
@@ -181,17 +181,40 @@ It's team deathmatch, first to 10 kills, with your own class and loadout. Rooms 
 
 For testing, add `?net=local` to the URL and two tabs in the same browser can play each other without the internet.
 
-## Guns (build 0.27)
+## Guns (builds 0.27–0.28)
 
 | Gun | Type | Class | Notes |
 | --- | --- | --- | --- |
 | BR-3 | Burst rifle | Medium | Three-round bursts (tap to fire one), 23 damage, tight spread |
-| FC-308 | Marksman rifle | Medium | Semi-auto, 44 damage, 15 rounds, long barrel, 0.6× zoom |
+| FC-308 | Marksman rifle | Medium | Semi-auto, 44 damage, 15 rounds, long barrel |
+| BX-56 | Bullpup rifle | Medium | Mag behind the grip: compact, quick to aim |
+| DB-2 | Double barrel | Medium | Two shots of 12 pellets, then crack it open |
 | MP-9 | Machine pistol | Light | 1,100 RPM, 24-round extended mag |
+| KV-45 | SMG | Light | 1,250 RPM with almost no kick |
+| LV-44 | Lever rifle | Light | Iron sights, 68 damage, 8 rounds, worked by a lever |
 | R-357 | Revolver | Light, Heavy | Six shots, 58 damage, heavy recoil |
 | AS-20 | Auto shotgun | Heavy | Mag-fed, 8 pellets, 210 RPM |
+| ROTARY-X | Minigun | Heavy | Spins up for 0.55 s (hold fire or aim to keep it spinning), then 1,600 RPM from a 250-round box |
 
-They're built on the existing guns' models and animations, take the same attachments as the gun they're based on, and sit in the test range's weapon wall, which now holds 11 cases.
+They're built on the original guns' models and animations, and take the attachments of the gun they're based on.
+
+**The armoury:** there are no glass cases any more. Every gun sits muzzle-down in one of two open wooden crates either side of the workbench, with the stocks sticking out. Look at one (it lifts and glows) and press E to take it.
+
+## Attachments (build 0.28)
+
+Eight slots, 49 parts. Each changes the gun's model and stats:
+- **Optic (9):** mini red dot, holo, reflex, Kobra 1.25×, 2× prism, 3× combat scope, 4×, 6× and 8× scopes.
+- **Muzzle (8):** suppressor, heavy suppressor, compensator, muzzle brake, flash hider, linear comp; full choke and duckbill for shotguns.
+- **Barrel (5):** long, CQB, heavy, fluted, match.
+- **Underbarrel (6):** vertical, angled, stubby, ergo grip, handstop, bipod.
+- **Side rail (4, new):** red laser, green laser, tactical light, laser-light combo.
+- **Magazine (5):** extended, fast, drum, mag coupler, polymer.
+- **Stock (5):** light, heavy, padded, folding, none.
+- **Ammo (7, new):** hollow point, armour piercing, subsonic, high velocity, match grade; slugs and dragon's breath for shotguns. Ammo shows as a coloured band on the mag.
+
+**Gunsmith (workbench, like Delta Force's):** the gun sits side-on in the middle of a dark studio, with every slot pinned to its spot on the gun by a leader line (gold when fitted). Click a slot to list its parts; every card spells out its pros (green ▲) and cons (red ▼) against your current build, and hovering previews the change on the stat bars (damage, fire rate, DPS, range, accuracy, recoil, handling, mobility, magazine, zoom, hip fire, stealth, reload). Guns are listed down the left by type. Drag to turn the gun.
+
+**Quick swap (hold B, like Battlefield 2042's plus menu):** a menu opens around your crosshair with optics up top, underbarrel on the left, muzzle on the right and ammo below. Move the mouse to steer the cursor and click a part to fit it. Your ammo carries over (swapping doesn't refill the mag) and the gun takes a moment to settle.
 
 ## Performance (build 0.25)
 
@@ -327,6 +350,7 @@ src/audio.js          procedural sound effects
 src/maps/testRange.js the test range (data + build function), incl. the parkour annex
 src/maps/arenas.js    the three semi-finals arenas (layouts as data + a shared builder)
 src/tdm.js            team deathmatch: scoring, respawns, team AI (intel, roles, reloads)
+src/bench.js          the gunsmith (workbench overlay)
 src/net.js            online rooms: transports (PeerJS / BroadcastChannel), lobby, remote players, sync
 src/nav.js            bot navigation: walkable grid per level, stair links, A*
 src/matchmaking.js    PLAY flow: matchmaking, 30 s loadout pick, team intro

@@ -160,29 +160,75 @@
   /* vignette for a slightly more filmic look */
   #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(10,12,18,.32) 100%); }
 
-  /* workbench */
-  #bench { position: fixed; inset: 0; display: flex; pointer-events: none; }
-  #bench .bench-panel { pointer-events: auto; width: min(620px, 100%); height: 100%; overflow-y: auto; padding: 22px 26px 26px;
-    background: linear-gradient(90deg, rgba(14,15,19,.94) 70%, rgba(14,15,19,.82)); color: #fff; }
-  #bench .bench-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-  #bench h2 { margin: 0; font-size: 15px; letter-spacing: .3em; font-weight: 800; opacity: .6; }
-  .bench-weapon b { display: block; font-size: 44px; font-weight: 800; font-style: italic; line-height: 1; margin-top: 4px; }
-  .bench-weapon span { font-size: 13px; font-weight: 700; letter-spacing: .2em; color: #ff4a40; }
-  .bench-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin: 14px 0 12px; }
-  .bench-tabs .tab { all: unset; cursor: pointer; position: relative; font: 800 italic 15px var(--font); letter-spacing: .06em; padding: 5px 12px;
-    background: rgba(255,255,255,.08); clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
-  .bench-tabs .tab:hover { background: rgba(255,255,255,.18); }
-  .bench-tabs .tab.on { background: #fff; color: var(--ink); }
-  .bench-tabs .tab i { font-style: normal; font-size: 11px; background: var(--red); color: #fff; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
-  .bench-slots .slot { padding: 8px 0; border-top: 1px solid rgba(255,255,255,.08); }
-  .slot-name { font-size: 12px; font-weight: 800; letter-spacing: .22em; opacity: .5; margin-bottom: 6px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .chip { all: unset; cursor: pointer; font: 700 14px var(--font); letter-spacing: .05em; padding: 5px 11px; border: 1px solid rgba(255,255,255,.18); }
-  .chip:hover { border-color: #fff; }
-  .chip.on { background: var(--red); border-color: var(--red); }
-  .bench-desc { min-height: 2.6em; margin: 10px 0 4px; font-size: 15px; font-weight: 500; opacity: .8; }
-  .bench-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; margin-top: 6px; }
-  .stat { display: grid; grid-template-columns: 1fr auto; font-size: 12px; font-weight: 800; letter-spacing: .12em; }
+  /* plus menu (hold B) */
+  #plus { position: fixed; inset: 0; z-index: 25; pointer-events: none; font-family: var(--font); color: #fff;
+    background: radial-gradient(circle at 50% 50%, rgba(0,0,0,.05), rgba(0,0,0,.45) 70%); }
+  #plus.hidden { display: none; }
+  .pl-head { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; }
+  .pl-head b { display: block; font: 800 italic 28px var(--font); text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  .pl-head span { font: 700 10px var(--font); letter-spacing: .22em; opacity: .7; }
+  .pl-arm { position: absolute; display: flex; flex-direction: column; gap: 4px; width: 210px; }
+  .pl-arm small { font: 800 11px var(--font); letter-spacing: .3em; color: var(--red); text-shadow: 0 1px 6px rgba(0,0,0,.8); }
+  .pl-arm.top { left: 50%; bottom: calc(50% + 50px); transform: translateX(-50%); flex-direction: column-reverse; }
+  .pl-arm.bottom { left: 50%; top: calc(50% + 50px); transform: translateX(-50%); }
+  .pl-arm.left { right: calc(50% + 150px); top: 50%; transform: translateY(-50%); text-align: right; }
+  .pl-arm.right { left: calc(50% + 150px); top: 50%; transform: translateY(-50%); }
+  .pl-arm.empty { opacity: .35; }
+  .pl-opt { padding: 7px 12px; background: rgba(14,15,19,.78); border: 1px solid rgba(255,255,255,.14); font: 800 13px var(--font); letter-spacing: .05em; }
+  .pl-opt.on { border-color: #ffc850; color: #ffd77a; }
+  .pl-opt.hot { background: var(--red); border-color: var(--red); color: #fff; }
+  .pl-cursor { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px rgba(0,0,0,.4); }
+  /* gunsmith (workbench) */
+  #bench { position: fixed; inset: 0; z-index: 35; color: #fff; font-family: var(--font); pointer-events: none;
+    background:
+      radial-gradient(ellipse at 52% 48%, transparent 0 35%, rgba(4,4,6,.55) 100%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 48px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, transparent 1px 48px); }
+  #bench.hidden { display: none; }
+  #bench > * { pointer-events: auto; }
+  .gs-top { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 18px 26px; pointer-events: none !important; }
+  .gs-title small { display: block; font: 800 12px var(--font); letter-spacing: .4em; color: var(--red); }
+  .gs-weapon b { display: block; font: 800 italic 48px var(--font); line-height: 1; }
+  .gs-weapon span { font: 700 13px var(--font); letter-spacing: .22em; opacity: .65; }
+  .gs-hint { font: 700 11px var(--font); letter-spacing: .2em; opacity: .45; margin-top: 8px; }
+  .gs-list { position: absolute; left: 0; top: 112px; bottom: 70px; width: min(240px, 20vw); overflow-y: auto; padding: 0 10px 0 22px; scrollbar-width: thin; }
+  .gs-group { font: 800 11px var(--font); letter-spacing: .3em; opacity: .45; margin: 14px 0 6px; }
+  .gs-gun { all: unset; cursor: pointer; position: relative; display: block; box-sizing: border-box; width: 100%; padding: 7px 12px; margin-bottom: 3px;
+    background: rgba(255,255,255,.05); border-left: 3px solid transparent; }
+  .gs-gun b { display: block; font: 800 italic 17px var(--font); }
+  .gs-gun span { font: 700 10px var(--font); letter-spacing: .16em; opacity: .55; }
+  .gs-gun i { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font: 800 11px var(--font); font-style: normal; background: var(--red); padding: 1px 6px; }
+  .gs-gun:hover { background: rgba(255,255,255,.12); }
+  .gs-gun.on { background: rgba(255,255,255,.16); border-left-color: var(--red); }
+  .gs-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none !important; }
+  .gs-lines polyline { fill: none; stroke: rgba(255,255,255,.35); stroke-width: 1.2; }
+  .gs-lines polyline.fit { stroke: rgba(255,200,80,.7); }
+  .gs-lines polyline.on { stroke: var(--red); stroke-width: 2; }
+  .gs-lines circle { fill: #fff; } .gs-lines circle.fit { fill: #ffc850; } .gs-lines circle.on { fill: var(--red); }
+  .gs-nodes { position: absolute; inset: 0; pointer-events: none !important; }
+  .gs-node { all: unset; pointer-events: auto; cursor: pointer; position: absolute; left: 0; top: 0; box-sizing: border-box; padding: 6px 10px; height: 46px;
+    background: rgba(18,19,23,.86); border: 1px solid rgba(255,255,255,.18); border-left: 3px solid rgba(255,255,255,.4); }
+  .gs-node small { display: block; font: 800 10px var(--font); letter-spacing: .24em; opacity: .55; }
+  .gs-node b { display: block; font: 800 13px var(--font); letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gs-node.fitted { border-left-color: #ffc850; } .gs-node.fitted b { color: #ffd77a; }
+  .gs-node.hot, .gs-node:hover { background: rgba(40,41,48,.95); border-color: rgba(255,255,255,.5); }
+  .gs-node.on { background: var(--red); border-color: var(--red); } .gs-node.on b { color: #fff; }
+  .gs-right { position: absolute; right: 0; top: 96px; bottom: 70px; width: min(360px, 28vw); overflow-y: auto; padding: 0 22px 0 8px; scrollbar-width: thin; }
+  .gs-parts-h { display: flex; justify-content: space-between; align-items: baseline; margin: 6px 0 8px; font: 800 11px var(--font); letter-spacing: .26em; opacity: .7; }
+  .gs-parts-h b { font: 800 italic 22px var(--font); letter-spacing: .02em; opacity: 1; }
+  .gs-tip { font: 500 14px var(--font); opacity: .6; margin: 0 0 12px; }
+  .gs-card { all: unset; cursor: pointer; display: block; box-sizing: border-box; width: 100%; padding: 9px 12px; margin-bottom: 5px; background: rgba(255,255,255,.06); border-left: 3px solid transparent; }
+  .gs-card b { display: block; font: 800 15px var(--font); letter-spacing: .04em; }
+  .gs-card p { margin: 2px 0 4px; font: 500 12px var(--font); opacity: .62; }
+  .gs-card:hover { background: rgba(255,255,255,.13); }
+  .gs-card.on { border-left-color: #ffc850; background: rgba(255,200,80,.1); }
+  .gs-pc { display: flex; flex-wrap: wrap; gap: 3px 10px; }
+  .gs-pc i { font: 800 10px var(--font); font-style: normal; letter-spacing: .1em; }
+  .gs-pc .pro { color: #3ddc84; } .gs-pc .con { color: #ff5a4e; }
+  .gs-fitted { font: 800 10px var(--font); letter-spacing: .24em; color: #ffc850; }
+  .gs-stats { margin-top: 14px; display: grid; gap: 7px; }
+  .gs-stats .gs-parts-h { margin-bottom: 0; }
+  .stat { display: grid; grid-template-columns: 1fr auto; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
   .stat-name { opacity: .6; }
   .stat-val.up { color: #3ddc84; } .stat-val.down { color: #ff5a4e; }
   .stat .bar { grid-column: 1 / -1; position: relative; height: 5px; margin-top: 3px; background: rgba(255,255,255,.1); }
@@ -190,15 +236,15 @@
   .stat .bar b { position: absolute; top: 0; bottom: 0; }
   .stat .bar b.up { background: #3ddc84; } .stat .bar b.down { background: #ff5a4e; }
   .stat .bar u { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: rgba(255,255,255,.55); }
-  .bench-actions { display: flex; gap: 8px; margin-top: 18px; }
-  .bench-actions button { all: unset; cursor: pointer; font: 800 italic 20px var(--font); letter-spacing: .08em; padding: 9px 22px;
+  .gs-bottom { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 14px 22px;
+    background: linear-gradient(0deg, rgba(8,8,10,.8), transparent); }
+  .gs-count { margin-right: auto; font: 800 12px var(--font); letter-spacing: .24em; opacity: .6; }
+  .gs-bottom button { all: unset; cursor: pointer; font: 800 italic 20px var(--font); letter-spacing: .08em; padding: 9px 26px;
     clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
-  .bench-done { background: #fff; color: var(--ink); flex: 1; text-align: center; }
-  .bench-done:hover { background: var(--red); color: #fff; }
-  .bench-clear { background: rgba(255,255,255,.1); }
-  .bench-clear:hover { background: rgba(255,255,255,.2); }
-  .bench-hint { font-size: 12px; font-weight: 700; letter-spacing: .14em; opacity: .45; margin-top: 10px; }
-  @media (max-width: 760px) { .bench-stats { grid-template-columns: 1fr; } }
+  .gs-bottom .gs-done { background: #fff; color: var(--ink); } .gs-bottom .gs-done:hover { background: var(--red); color: #fff; }
+  .gs-bottom .gs-strip { background: rgba(255,255,255,.12); } .gs-bottom .gs-strip:hover { background: rgba(255,255,255,.22); }
+  @media (max-width: 900px) { .gs-list { width: 150px; } .gs-right { width: 250px; } .gs-weapon b { font-size: 34px; } }
+
 
   /* key binds */
   .binds { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; font-weight: 700; font-size: 14px; letter-spacing: .08em; margin-top: 4px; }
@@ -547,7 +593,7 @@
     <div><b id="acc">--</b><span>ACCURACY</span></div>
     <div><b id="chunks">0</b><span>DESTRUCTION</span></div>
   </div>
-  <div id="hint">E — TAKE GUN / WORKBENCH · 1/2 — SWAP · T — RESET · ESC — MENU</div>
+  <div id="hint">E — TAKE GUN / WORKBENCH · HOLD B — ATTACHMENTS · 1/2 — SWAP · T — RESET · ESC — MENU</div>
   <div id="prompt"></div>
   <div id="debug"><span id="fps">--</span> FPS · <span id="speed">0.0</span> M/S</div>
   <div id="state"></div>
@@ -599,7 +645,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.27</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.28</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -694,53 +740,44 @@
   <div class="mm-name" id="mm-name"></div>
 </div>
 <div id="death" class="hidden"><div><b>ELIMINATED</b><span id="deathsub"></span></div></div>
-<div id="bench" class="hidden">
-  <div class="bench-panel">
-    <div class="bench-head"><h2>WORKBENCH</h2><span class="bench-hint">DRAG RIGHT SIDE TO SPIN</span></div>
-    <div class="bench-weapon"></div>
-    <div class="bench-tabs"></div>
-    <div class="bench-slots"></div>
-    <div class="bench-desc"></div>
-    <div class="bench-stats"></div>
-    <div class="bench-actions"><button class="bench-clear" type="button">STRIP ALL</button><button class="bench-done" type="button">DONE (E)</button></div>
-  </div>
-</div>
+<div id="bench" class="hidden"></div>
+<div id="plus" class="hidden"></div>
 <div id="error" class="hidden"></div>
 
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.27-1794391210",
-  "./src/audio.js": "./src/audio.js?v=0.27-1794391210",
-  "./src/batch.js": "./src/batch.js?v=0.27-1794391210",
-  "./src/bench.js": "./src/bench.js?v=0.27-1794391210",
-  "./src/bots.js": "./src/bots.js?v=0.27-1794391210",
-  "./src/classes.js": "./src/classes.js?v=0.27-1794391210",
-  "./src/contestant.js": "./src/contestant.js?v=0.27-1794391210",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.27-1794391210",
-  "./src/course.js": "./src/course.js?v=0.27-1794391210",
-  "./src/effects.js": "./src/effects.js?v=0.27-1794391210",
-  "./src/elevator.js": "./src/elevator.js?v=0.27-1794391210",
-  "./src/input.js": "./src/input.js?v=0.27-1794391210",
-  "./src/main.js": "./src/main.js?v=0.27-1794391210",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.27-1794391210",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.27-1794391210",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.27-1794391210",
-  "./src/math.js": "./src/math.js?v=0.27-1794391210",
-  "./src/nav.js": "./src/nav.js?v=0.27-1794391210",
-  "./src/net.js": "./src/net.js?v=0.27-1794391210",
-  "./src/player.js": "./src/player.js?v=0.27-1794391210",
-  "./src/props.js": "./src/props.js?v=0.27-1794391210",
-  "./src/renderer.js": "./src/renderer.js?v=0.27-1794391210",
-  "./src/rig.js": "./src/rig.js?v=0.27-1794391210",
-  "./src/tdm.js": "./src/tdm.js?v=0.27-1794391210",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.27-1794391210",
-  "./src/weapon.js": "./src/weapon.js?v=0.27-1794391210",
-  "./src/weapons.js": "./src/weapons.js?v=0.27-1794391210",
-  "./src/world.js": "./src/world.js?v=0.27-1794391210"
+  "./src/attachments.js": "./src/attachments.js?v=0.28-1794392957",
+  "./src/audio.js": "./src/audio.js?v=0.28-1794392957",
+  "./src/batch.js": "./src/batch.js?v=0.28-1794392957",
+  "./src/bench.js": "./src/bench.js?v=0.28-1794392957",
+  "./src/bots.js": "./src/bots.js?v=0.28-1794392957",
+  "./src/classes.js": "./src/classes.js?v=0.28-1794392957",
+  "./src/contestant.js": "./src/contestant.js?v=0.28-1794392957",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.28-1794392957",
+  "./src/course.js": "./src/course.js?v=0.28-1794392957",
+  "./src/effects.js": "./src/effects.js?v=0.28-1794392957",
+  "./src/elevator.js": "./src/elevator.js?v=0.28-1794392957",
+  "./src/input.js": "./src/input.js?v=0.28-1794392957",
+  "./src/main.js": "./src/main.js?v=0.28-1794392957",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.28-1794392957",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.28-1794392957",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.28-1794392957",
+  "./src/math.js": "./src/math.js?v=0.28-1794392957",
+  "./src/nav.js": "./src/nav.js?v=0.28-1794392957",
+  "./src/net.js": "./src/net.js?v=0.28-1794392957",
+  "./src/player.js": "./src/player.js?v=0.28-1794392957",
+  "./src/props.js": "./src/props.js?v=0.28-1794392957",
+  "./src/renderer.js": "./src/renderer.js?v=0.28-1794392957",
+  "./src/rig.js": "./src/rig.js?v=0.28-1794392957",
+  "./src/tdm.js": "./src/tdm.js?v=0.28-1794392957",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.28-1794392957",
+  "./src/weapon.js": "./src/weapon.js?v=0.28-1794392957",
+  "./src/weapons.js": "./src/weapons.js?v=0.28-1794392957",
+  "./src/world.js": "./src/world.js?v=0.28-1794392957"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.27-1794391210"></script>
+<script type="module" src="src/main.js?v=0.28-1794392957"></script>
 </body>
 </html>

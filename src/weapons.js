@@ -448,4 +448,99 @@ variant('autoshotgun', 'shotgun', {
   );
 });
 
-export const CASE_ORDER = ['ar', 'burst', 'dmr', 'smg', 'mp', 'shotgun', 'autoshotgun', 'sniper', 'lmg', 'pistol', 'revolver'];
+// KV-45: hyper-fast SMG with almost no kick.
+variant('kv', 'smg', {
+  name: 'KV-45', type: 'SMG', rpm: 1250, mag: 25, dmg: 11, headMult: 1.6,
+  spread: { base: 0.009, move: 0.01, air: 0.018, bloom: 0.003, bloomMax: 0.026, ads: 0.4 },
+  recoil: { up: 0.0045, side: 0.006, vm: 0.55 },
+  sound: { freq: 3800, thump: 210, gain: 0.38 },
+}, (parts) => {
+  each(parts, ['receiver', 'shroud'], (p) => { p.col = DARK2; p.m = 'poly'; });
+  each(parts, ['stripe'], (p) => { p.col = [1, 0.75, 0.1]; });
+  each(parts, ['mag'], (p) => { p.col = BLACK; p.s[1] = 0.15; p.c[1] = -0.11; });
+  each(parts, ['magBase'], (p) => { p.c[1] = -0.189; });
+  parts.push(P('kvBlock', [0, -0.03, -0.08], [0.058, 0.05, 0.1], DARK, { m: 'poly' }));
+});
+
+// BX-56: bullpup rifle. The mag sits behind the grip, so it's short and handy.
+variant('bullpup', 'ar', {
+  name: 'BX-56', type: 'BULLPUP RIFLE', rpm: 780, mag: 30, dmg: 20, headMult: 2,
+  reload: 2.2, reloadEmpty: 2.7, magPos: [0, -0.115, 0.18],
+  spread: { base: 0.004, move: 0.014, air: 0.028, bloom: 0.0045, bloomMax: 0.032, ads: 0.25 },
+  recoil: { up: 0.01, side: 0.008, vm: 1 }, adsSpeed: 16,
+}, (parts) => {
+  each(parts, ['mag', 'magRib', 'magBase', 'magWindow'], (p) => { p.c[2] += 0.23; p.col = p.name === 'mag' ? DARK2 : p.col; });
+  each(parts, ['receiver', 'lower', 'stock'], (p) => { p.col = [0.52, 0.55, 0.5]; p.m = 'poly'; });
+  each(parts, ['handguard'], (p) => { p.col = [0.52, 0.55, 0.5]; });
+  parts.push(P('bpShell', [0, -0.03, 0.2], [0.066, 0.07, 0.2], [0.52, 0.55, 0.5], { m: 'poly' }));
+});
+
+// LV-44: lever-action rifle. Iron sights, big hits, a lever to work between shots.
+variant('lever', 'sniper', {
+  name: 'LV-44', type: 'LEVER RIFLE', rpm: 100, mag: 8, dmg: 68, headMult: 1.9, scope: false,
+  reload: 2.4, reloadEmpty: 2.4, adsZoom: 0.68, adsSpeed: 12, sightY: 0.058,
+  spread: { base: 0.004, move: 0.025, air: 0.045, bloom: 0, bloomMax: 0, ads: 0.1 },
+  recoil: { up: 0.04, side: 0.008, vm: 2.2 },
+  sound: { freq: 1700, thump: 85, gain: 0.85, dur: 0.34 },
+}, (parts) => {
+  for (const p of parts) if (p.grp === 'sight' || ['scope', 'scopeF', 'ring1', 'ring2', 'lens', 'recRail', 'monopod', 'chSlot'].includes(p.name)) p.hidden = true;
+  each(parts, ['stock', 'chassis', 'cheek'], (p) => { p.col = WOOD; p.m = 'wood'; });
+  each(parts, ['receiver'], (p) => { p.col = [0.42, 0.36, 0.25]; p.m = 'steel'; });
+  each(parts, ['barrel'], (p) => { p.s[2] = 0.5; p.c[2] = -0.45; });
+  each(parts, ['brake', 'brakePort', 'flute'], (p) => { p.hidden = true; });
+  parts.push(
+    P('front', [0, 0.04, -0.68], [0.006, 0.02, 0.01], STEEL, { m: 'steel' }),
+    P('rearSight', [0, 0.056, 0.04], [0.03, 0.014, 0.008], STEEL, { m: 'steel' }),
+    P('rearNotch', [0, 0.062, 0.038], [0.008, 0.008, 0.009], BLACK),
+    C('magTube', [0, -0.012, -0.42], 0.022, 0.44, STEEL, { m: 'steel' }),
+    P('lever', [0, -0.085, 0.07], [0.012, 0.012, 0.14], STEEL, { m: 'steel', bolt: true }),
+    P('leverLoop', [0, -0.11, 0.1], [0.012, 0.04, 0.012], STEEL, { m: 'steel', bolt: true }),
+  );
+  each(parts, ['bolt', 'boltKnob', 'magBase'], (p) => { p.hidden = true; });
+  each(parts, ['mag'], (p) => { p.s = [0.03, 0.03, 0.05]; p.c = [0, -0.012, -0.2]; p.col = STEEL; });   // the tube's follower: what comes out on a reload
+});
+
+// ROTARY-X: minigun. Spins up for half a second, then shreds.
+variant('minigun', 'lmg', {
+  name: 'ROTARY-X', type: 'MINIGUN', rpm: 1600, mag: 250, dmg: 12, headMult: 1.4, spin: 0.55,
+  reload: 4.4, reloadEmpty: 4.9, muzzle: [0, 0.0, -0.78],
+  spread: { base: 0.016, move: 0.03, air: 0.04, bloom: 0.0012, bloomMax: 0.03, ads: 0.6 },
+  recoil: { up: 0.0035, side: 0.008, vm: 0.6 }, adsSpeed: 7, adsZoom: 0.88,
+  sound: { freq: 2400, thump: 130, gain: 0.5 },
+}, (parts) => {
+  for (const p of parts) if (['barrel', 'shroud', 'shHole', 'shHoleT', 'flash', 'frontPost'].includes(p.name) || p.grp === 'muzzle') p.hidden = true;
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    parts.push(C('mgBarrel', [Math.cos(a) * 0.026, Math.sin(a) * 0.026, -0.46], 0.018, 0.62, i % 2 ? BLACK : DARK, { m: 'metal', spin: true }));
+  }
+  parts.push(
+    C('mgClampF', [0, 0, -0.7], 0.085, 0.022, DARK2, { m: 'metal', spin: true }),
+    C('mgClampM', [0, 0, -0.45], 0.08, 0.018, DARK2, { m: 'metal', spin: true }),
+    C('mgHub', [0, 0, -0.17], 0.09, 0.08, DARK, { m: 'metal' }),
+    P('mgMotor', [0.06, -0.02, -0.12], [0.05, 0.06, 0.12], [0.85, 0.6, 0.1], { m: 'paint' }),
+    P('mgHandle', [0, 0.09, -0.05], [0.02, 0.02, 0.2], BLACK, { m: 'rubber' }),
+  );
+});
+
+// DB-2: double-barrel shotgun. Two shots, both barrels, then crack it open.
+variant('double', 'shotgun', {
+  name: 'DB-2', type: 'DOUBLE BARREL', auto: false, rpm: 360, mag: 2, dmg: 9, headMult: 1.5, pellets: 12,
+  action: undefined, reloadStyle: 'mag', reload: 2.0, reloadEmpty: 2.0, magPos: [0, 0.02, 0.02], bolt: [0.04, 0.02, 0.02],
+  spread: { base: 0.048, move: 0.01, air: 0.015, bloom: 0, bloomMax: 0, ads: 0.75 },
+  recoil: { up: 0.06, side: 0.014, vm: 2.6 },
+  sound: { freq: 1300, thump: 70, gain: 0.95, dur: 0.32 },
+}, (parts) => {
+  for (let i = parts.length - 1; i >= 0; i--) if (['shell', 'loadPort', 'portRim', 'saddle', 'tube', 'tubeCap', 'pump', 'pumpRidge', 'pumpBar', 'ribPost'].includes(parts[i].name)) parts.splice(i, 1);
+  for (const p of parts) delete p.pump;
+  each(parts, ['barrel'], (p) => { p.c[0] = -0.019; p.s[0] = p.s[1] = 0.036; });
+  each(parts, ['stock', 'stockComb', 'grip'], (p) => { p.col = WOOD; p.m = 'wood'; });
+  each(parts, ['receiver'], (p) => { p.col = STEEL; p.m = 'steel'; });
+  parts.push(
+    C('barrel2', [0.019, 0.025, -0.42], 0.036, 0.56, BLACK, { m: 'metal' }),
+    P('foreend', [0, -0.012, -0.28], [0.06, 0.04, 0.2], WOOD, { m: 'wood' }),
+    P('mag', [0, 0.02, 0.02], [0.05, 0.02, 0.05], [0.8, 0.15, 0.1], { mag: true, hidden: true }),
+    P('hinge', [0, -0.02, -0.12], [0.07, 0.03, 0.03], STEEL, { m: 'steel' }),
+  );
+});
+
+export const CASE_ORDER = ['ar', 'burst', 'dmr', 'bullpup', 'smg', 'kv', 'mp', 'shotgun', 'autoshotgun', 'double', 'sniper', 'lever', 'lmg', 'minigun', 'pistol', 'revolver'];
