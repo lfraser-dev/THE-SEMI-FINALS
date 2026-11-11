@@ -825,76 +825,111 @@ export class Weapon {
     const nail = (F, c, r) => { if (bare) put(F, c, r, [0.012, 0.004, 0.01], L.nail, 0.002); };
     const knuckle = (F, c, r) => { if (L.tactical) put(F, c, r, [0.007, 0.014, 0.017], Gd, 0.003, 'rubber'); };
 
-    // grip hand, in the grip's frame (y up the grip, -z forward, +x your side)
+    // ---- hands: a jointed rig. Hand space: z = wrist → knuckles, y = back of the hand, x = toward the index finger
+    // (mirrored for the left hand). Each finger is three tapered capsules, curled joint by joint; the thumb too.
+    const capsule = (H, p0, p1, r0, r1, col, mat = 'cloth') => {
+      const dv = [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]], len = Math.hypot(...dv) || 1e-4;
+      const rm = Math.max(r0, r1);
+      // the capsule's -z end points along the direction (anglesFor), so that end gets the far radius
+      put(H, [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2], anglesFor(dv), [rm * 2, rm * 2, len + rm * 2], col, { cap: [r1, r0] }, mat);
+    };
+    const FING = [   // knuckle x (index side +), knuckle z, bone lengths, radius
+      [0.027, 0.044, [0.042, 0.025, 0.02], 0.0095],
+      [0.009, 0.047, [0.046, 0.028, 0.021], 0.0098],
+      [-0.009, 0.045, [0.043, 0.026, 0.02], 0.0093],
+      [-0.026, 0.04, [0.034, 0.021, 0.018], 0.0083],
+    ];
+    const drawHand = (F, ax, ay, az, o, side, pose) => {
+      const H = pm(); pi++;
+      const B = mat4();
+      B.set([...ax, 0, ...ay, 0, ...az, 0, ...o, 1]);
+      mul(H, F, B);
+      // palm, the pads at its base, and the knuckle line
+      put(H, [0, 0, 0.004], [0, 0, 0], [0.078, 0.027, 0.086], G, 0.012, 'cloth');
+      capsule(H, [side * 0.026, -0.009, -0.03], [side * 0.03, -0.006, 0.012], 0.014, 0.012, G);       // thumb muscle
+      capsule(H, [-side * 0.03, -0.008, -0.028], [-side * 0.03, -0.006, 0.026], 0.011, 0.01, G);     // outer edge
+      if (L.tactical) put(H, [0, 0.016, 0.036], [0, 0, 0], [0.072, 0.009, 0.022], Gd, 0.004, 'rubber');
+      // fingers
+      FING.forEach(([kx, kz, lens, r], i) => {
+        const [c1, c2, c3, spread] = pose.f[i];
+        let p = [side * kx, 0.002, kz], cum = 0;
+        const rad = [r, r * 0.92, r * 0.84, r * 0.78];
+        [c1, c2, c3].forEach((c, j) => {
+          cum += c;
+          const sp = side * (spread || 0);
+          const dir = [Math.sin(sp) * Math.cos(cum), -Math.sin(cum), Math.cos(sp) * Math.cos(cum)];
+          const q = p.map((v, k) => v + dir[k] * lens[j]);
+          capsule(H, p, q, rad[j], rad[j + 1], G);
+          if (j === 2 && bare) {   // nail on the back of the fingertip
+            const up = [Math.sin(sp) * Math.sin(cum) * 0, Math.cos(cum), Math.sin(cum)];
+            const nc = q.map((v, k) => v - dir[k] * lens[j] * 0.45 + up[k] * rad[3] * 0.85);
+            put(H, nc, anglesFor(dir), [rad[3] * 1.3, 0.003, lens[j] * 0.55], L.nail, 0.0012);
+          }
+          p = q;
+        });
+      });
+      // thumb: three bones along the pose's directions
+      let p = [side * 0.034, -0.012, -0.012];
+      pose.t.forEach((d0, j) => {
+        const d = [side * d0[0], d0[1], d0[2]], l = Math.hypot(...d), dir = d.map((v) => v / l);
+        const len = [0.03, 0.027, 0.022][j], r = [0.0125, 0.011, 0.0098, 0.009];
+        const q = p.map((v, k) => v + dir[k] * len);
+        capsule(H, p, q, r[j], r[j + 1], G);
+        p = q;
+      });
+      return H;
+    };
+    const norm3 = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+    const cross3 = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const rotX = (v, ang) => [v[0], v[1] * Math.cos(ang) - v[2] * Math.sin(ang), v[1] * Math.sin(ang) + v[2] * Math.cos(ang)];
+
+    // grip hand: palm against the right of the pistol grip, fingers wrapped round the front, index on the trigger,
+    // thumb over the top on the far side
     const gripPart = d.parts.find((q) => q.name === 'grip' && !q.hidden);
     const gRx = gripPart ? gripPart.rx || 0 : -0.3;
-    compose(this.tmp, add3(right, [0.004, -0.004, 0.004]), [gRx, 0, 0], [1, 1, 1]);
+    const gw = gripPart ? gripPart.s[0] / 2 : 0.022;
+    let RH;
+    {
+      const az = norm3(rotX([0, 0.12, -1], gRx)), ay = [1, 0, 0], ax = cross3(ay, az);
+      const o = add3(right, rotX([gw + 0.013, -0.004, 0.024], gRx));
+      const GRIP = { f: [[0.2, 0.45, 0.35, 0.05], [1.45, 1.35, 0.85], [1.5, 1.4, 0.85], [1.5, 1.38, 0.8, -0.05]],
+        t: [[0.3, -0.85, 0.45], [0.05, -0.55, 0.85], [0, -0.3, 0.95]] };
+      RH = drawHand(this.root, ax, ay, az, o, 1, GRIP);
+      compose(this.tmp, o, [0, 0, 0], [1, 1, 1]);
+      mul(hm[1], this.root, this.tmp);
+    }
     const RF = hm[1];
-    mul(RF, this.root, this.tmp);
-    put(RF, [0.03, 0.0, 0.01], [0, 0, 0], [0.024, 0.082, 0.074], G, 0.012, 'cloth');           // back of the hand
-    put(RF, [0.012, -0.014, 0.032], [0, 0, 0], [0.032, 0.058, 0.024], G, 0.01, 'cloth');       // heel of the palm
-    [[0.009, 1], [-0.015, 0.97], [-0.038, 0.84]].forEach(([y, k]) => {                       // middle, ring, little finger
-      put(RF, [0.025, y, -0.03], [0, 0, 0], [0.024 * k, 0.0175 * k, 0.018], G, 0.007, 'cloth');
-      put(RF, [0.001, y, -0.037], [0, 0, 0], [0.026 * k, 0.0165 * k, 0.017], G, 0.007, 'cloth');
-      put(RF, [-0.021, y, -0.027], [0, 0.55, 0], [0.016, 0.015 * k, 0.02], G, 0.006, 'cloth');
-      knuckle(RF, [0.037, y, -0.031], [0, 0, 0]);
-    });
-    // index finger along the trigger guard, curled onto the trigger
-    put(RF, [0.019, 0.035, -0.042], [0.08, 0.1, 0], [0.018, 0.018, 0.034], G, 0.007, 'cloth');
-    put(RF, [0.012, 0.033, -0.07], [0.25, 0.3, 0], [0.017, 0.017, 0.025], G, 0.007, 'cloth');
-    put(RF, [0.006, 0.026, -0.085], [0.7, 0.35, 0], [0.015, 0.015, 0.017], G, 0.006, 'cloth');
-    knuckle(RF, [0.03, 0.036, -0.04], [0, 0.1, 0]);
-    // thumb over the top of the grip on the far side
-    put(RF, [-0.006, 0.042, 0.014], [0, -0.7, 0], [0.021, 0.021, 0.032], G, 0.008, 'cloth');
-    put(RF, [-0.025, 0.046, -0.008], [0.05, -0.25, 0], [0.018, 0.018, 0.028], G, 0.007, 'cloth');
-    nail(RF, [-0.028, 0.056, -0.012], [0.05, -0.25, 0]);
 
     // support hand
     const plant = this.plantTarget(player);
     const LF = hm[0];
-    const onGun = () => { compose(this.tmp, left, [0, 0, -0.1], [1, 1, 1]); mul(LF, this.root, this.tmp); };
-    let flat = 0;
-    if (plant && plant.t > 0.001) {
-      onGun();
-      const gp = [LF[12], LF[13], LF[14]];
-      const hp = lerp3(gp, plant.pos, plant.t);
+    let flat = 0, LH;
+    const CLAMP = { f: [[0.85, 1.05, 0.7, 0.04], [0.9, 1.1, 0.7], [0.95, 1.1, 0.7], [0.95, 1.05, 0.65, -0.06]],
+      t: [[0.25, -0.8, 0.55], [0.3, -0.6, 0.75], [0.25, -0.35, 0.9]] };
+    const FLAT = { f: [[0.12, 0.1, 0.06, 0.12], [0.1, 0.1, 0.06, 0.03], [0.1, 0.1, 0.06, -0.06], [0.12, 0.1, 0.06, -0.15]],
+      t: [[0.8, -0.3, 0.5], [0.5, -0.1, 0.85], [0.3, 0, 0.95]] };
+    if (plant && plant.t > 0.5) {
+      // flat hand planted on a ledge / wall / button
+      const onGunP = transformPoint(this.root, left);
+      const hp = lerp3(onGunP, plant.pos, plant.t);
       const gr = [rot[0] + 0.1, rot[1], rot[2] - 0.25];
       compose(LF, hp, lerp3(gr, plant.rot, smooth(plant.t)), [1, 1, 1]);
-      flat = smooth(plant.t);
-    } else onGun();
-    if (flat > 0.5) {
-      // flat hand: planted on a ledge / wall / button
-      put(LF, [0, 0, 0.0], [0, 0, 0], [0.072, 0.024, 0.08], G, 0.01, 'cloth');
-      [-0.027, -0.009, 0.009, 0.026].forEach((x, i) => {
-        const k = i === 3 ? 0.85 : 1;
-        put(LF, [x, -0.002, -0.054 * k], [0.15, 0, 0], [0.016, 0.016, 0.032 * k], G, 0.006, 'cloth');
-        put(LF, [x, -0.008, -0.08 * k], [0.4, 0, 0], [0.015, 0.015, 0.022 * k], G, 0.006, 'cloth');
-        knuckle(LF, [x, 0.012, -0.04], [0, 0, 0]);
-      });
-      put(LF, [-0.042, -0.004, -0.02], [0, 0.6, 0], [0.018, 0.018, 0.04], G, 0.007, 'cloth');
+      flat = 1;
+      LH = drawHand(LF, [-1, 0, 0], [0, 1, 0], [0, 0, -1], [0, 0, 0.03], -1, FLAT);
     } else {
-      // C-clamp on the handguard: back of the hand on your side, fingers wrapped underneath, thumb over the top.
-      // (wraps an imagined handguard ~3.5 cm above the grip point)
-      put(LF, [-0.044, 0.03, 0.0], [0, 0, 0.12], [0.022, 0.066, 0.08], G, 0.01, 'cloth');          // back of the hand
-      put(LF, [-0.036, -0.002, 0.034], [0, 0, 0.3], [0.026, 0.032, 0.04], G, 0.01, 'cloth');      // heel
-      [-0.028, -0.009, 0.01, 0.028].forEach((z, i) => {
-        const k = i === 3 ? 0.86 : 1;
-        put(LF, [-0.034, 0.004, z], [0, 0, -0.65], [0.022 * k, 0.017 * k, 0.016 * k], G, 0.006, 'cloth');
-        put(LF, [-0.009, -0.006, z], [0, 0, 0], [0.024 * k, 0.016 * k, 0.015 * k], G, 0.006, 'cloth');
-        put(LF, [0.015, 0.0, z], [0, 0, 0.7], [0.016 * k, 0.015 * k, 0.014 * k], G, 0.005, 'cloth');
-        nail(LF, [0.02, 0.006, z], [0, 0, 0.7]);
-        knuckle(LF, [-0.056, 0.006, z], [0, 0, -0.3]);
-      });
-      put(LF, [-0.038, 0.058, -0.014], [0, 0.25, 0.6], [0.02, 0.019, 0.034], G, 0.008, 'cloth');  // thumb over the top
-      put(LF, [-0.021, 0.07, -0.04], [0, 0.1, 0.9], [0.017, 0.017, 0.026], G, 0.007, 'cloth');
-      nail(LF, [-0.016, 0.079, -0.046], [0, 0.1, 0.9]);
-      if (L.tactical) put(LF, [-0.056, 0.032, 0.0], [0, 0, 0.12], [0.004, 0.05, 0.05], Gd, 0.004, 'rubber');   // armoured back plate
+      // C-clamp under the handguard: palm up against it, fingers curled up the far side, thumb up the near side,
+      // the back of the hand toward you
+      const az = norm3([1, 0.4, 0]), ax = [0, 0, 1], ay = cross3(az, ax);
+      const o = add3(left, [-0.03, -0.012, 0]);
+      compose(this.tmp, o, [0, 0, 0], [1, 1, 1]);
+      mul(LF, this.root, this.tmp);
+      LH = drawHand(this.root, ax, ay, az, o, -1, CLAMP);
     }
 
     // forearms: tapered sleeves from wrist to elbow, glove cuff, rolled sleeve cuff (and a watch on the left wrist)
     const xf = (M, v) => [0, 1, 2].map((i) => M[i] * v[0] + M[4 + i] * v[1] + M[8 + i] * v[2] + M[12 + i]);
-    const lv = flat > 0.5 ? xf(LF, [0, 0.0, 0.045]) : xf(LF, [-0.036, 0.012, 0.036]);   // heel of each hand
-    const rv = xf(RF, [0.02, -0.03, 0.036]);
+    const lv = xf(LH, [0, 0, -0.04]);     // wrists
+    const rv = xf(RH, [0, 0, -0.04]);
     let lShoulder = lerp3([-0.32, -0.62, 0.0], [-0.24, -0.55, 0.05], a);
     if (plant && plant.t > 0.001) lShoulder = lerp3(lShoulder, [-0.36, -0.68, -0.28], plant.t); // reach the arm out, away from the lens
     const rShoulder = lerp3([0.34, -0.5, 0.12], [0.16, -0.46, 0.18], a);
@@ -906,14 +941,14 @@ export class Weapon {
       const h = hand.map((v, k) => v + u[k] * 0.034);          // wrist
       const len = Math.max(0.05, l0 - 0.034);
       const ang = anglesFor(u);
-      put(I, hand.map((v, k) => v + u[k] * 0.012), ang, [0.056, 0.056, 0.06], L.glove, { cap: [0.025, 0.028] }, 'cloth');   // wrist
+      put(I, hand.map((v, k) => v + u[k] * 0.012), ang, [0.056, 0.056, 0.06], L.glove, { cap: [0.028, 0.025] }, 'cloth');   // wrist
       const rw = 0.029, re = isLeft && plant ? lerp(0.042, 0.036, plant.t) : 0.042;
       // the sleeve, wrist end narrow (the capsule's back end points at the wrist)
       const capS = [re * 2, re * 2, len];
-      put(I, h.map((v, k) => v + u[k] * len / 2), ang, capS, L.sleeve, { cap: [rw, re] }, 'cloth');
+      put(I, h.map((v, k) => v + u[k] * len / 2), ang, capS, L.sleeve, { cap: [re, rw] }, 'cloth');
       put(I, h.map((v, k) => v + u[k] * 0.006), ang, [0.066, 0.066, 0.034], Gd, 'cyl', 'rubber');                 // glove cuff
       put(I, h.map((v, k) => v + u[k] * 0.07), ang, [0.078, 0.078, 0.03], L.sleeveDark, 'cyl', 'cloth');          // rolled sleeve
-      put(I, h.map((v, k) => v + u[k] * 0.086), ang, [0.08, 0.08, 0.006], L.accent, 'cyl');                        // stripe
+      put(I, h.map((v, k) => v + u[k] * 0.083), ang, [0.0795, 0.0795, 0.004], L.accent.map((v) => v * 0.7), 'cyl');   // stripe
       if (isLeft) {
         put(I, h.map((v, k) => v + u[k] * 0.03), ang, [0.064, 0.064, 0.018], [0.08, 0.08, 0.09], 'cyl', 'rubber'); // watch strap
         const face = [h[0] + u[0] * 0.03, h[1] + u[1] * 0.03 + 0.03, h[2] + u[2] * 0.03];

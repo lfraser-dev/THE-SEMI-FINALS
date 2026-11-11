@@ -300,29 +300,79 @@ export class Workbench {
 }
 
 // ---------------------------------------------------------------- gun crates
-// Two open wooden crates either side of the workbench, every gun jammed in muzzle-first with the stock sticking out.
-// Look at a gun and press E to take it. Returns the guns as pickable items: { def, aim, parts(time, hot) }.
-const WOOD = [0.5, 0.35, 0.22], WOOD_D = [0.36, 0.25, 0.16], IRON = [0.2, 0.2, 0.22], STENCIL = [0.12, 0.12, 0.12];
+// Military weapon crates either side of the workbench: olive-drab wooden crates with steel corners, rope handles,
+// stencilled markings and the lid propped open behind, every gun jammed in muzzle-first. Round them: stacked ammo
+// cans (one open, full of rounds), loose mags, shell boxes and a belt of rounds. Look at a gun and press E to take
+// it; look at an ammo can and press E to fill up both guns.
+const OD = [0.29, 0.33, 0.2], OD_D = [0.2, 0.23, 0.14], STEELD = [0.17, 0.17, 0.18], STEN = [0.92, 0.8, 0.3], STENW = [0.88, 0.88, 0.84];
+const ROPE = [0.55, 0.47, 0.32], BRASSC = [0.8, 0.62, 0.28], TIP = [0.5, 0.3, 0.18];
 export function gunCrates(world, defs, benchPos) {
   const add = (min, max, o) => world.add(makeBox(min, max, { grid: false, ...o }));
+  const at = (x, y, z, sx, sy, sz, o) => add([x - sx / 2, y, z - sz / 2], [x + sx / 2, y + sy, z + sz / 2], o);
+  const deco = (min, max, o) => add(min, max, { solid: false, noShadow: true, ...o });
   const [bx, by, bz] = benchPos;
   const W = 2.5, D = 1.25, Hh = 0.62, t = 0.05;
   const crates = [[bx - 3.35, bz + 0.62], [bx + 3.35, bz + 0.62]];
   const items = [];
   const half = Math.ceil(defs.length / 2);
+  // stencil "text": a row of short bars of varying width, like letters at a distance
+  const stencil = (x0, y0, z, w, h, seed, col = STEN, face = -1) => {
+    let x = x0, k = seed;
+    while (x < x0 + w - 0.02) {
+      k = (k * 9301 + 49297) % 233280;
+      const lw = 0.025 + (k / 233280) * 0.035;
+      if (x + lw > x0 + w) break;
+      deco([x, y0, z - 0.004 * (face < 0 ? 1 : 0)], [x + lw, y0 + h, z + 0.004 * (face > 0 ? 1 : 0)], { color: col, emissive: 0.08 });
+      x += lw + 0.012;
+    }
+  };
+  // a steel ammo can: body, lid with a handle, latch, yellow stencil band
+  const ammoCan = (x, y, z, open = false, rotY = 0) => {
+    const sx = rotY ? 0.16 : 0.3, sz = rotY ? 0.3 : 0.16;
+    at(x, y, z, sx, 0.19, sz, { color: OD, mat: 'paint' });
+    if (!open) {
+      at(x, y + 0.19, z, sx + 0.012, 0.025, sz + 0.012, { color: OD_D, mat: 'paint' });
+      at(x, y + 0.215, z, rotY ? 0.03 : 0.12, 0.018, rotY ? 0.12 : 0.03, { color: STEELD, mat: 'metal' });
+    } else {
+      // lid flipped back, rounds stood up inside
+      at(x, y + 0.19, z + (rotY ? 0 : sz / 2 + 0.012), sx + 0.012, 0.2, 0.012, { color: OD_D, mat: 'paint' });
+      for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) {
+        const px = x - sx / 2 + 0.03 + i * ((sx - 0.06) / 5), pz = z - sz / 2 + 0.03 + j * ((sz - 0.06) / 2);
+        at(px, y + 0.17, pz, 0.016, 0.05, 0.016, { color: BRASSC, mat: 'metal', solid: false, shape: 'cyl' });
+        at(px, y + 0.22, pz, 0.011, 0.016, 0.011, { color: TIP, mat: 'metal', solid: false, noShadow: true });
+      }
+    }
+    at(x + (rotY ? 0 : sx / 2 + 0.006), y + 0.12, z + (rotY ? sz / 2 + 0.006 : 0), rotY ? 0.04 : 0.012, 0.05, rotY ? 0.012 : 0.04, { color: STEELD, mat: 'metal', solid: false });
+    deco([x - sx / 2 - 0.001, y + 0.06, z - sz / 2 - 0.004], [x + sx / 2 + 0.001, y + 0.085, z - sz / 2 + 0.001], { color: STEN, emissive: 0.05 });
+    return [x, y + 0.2, z];
+  };
   crates.forEach(([cx, cz], ci) => {
     const x0 = cx - W / 2, x1 = cx + W / 2, z0 = cz - D / 2, z1 = cz + D / 2, y = by;
-    // planks: floor, walls (with a darker slat band), iron corner brackets and a stencil band
-    add([x0, y, z0], [x1, y + 0.08, z1], { color: WOOD_D, tex: 12 });
-    add([x0, y, z0], [x1, y + Hh, z0 + t], { color: WOOD, tex: 12 });
-    add([x0, y, z1 - t], [x1, y + Hh, z1], { color: WOOD, tex: 12 });
-    add([x0, y, z0], [x0 + t, y + Hh, z1], { color: WOOD, tex: 12 });
-    add([x1 - t, y, z0], [x1, y + Hh, z1], { color: WOOD, tex: 12 });
-    add([x0 - 0.01, y + Hh * 0.45, z0 - 0.012], [x1 + 0.01, y + Hh * 0.55, z0 + 0.001], { color: WOOD_D, solid: false, noShadow: true });
-    for (const xx of [x0, x1]) for (const zz of [z0, z1]) add([xx - 0.03, y, zz - 0.03], [xx + 0.03, y + Hh + 0.02, zz + 0.03], { color: IRON });
-    add([cx - 0.45, y + Hh * 0.62, z0 - 0.014], [cx + 0.45, y + Hh * 0.72, z0 - 0.004], { color: STENCIL, solid: false, noShadow: true });
-    // the lid, leant against the wall behind
-    add([x0 + 0.1, y, z1 + 0.06], [x1 - 0.1, y + 0.05, z1 + 0.12], { color: WOOD_D, tex: 12, solid: false });
+    // the crate: painted planks (wood grain under olive paint), a darker plinth, steel corners and bands
+    add([x0, y, z0], [x1, y + 0.08, z1], { color: OD_D, tex: 12, mat: 'paint' });
+    add([x0, y, z0], [x1, y + Hh, z0 + t], { color: OD, tex: 12, mat: 'paint' });
+    add([x0, y, z1 - t], [x1, y + Hh, z1], { color: OD, tex: 12, mat: 'paint' });
+    add([x0, y, z0], [x0 + t, y + Hh, z1], { color: OD, tex: 12, mat: 'paint' });
+    add([x1 - t, y, z0], [x1, y + Hh, z1], { color: OD, tex: 12, mat: 'paint' });
+    add([x0 - 0.02, y, z0 - 0.02], [x1 + 0.02, y + 0.06, z1 + 0.02], { color: OD_D, mat: 'paint' });                       // skid
+    for (const xx of [x0, x1]) for (const zz of [z0, z1]) add([xx - 0.035, y, zz - 0.035], [xx + 0.035, y + Hh + 0.015, zz + 0.035], { color: STEELD, mat: 'metal' });
+    for (const yy of [0.18, 0.46]) deco([x0 - 0.012, y + yy, z0 - 0.012], [x1 + 0.012, y + yy + 0.04, z0 + 0.001], { color: STEELD, mat: 'metal' });     // steel bands
+    deco([x0 - 0.012, y + Hh - 0.03, z0 - 0.012], [x1 + 0.012, y + Hh, z1 + 0.012], { color: OD_D, mat: 'paint' });                                     // rim
+    // stencils on the front: a big line of "text", a smaller one, and a yellow hazard band at the end
+    stencil(x0 + 0.18, y + 0.27, z0 - 0.012, 1.3, 0.07, 17 + ci * 31);
+    stencil(x0 + 0.18, y + 0.37, z0 - 0.012, 0.8, 0.04, 91 + ci * 7, STENW);
+    deco([x1 - 0.42, y + 0.26, z0 - 0.016], [x1 - 0.14, y + 0.42, z0 - 0.001], { color: STEN, emissive: 0.06 });
+    for (let k = 0; k < 4; k++) deco([x1 - 0.4 + k * 0.07, y + 0.26, z0 - 0.018], [x1 - 0.37 + k * 0.07, y + 0.42, z0 - 0.015], { color: [0.08, 0.08, 0.08] });
+    // rope handles at both ends
+    for (const [xx, s] of [[x0, -1], [x1, 1]]) {
+      at(xx + s * 0.03, y + 0.42, cz - 0.16, 0.04, 0.04, 0.04, { color: STEELD, mat: 'metal', solid: false });
+      at(xx + s * 0.03, y + 0.42, cz + 0.16, 0.04, 0.04, 0.04, { color: STEELD, mat: 'metal', solid: false });
+      at(xx + s * 0.06, y + 0.38, cz, 0.03, 0.03, 0.36, { color: ROPE, mat: 'cloth', solid: false, shape: 'cyl' });
+    }
+    // the lid, propped open against the wall behind, with its own stencil and hinges
+    add([x0 + 0.05, y + 0.05, z1 + 0.04], [x1 - 0.05, y + 0.95, z1 + 0.1], { color: OD, tex: 12, mat: 'paint', solid: false });
+    stencil(x0 + 0.3, y + 0.62, z1 + 0.039, 1.6, 0.09, 53 + ci * 13);
+    for (const xx of [x0 + 0.4, x1 - 0.4]) at(xx, y + Hh - 0.03, z1 + 0.04, 0.1, 0.06, 0.04, { color: STEELD, mat: 'metal', solid: false });
     // the guns: two rows, jammed in at odd angles
     const mine = defs.slice(ci * half, ci * half + half);
     const cols = Math.ceil(mine.length / 2);
@@ -331,9 +381,8 @@ export function gunCrates(world, defs, benchPos) {
       const rnd = (k) => { const v = Math.sin((i + 1) * 12.9898 + (ci + 1) * 78.233 + k * 37.719) * 43758.5453; return v - Math.floor(v); };
       const px = x0 + 0.3 + (col + 0.5) * ((W - 0.6) / cols) + (rnd(1) - 0.5) * 0.08;
       const pz = row ? cz + 0.24 : cz - 0.2;
-      const len = Math.max(...def.parts.map((p) => -(p.c[2] - p.s[2] / 2)));   // how far the muzzle reaches
-      const py = y + Math.max(Hh + 0.08, 0.2 + len * 0.9);   // muzzle near the bottom, the rest sticking out
-      // local z (the stock end) points up, tilted; the gun's side faces you
+      const len = Math.max(...def.parts.map((p) => -(p.c[2] - p.s[2] / 2)));
+      const py = y + Math.max(Hh + 0.08, 0.2 + len * 0.9);
       const up = norm3([(rnd(2) - 0.5) * 0.7, 1, (rnd(3) - 0.5) * 0.35 - 0.12]);
       const f = [Math.sin((rnd(4) - 0.5) * 0.8), 0, -Math.cos((rnd(4) - 0.5) * 0.8)];
       const fd = f[0] * up[0] + f[1] * up[1] + f[2] * up[2];
@@ -341,7 +390,7 @@ export function gunCrates(world, defs, benchPos) {
       const ya = [up[1] * xa[2] - up[2] * xa[1], up[2] * xa[0] - up[0] * xa[2], up[0] * xa[1] - up[1] * xa[0]];
       const m = mat4();
       m.set([...xa, 0, ...ya, 0, ...up, 0, px, py, pz, 1]);
-      const item = {
+      items.push({
         def, base: m, lift: 0, crate: ci,
         aim: [px + up[0] * 0.18, py + up[1] * 0.18, pz + up[2] * 0.18],
         center: [px, y, pz],
@@ -352,9 +401,22 @@ export function gunCrates(world, defs, benchPos) {
           mm[12] += up[0] * this.lift; mm[13] += up[1] * this.lift; mm[14] += up[2] * this.lift;
           return Weapon.worldParts(this.def, mm).map((p) => (hot ? { ...p, emissive: Math.max(p.emissive, 0.12) } : p));
         },
-      };
-      items.push(item);
+      });
     });
+    // ammo round the crate: a stack of cans (top one open), loose mags, a box of shells, a belt of rounds
+    const sx = ci ? x1 + 0.3 : x0 - 0.3;
+    ammoCan(sx, y, cz - 0.3, false);
+    ammoCan(sx, y, cz + 0.05, false);
+    const top = ammoCan(sx, y + 0.24, cz - 0.12, true);
+    items.push({ ammo: true, aim: top, center: [sx, y, cz], parts: () => [] });
+    for (let k = 0; k < 3; k++) {
+      const mx = cx - 0.5 + k * 0.28, mz = z0 - 0.22 - (k % 2) * 0.07;
+      at(mx, y, mz, 0.05, 0.03, 0.16, { color: [0.12, 0.12, 0.13], mat: 'metal', solid: false });
+      at(mx, y + 0.03, mz - 0.05, 0.03, 0.006, 0.03, { color: BRASSC, mat: 'metal', solid: false, noShadow: true });
+    }
+    at(cx + 0.55, y, z0 - 0.25, 0.22, 0.07, 0.12, { color: [0.75, 0.12, 0.08], mat: 'paint', solid: false });
+    at(cx + 0.55, y + 0.07, z0 - 0.25, 0.224, 0.012, 0.124, { color: STENW, mat: 'paint', solid: false });
+    for (let k = 0; k < 9; k++) at(cx + 0.1 + k * 0.035, y, z0 - 0.42 + Math.sin(k * 0.8) * 0.04, 0.014, 0.014, 0.055, { color: k % 3 ? BRASSC : [0.25, 0.22, 0.18], mat: 'metal', solid: false, noShadow: true });
   });
   return items;
 }

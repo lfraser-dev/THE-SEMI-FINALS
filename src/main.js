@@ -147,7 +147,7 @@ function applyLoadout(id, lo) {
   try { localStorage.setItem('semifinals.loadouts', JSON.stringify(loadouts)); } catch { /* ignore */ }
   const def = defFor(id);
   slots.forEach((w) => { if (w.def.id === id) w.setDef(def); });
-  cases.forEach((c) => { if (c.def.id === id) c.def = def; });
+  cases.forEach((c) => { if (c.def?.id === id) c.def = def; });
   updateSlotHud();
 }
 
@@ -785,6 +785,9 @@ function updateHud(dt, fovRad) {
   } else if (nearBench && !nearCase) {
     hud.prompt.innerHTML = '<kbd>E</kbd> WORKBENCH <span>ATTACHMENTS</span>';
     hud.prompt.style.opacity = 1;
+  } else if (nearCase?.ammo) {
+    hud.prompt.innerHTML = '<kbd>E</kbd> TAKE <b>AMMO</b> <span>FILL BOTH GUNS</span>';
+    hud.prompt.style.opacity = 1;
   } else if (nearCase) {
     const d = nearCase.def;
     hud.prompt.innerHTML = `<kbd>E</kbd> ${weapon().def.id === d.id ? 'REFILL' : 'TAKE'} <b>${d.name}</b> <span>${d.type}</span>`;
@@ -1015,7 +1018,7 @@ function renderShop() {
 function refreshGuns() {
   setHandLook(buildOutfit(cosmetics, classLo.cls));
   slots.forEach((w) => { const a = w.ammo; w.setDef(defFor(w.def.id)); w.ammo = Math.min(a, w.def.mag); });
-  cases.forEach((c) => { c.def = defFor(c.def.id); });
+  cases.forEach((c) => { if (c.def) c.def = defFor(c.def.id); });
   showroomKey = '';
 }
 // PLAY: matchmaking → loadout (30 s) → team intro → the arena. Once you're in a match, PLAY resumes it.
@@ -1719,6 +1722,7 @@ function frameBody(now) {
     const liftBtn = lookLiftButton();
     if (liftBtn && input.hit('KeyE')) liftBtn.lift.press(liftBtn, sounds);
     else if (nearConsole() && input.hit('KeyE')) pressConsole();
+    else if (nearCase?.ammo && input.hit('KeyE')) { slots.forEach((w) => { w.ammo = w.def.mag; }); sounds.magIn?.(); sounds.pickup(); }
     else if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
     else if (nearBench && input.hit('KeyE')) openBench();
     w = weapon();
