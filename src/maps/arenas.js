@@ -57,8 +57,8 @@ const LAYOUTS = [
     },
   },
   {
-    name: 'TWIN TOWERS', W: 40, D: 26, ox: 520,
-    blurb: 'A TOWER EACH, TRENCH WALLS IN THE MIDDLE',
+    name: 'HIGH GROUND', W: 40, D: 26, ox: 520,
+    blurb: 'A LOOKOUT EACH, TRENCH WALLS IN THE MIDDLE',
     mid: {
       b: [[0, 0, 3, 3, 3, WALL, 0.3], [0, -10, 0.6, 1.4, 6, ACCENT], [0, 10, 0.6, 1.4, 6, ACCENT]],
     },

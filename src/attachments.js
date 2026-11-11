@@ -34,7 +34,10 @@ const MOUNT = {
 };
 
 // Base effective range (m) before damage falls off
-export const RANGE = { ar: 35, smg: 18, shotgun: 10, sniper: 120, lmg: 40, pistol: 20 };
+export const RANGE = { ar: 35, smg: 18, shotgun: 10, sniper: 120, lmg: 40, pistol: 20, burst: 40, dmr: 60, mp: 14, revolver: 28, autoshotgun: 9 };
+
+// variants (BR-3, FC-308, ...) take the attachments of the gun they're built on
+const STYLE = { burst: 'ar', dmr: 'ar', mp: 'pistol', revolver: 'pistol', autoshotgun: 'shotgun' };
 
 const P = (name, c, s, col, extra = {}) => ({ name, c, s, col, ...extra });
 
@@ -90,7 +93,7 @@ export const ATTACHMENTS = {
 export function optionsFor(weaponId, slot) {
   if ((slot === 'barrel' || slot === 'stock') && weaponId === 'pistol') return [];
   return Object.entries(ATTACHMENTS)
-    .filter(([, a]) => a.slot === slot && (a.for === 'all' || a.for.includes(weaponId)))
+    .filter(([, a]) => a.slot === slot && (a.for === 'all' || a.for.includes(weaponId) || a.for.includes(STYLE[weaponId])))
     .map(([id, a]) => ({ id, ...a }));
 }
 
@@ -100,7 +103,7 @@ export function slotsFor(weaponId) {
 
 // ---------------------------------------------------------------- build
 export function buildDef(base, loadout = {}) {
-  const id = base.id, m = MOUNT[id];
+  const id = base.id, style = base.style || id, m = MOUNT[id] || MOUNT[style];
   const def = {
     ...base,
     spread: { ...base.spread },
@@ -110,7 +113,7 @@ export function buildDef(base, loadout = {}) {
     magPos: [...base.magPos],
     foreGrip: [...base.foreGrip],
     parts: base.parts.map((p) => ({ ...p, c: [...p.c], s: [...p.s] })),
-    range: RANGE[id],
+    range: RANGE[id] ?? RANGE[style],
     flashScale: 1,
     hipSpread: 1,
     laser: null,
@@ -301,7 +304,7 @@ export function buildDef(base, loadout = {}) {
   def.spread.move *= k.spreadMove;
   def.spread.ads *= k.adsSpread;
   def.hipSpread = k.hipSpread;
-  def.range = RANGE[id] * k.range;
+  def.range = (RANGE[id] ?? RANGE[style]) * k.range;
   def.sound.gain *= k.gain;
   if (k.gain < 0.5) { def.sound.freq *= 0.55; def.sound.thump *= 0.8; }
   def.flashScale = k.flash;

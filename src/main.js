@@ -21,6 +21,7 @@ import { Elevator } from './elevator.js';
 import { BotManager } from './bots.js';
 import { Matchmaking } from './matchmaking.js';
 import { Deathmatch } from './tdm.js';
+import { Lobby } from './net.js';
 import { StaticBatches } from './batch.js';
 
 const $ = (id) => document.getElementById(id);
@@ -79,7 +80,8 @@ player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
 const elevator = new Elevator(world, map.elevator);
 const lifts = [];        // (no lifts in the arenas)
-const tdm = new Deathmatch(world);          // the team deathmatch
+const ai = new Deathmatch(world);           // team deathmatch against the AI
+let tdm = ai;                               // the match being played: the AI one, or an online one
 let where = 'range';       // 'range' or 'stadium'
 const inStadium = () => where === 'stadium';
 let padCd = 0, voidT = 0;
@@ -212,6 +214,7 @@ function fire(w) {
 
   const perDummy = new Map();
   let anyHit = false;
+  if (tdm.active && inStadium()) tdm.heard(tdm.you, camEye);      // the enemy hears your shots
   for (let i = 0; i < d.pellets; i++) {
     const a = Math.random() * Math.PI * 2;
     const r = spread * (d.pellets > 1 ? Math.sqrt(Math.random()) : Math.sqrt(Math.random()));
@@ -225,6 +228,7 @@ function fire(w) {
     }
     const end = hit ? hit.point : [0, 1, 2].map((k) => o[k] + dir[k] * left);
     if (i < 4) effects.tracer(muzzle, end);
+    if (i === 0 && online.active) online.myShot(muzzle, end);
     if (!hit) continue;
     const b = hit.box;
     if (b.tag === 'bot' && tdm.active && b.ref.team === tdm.myTeam.idx) continue;   // no friendly fire
@@ -248,6 +252,13 @@ function fire(w) {
   if (anyHit) stats.hits++;
   for (const [dummy, e] of perDummy) {
     if (!dummy.alive) continue;
+    if (dummy.remote) {
+      // another player online: tell them; they take the damage on their side
+      online.myHit(dummy.remote, e.dmg, e.head, camEye);
+      showHitmarker(false, e.head);
+      damageNumbers.push({ pos: [...e.point], amount: e.dmg, head: e.head, t: 0, el: null, drift: Math.random() - 0.5 });
+      continue;
+    }
     if (dummy.agent) dummy.agent.lastHitBy = tdm.you;      // deathmatch kill credit
     const dead = dummy.damage(e.dmg, e.dir);
     if (dead) stats.kills++;
@@ -403,6 +414,7 @@ function damagePlayer(amount, from, name) {
 }
 
 function die(name) {
+  if (online.active && tdm === online) online.myDeath(typeof player.lastHitBy === 'string' ? player.lastHitBy : null);
   player.hp = 0;
   player.dead = true;
   deathT = 3;
@@ -556,7 +568,7 @@ let lastCount = 0;
 function updateCombat(dt) {
   botMgr.update(dt, botHooks);
   if (tdm.active) {
-    tdm.update(dt, botHooks);
+    tdm.update(dt, tdm === online ? netHooks : botHooks);
     matchEvents();
   }
   if (botMgr.state === 'countdown') {
@@ -1016,6 +1028,47 @@ const mmk = new Matchmaking({
     startMatch(m);
   },
 });
+// ONLINE: host or join a room for 1v1 / 2v2 with friends
+const lobby = new Lobby(world, {
+  root: $('net'), arenas: ARENAS.map((a) => a.name), getClass: () => classLo.cls,
+  onClose: () => { menu.classList.remove('hidden'); renderMenu(); },
+  onStart: (info) => startOnline(info),
+  onHostLeft: () => { banner('HOST LEFT', 'MATCH OVER', 'bad', 2); setTimeout(() => endMatch(true), 1600); },
+});
+const online = lobby.online;
+const netHooks = {
+  player,
+  onShatter: (b) => botHooks.onShatter(b),
+  remoteShot: (f, e, r) => { effects.tracer(f, e); sounds.botShot(Math.hypot(player.pos[0] - f[0], player.pos[2] - f[2])); if (r) botHooks.whiz(f, e); },
+  remoteHit: (dmg, from, name, byId) => { player.lastHitBy = byId; damagePlayer(dmg, from, name); },
+  feed: (a, b, wid) => killFeed(a, WEAPONS[wid]?.name || 'GUN', b, false),
+  banner: (...a) => banner(...a),
+  weaponId: () => weapon().def.id,
+};
+function startOnline(info) {
+  if (ai.active) ai.stop();
+  tdm = online;
+  online.g = netHooks;
+  stadium = ARENAS[info.arena] || ARENAS[0];
+  match = { online: true, teams: info.teams.map((t) => ({ name: t.name, col: t.col, mine: t.mine })) };
+  setTeamsHud(match);
+  where = 'none';
+  classDirty = true;
+  menu.classList.add('hidden');
+  enterStadium();
+  batches.world = null;
+  resetGlass();
+  const sp = stadium.spawns[info.team];
+  player.spawn(sp.pos, sp.yaw);
+  Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5, lastHitBy: null });
+  $('matchend').classList.add('hidden');
+}
+$('mm-online').addEventListener('click', () => { sounds.unlock(); menu.classList.add('hidden'); lobby.show(); });
+addEventListener('keydown', (e) => {
+  if (!lobby.open || e.target?.tagName === 'INPUT') return;
+  if (e.code === 'Escape') { lobby.hide(); menu.classList.remove('hidden'); renderMenu(); }
+  e.stopImmediatePropagation();
+}, true);
 function setTeamsHud(m) {
   $('teams').replaceChildren(...m.teams.map((t) => {
     const d = document.createElement('div');
@@ -1029,6 +1082,7 @@ function setTeamsHud(m) {
 }
 // ---------- tdm match: start / end, events, HUD ----------
 function startMatch(m) {
+  if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
   resetGlass();
   walls.forEach((w) => w.reset());
@@ -1040,7 +1094,7 @@ function startMatch(m) {
   $('matchend').classList.add('hidden');
 }
 function endMatch(toMenu) {
-  tdm.stop();
+  if (tdm === online) { online.leave(); tdm = ai; } else tdm.stop();
   match = null;
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
@@ -1052,7 +1106,7 @@ function matchEvents() {
     else if (ev.type === 'kill') {
       const mine = ev.team === tdm.myTeam, left = 10 - ev.team.kills;
       if (ev.killer === tdm.you) { sounds.checkpoint?.(); banner('ELIMINATED', ev.victim.name, 'good', 1); }
-      if (left > 0 && left <= 3 && !tdm.over) banner(`${left} TO GO`, `${ev.team.name} ${mine ? '— YOUR TEAM' : ''}`.trim(), mine ? 'good' : 'bad', 1.4);
+      if (left > 0 && left <= 3 && !tdm.over && !ev.remoteScore) banner(`${left} TO GO`, `${ev.team.name} ${mine ? '— YOUR TEAM' : ''}`.trim(), mine ? 'good' : 'bad', 1.4);
     } else if (ev.type === 'end') { banner(`${ev.winner.name} WIN`, ev.winner === tdm.myTeam ? 'YOU ADVANCE' : 'ELIMINATED', ev.winner === tdm.myTeam ? 'good' : 'bad', 2.6); sounds.finish?.(); setTimeout(showMatchEnd, 2600); }
   }
   tdm.events.length = 0;
@@ -1733,4 +1787,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, tdm, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

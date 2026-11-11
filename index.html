@@ -460,6 +460,43 @@
   #teams .tm.mine { background: rgba(255,255,255,.92); color: var(--ink); }
   #teams .tm.mine span { color: #b07a00; }
 
+  /* ---------- online lobby ---------- */
+  #net { position: fixed; inset: 0; z-index: 40; color: #fff; font-family: var(--font); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box;
+    background: radial-gradient(ellipse at 50% 40%, rgba(30,30,36,.9), rgba(6,6,8,.97) 70%); overflow-y: auto; }
+  #net.hidden { display: none; }
+  .nt-box { width: min(760px, 100%); }
+  .nt-field { display: block; margin: 14px 0 6px; }
+  .nt-field small, .nt-code small { display: block; font: 800 11px var(--font); letter-spacing: .26em; opacity: .6; margin-bottom: 6px; }
+  #net input { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 10px 14px; background: rgba(255,255,255,.1); font: 800 22px var(--font); letter-spacing: .08em; text-transform: uppercase; }
+  #net input:focus { background: rgba(255,255,255,.16); box-shadow: inset 0 -3px 0 var(--red); }
+  .nt-cards { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 14px; }
+  .nt-card { background: rgba(255,255,255,.06); padding: 16px; }
+  .nt-card > b { display: block; font: 800 italic 26px var(--font); margin-bottom: 10px; }
+  .nt-seg { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .nt-seg button, .nt-copy, .nt-swap { all: unset; cursor: pointer; padding: 6px 12px; font: 800 13px var(--font); letter-spacing: .12em; background: rgba(255,255,255,.09); }
+  .nt-seg button.on { background: #fff; color: var(--ink); }
+  .nt-seg button:hover, .nt-copy:hover, .nt-swap:hover { background: var(--red); color: #fff; }
+  .nt-go { all: unset; cursor: pointer; display: block; text-align: center; margin-top: 10px; padding: 12px 22px; font: 800 italic 28px var(--font); background: var(--red); }
+  .nt-go:disabled { opacity: .35; cursor: not-allowed; }
+  .nt-codein { text-align: center; font-size: 34px !important; letter-spacing: .3em !important; }
+  .nt-back { all: unset; cursor: pointer; display: inline-block; margin-top: 18px; padding: 8px 26px; font: 800 italic 20px var(--font); letter-spacing: .1em; background: rgba(255,255,255,.1); }
+  .nt-back:hover { background: var(--red); }
+  .nt-code { display: flex; align-items: end; gap: 14px; margin: 12px 0 4px; }
+  .nt-code b { font: 800 italic 64px var(--font); letter-spacing: .14em; line-height: .9; color: var(--red); }
+  .nt-meta { font: 700 13px var(--font); letter-spacing: .22em; opacity: .7; margin: 8px 0 14px; }
+  .nt-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .nt-team { background: rgba(255,255,255,.06); border-top: 6px solid var(--t); padding: 12px 14px; }
+  .nt-team > b { display: block; font: 800 italic 24px var(--font); color: var(--t); margin-bottom: 8px; }
+  .nt-p { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.08); font: 800 16px var(--font); }
+  .nt-p span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nt-p.me span { color: #ffd04a; }
+  .nt-p i { font: 800 11px var(--font); font-style: normal; letter-spacing: .14em; opacity: .7; }
+  .nt-p.empty { opacity: .35; font-weight: 700; letter-spacing: .12em; font-size: 12px; }
+  .nt-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .nt-row .nt-go, .nt-row .nt-back { margin-top: 18px; }
+  .nt-wait { margin-top: 18px; font: 800 14px var(--font); letter-spacing: .2em; opacity: .7; }
+  .nt-msg { margin-top: 16px; font: 800 13px var(--font); letter-spacing: .2em; color: #ffd04a; }
+  @media (max-width: 760px) { .nt-cards, .nt-teams { grid-template-columns: 1fr; } .nt-code b { font-size: 44px; } }
   /* ---------- match HUD ---------- */
   #objective { position: absolute; top: 122px; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
   #objective b { display: block; white-space: nowrap; font: 800 italic 28px var(--font); letter-spacing: .02em; color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45), 0 0 18px rgba(0,0,0,.35); }
@@ -541,6 +578,7 @@
 </div>
 
 <div id="mmk" class="hidden"></div>
+<div id="net" class="hidden"></div>
 <div id="matchend" class="hidden"></div>
 
 <div id="menu">
@@ -561,13 +599,16 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.26</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.27</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
-        <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · CONTAINER SHIP</span>
+        <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
       </button>
       <button class="mm-card mm-range" id="play" type="button">
         <b>TEST RANGE</b><span id="mm-range-sub">GUNS · MOVEMENT · PARKOUR · BOTS</span><i>▶</i>
+      </button>
+      <button class="mm-card mm-range mm-online" id="mm-online" type="button">
+        <b>ONLINE</b><span>1V1 · 2V2 · PLAY WITH FRIENDS</span><i>▶</i>
       </button>
       <div id="locknote" class="hidden">Mouse lock isn't available here. For proper mouse look, open the game in its own browser tab.</div>
     </div>
@@ -669,36 +710,37 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.26-1794385638",
-  "./src/audio.js": "./src/audio.js?v=0.26-1794385638",
-  "./src/batch.js": "./src/batch.js?v=0.26-1794385638",
-  "./src/bench.js": "./src/bench.js?v=0.26-1794385638",
-  "./src/bots.js": "./src/bots.js?v=0.26-1794385638",
-  "./src/classes.js": "./src/classes.js?v=0.26-1794385638",
-  "./src/contestant.js": "./src/contestant.js?v=0.26-1794385638",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.26-1794385638",
-  "./src/course.js": "./src/course.js?v=0.26-1794385638",
-  "./src/effects.js": "./src/effects.js?v=0.26-1794385638",
-  "./src/elevator.js": "./src/elevator.js?v=0.26-1794385638",
-  "./src/input.js": "./src/input.js?v=0.26-1794385638",
-  "./src/main.js": "./src/main.js?v=0.26-1794385638",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.26-1794385638",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.26-1794385638",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.26-1794385638",
-  "./src/math.js": "./src/math.js?v=0.26-1794385638",
-  "./src/nav.js": "./src/nav.js?v=0.26-1794385638",
-  "./src/player.js": "./src/player.js?v=0.26-1794385638",
-  "./src/props.js": "./src/props.js?v=0.26-1794385638",
-  "./src/renderer.js": "./src/renderer.js?v=0.26-1794385638",
-  "./src/rig.js": "./src/rig.js?v=0.26-1794385638",
-  "./src/tdm.js": "./src/tdm.js?v=0.26-1794385638",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.26-1794385638",
-  "./src/weapon.js": "./src/weapon.js?v=0.26-1794385638",
-  "./src/weapons.js": "./src/weapons.js?v=0.26-1794385638",
-  "./src/world.js": "./src/world.js?v=0.26-1794385638"
+  "./src/attachments.js": "./src/attachments.js?v=0.27-1794389855",
+  "./src/audio.js": "./src/audio.js?v=0.27-1794389855",
+  "./src/batch.js": "./src/batch.js?v=0.27-1794389855",
+  "./src/bench.js": "./src/bench.js?v=0.27-1794389855",
+  "./src/bots.js": "./src/bots.js?v=0.27-1794389855",
+  "./src/classes.js": "./src/classes.js?v=0.27-1794389855",
+  "./src/contestant.js": "./src/contestant.js?v=0.27-1794389855",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.27-1794389855",
+  "./src/course.js": "./src/course.js?v=0.27-1794389855",
+  "./src/effects.js": "./src/effects.js?v=0.27-1794389855",
+  "./src/elevator.js": "./src/elevator.js?v=0.27-1794389855",
+  "./src/input.js": "./src/input.js?v=0.27-1794389855",
+  "./src/main.js": "./src/main.js?v=0.27-1794389855",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.27-1794389855",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.27-1794389855",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.27-1794389855",
+  "./src/math.js": "./src/math.js?v=0.27-1794389855",
+  "./src/nav.js": "./src/nav.js?v=0.27-1794389855",
+  "./src/net.js": "./src/net.js?v=0.27-1794389855",
+  "./src/player.js": "./src/player.js?v=0.27-1794389855",
+  "./src/props.js": "./src/props.js?v=0.27-1794389855",
+  "./src/renderer.js": "./src/renderer.js?v=0.27-1794389855",
+  "./src/rig.js": "./src/rig.js?v=0.27-1794389855",
+  "./src/tdm.js": "./src/tdm.js?v=0.27-1794389855",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.27-1794389855",
+  "./src/weapon.js": "./src/weapon.js?v=0.27-1794389855",
+  "./src/weapons.js": "./src/weapons.js?v=0.27-1794389855",
+  "./src/world.js": "./src/world.js?v=0.27-1794389855"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.26-1794385638"></script>
+<script type="module" src="src/main.js?v=0.27-1794389855"></script>
 </body>
 </html>

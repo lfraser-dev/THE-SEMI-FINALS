@@ -351,4 +351,101 @@ export const WEAPONS = {
   },
 };
 
-export const CASE_ORDER = ['ar', 'smg', 'shotgun', 'sniper', 'lmg', 'pistol'];
+// ---------------------------------------------------------------- variants
+// New guns built on an existing one's model and animations (its `style`), with their own stats and look.
+const clone = (o) => JSON.parse(JSON.stringify(o));
+function variant(id, base, stats, edit) {
+  const w = clone(WEAPONS[base]);
+  Object.assign(w, stats, { id, style: base });
+  if (edit) edit(w.parts, w);
+  WEAPONS[id] = w;
+}
+const each = (parts, names, fn) => parts.forEach((p) => { if (names.includes(p.name)) fn(p); });
+const BLUE = [0.15, 0.55, 1];
+const OLIVE = [0.33, 0.35, 0.24];
+
+// BR-3: three-round burst rifle. Tap to fire a burst.
+variant('burst', 'ar', {
+  name: 'BR-3', type: 'BURST RIFLE', auto: false, burst: 3, burstGap: 0.3, rpm: 950, mag: 30, dmg: 23, headMult: 2,
+  reload: 2.0, reloadEmpty: 2.5,
+  spread: { base: 0.003, move: 0.016, air: 0.03, bloom: 0.004, bloomMax: 0.025, ads: 0.22 },
+  recoil: { up: 0.009, side: 0.005, vm: 0.9 },
+  sound: { freq: 2900, thump: 160, gain: 0.5 },
+}, (parts) => {
+  each(parts, ['receiver', 'handguard', 'stock', 'hgCap'], (p) => { p.col = WHITE; p.m = 'paint'; });
+  each(parts, ['stripe', 'hgStripe'], (p) => { p.col = BLUE; });
+  each(parts, ['mag', 'magRib', 'magBase', 'magWindow'], (p) => { p.col = DARK2; });
+});
+
+// FC-308: semi-auto marksman rifle. Long barrel, straight mag, hits hard.
+variant('dmr', 'ar', {
+  name: 'FC-308', type: 'MARKSMAN RIFLE', auto: false, rpm: 330, mag: 15, dmg: 44, headMult: 2.1,
+  reload: 2.2, reloadEmpty: 2.7, muzzle: [0, 0.012, -0.69],
+  spread: { base: 0.002, move: 0.022, air: 0.04, bloom: 0.012, bloomMax: 0.03, ads: 0.15 },
+  recoil: { up: 0.026, side: 0.006, vm: 1.6 }, adsZoom: 0.6, adsSpeed: 11,
+  sound: { freq: 2000, thump: 95, gain: 0.75, dur: 0.3 },
+}, (parts) => {
+  each(parts, ['barrel'], (p) => { p.s[2] = 0.36; p.c[2] = -0.49; });
+  each(parts, ['muzzle', 'mzSlot', 'mzCrown', 'gasBlock'], (p) => { p.c[2] -= 0.14; });
+  each(parts, ['receiver', 'lower', 'stock', 'handguard'], (p) => { p.col = OLIVE; });
+  each(parts, ['mag', 'magRib', 'magBase', 'magWindow'], (p) => { p.rx = 0.05; p.col = BLACK; if (p.name === 'mag') { p.s[1] = 0.11; p.c[1] = -0.09; } if (p.name === 'magBase') p.c[1] = -0.148; });
+});
+
+// MP-9: full-auto machine pistol with an extended mag. Shreds up close.
+variant('mp', 'pistol', {
+  name: 'MP-9', type: 'MACHINE PISTOL', auto: true, rpm: 1100, mag: 24, dmg: 11, headMult: 1.6,
+  reload: 1.4, reloadEmpty: 1.7, magPos: [0, -0.135, 0.07],
+  spread: { base: 0.012, move: 0.012, air: 0.018, bloom: 0.004, bloomMax: 0.035, ads: 0.45 },
+  recoil: { up: 0.006, side: 0.01, vm: 0.8 },
+  sound: { freq: 3600, thump: 200, gain: 0.4 },
+}, (parts) => {
+  each(parts, ['slide', 'slideTop'], (p) => { p.col = WHITE; p.m = 'paint'; });
+  each(parts, ['stripe'], (p) => { p.col = BLUE; });
+  each(parts, ['mag'], (p) => { p.s[1] = 0.135; p.c[1] = -0.135; });
+  each(parts, ['magBase'], (p) => { p.c[1] = -0.207; });
+});
+
+// R-357: six-shot revolver. Slow, heavy, two body shots and a bit.
+variant('revolver', 'pistol', {
+  name: 'R-357', type: 'REVOLVER', auto: false, rpm: 140, mag: 6, dmg: 58, headMult: 1.8, slide: false,
+  reload: 2.3, reloadEmpty: 2.3, muzzle: [0, 0.035, -0.22], magPos: [0, 0.022, -0.005],
+  spread: { base: 0.003, move: 0.014, air: 0.025, bloom: 0.02, bloomMax: 0.04, ads: 0.3 },
+  recoil: { up: 0.05, side: 0.012, vm: 2.4 },
+  sound: { freq: 1500, thump: 75, gain: 0.85, dur: 0.32 },
+}, (parts) => {
+  for (let i = parts.length - 1; i >= 0; i--) if (['mag', 'magBase', 'serr', 'port', 'magRelease', 'slideStop'].includes(parts[i].name)) parts.splice(i, 1);
+  each(parts, ['slide', 'slideTop', 'frame'], (p) => { p.col = STEEL; p.m = 'steel'; delete p.bolt; });
+  each(parts, ['grip', 'gripPanel', 'gripPanelL'], (p) => { p.col = WOOD; p.m = 'wood'; });
+  each(parts, ['front'], (p) => { p.c[2] = -0.2; });
+  // the slide becomes a short top strap behind the cylinder; a barrel and lug run forward of it
+  each(parts, ['slide'], (p) => { p.s[2] = 0.08; p.c[2] = 0.05; });
+  each(parts, ['slideTop'], (p) => { p.s[2] = 0.27; p.c[2] = -0.045; });
+  each(parts, ['barrelHood'], (p) => { p.c[2] = -0.215; });
+  parts.push(
+    C('barrelLong', [0, 0.034, -0.13], 0.024, 0.17, STEEL, { m: 'steel' }),
+    P('underLug', [0, 0.016, -0.135], [0.016, 0.018, 0.15], STEEL, { m: 'steel' }),
+    C('mag', [0, 0.024, -0.01], 0.06, 0.06, DARK, { m: 'metal', mag: true }),
+    ...[0, 1, 2, 3, 4, 5].map((k) => P('flute', [Math.cos(k * 1.047 + 0.52) * 0.029, 0.024 + Math.sin(k * 1.047 + 0.52) * 0.029, -0.01], [0.007, 0.007, 0.05], DARK2, { mag: true, grp: 'mag' })),
+    P('hammer', [0, 0.05, 0.07], [0.008, 0.02, 0.012], STEEL, { m: 'steel', bolt: true }),
+  );
+});
+
+// AS-20: magazine-fed automatic shotgun.
+variant('autoshotgun', 'shotgun', {
+  name: 'AS-20', type: 'AUTO SHOTGUN', auto: true, rpm: 210, mag: 8, dmg: 8, headMult: 1.4, pellets: 8,
+  action: undefined, reloadStyle: 'mag', reload: 2.4, reloadEmpty: 2.9, magPos: [0, -0.1, -0.02],
+  spread: { base: 0.06, move: 0.012, air: 0.018, bloom: 0.006, bloomMax: 0.02, ads: 0.8 },
+  recoil: { up: 0.035, side: 0.014, vm: 1.8 },
+  sound: { freq: 1400, thump: 85, gain: 0.8, dur: 0.24 },
+}, (parts) => {
+  for (let i = parts.length - 1; i >= 0; i--) if (['shell', 'loadPort', 'portRim', 'saddle'].includes(parts[i].name)) parts.splice(i, 1);
+  for (const p of parts) if (p.pump) delete p.pump;
+  each(parts, ['pump', 'pumpRidge', 'stock', 'stockComb', 'grip'], (p) => { p.col = DARK; p.m = 'poly'; });
+  each(parts, ['receiver'], (p) => { p.col = DARK2; });
+  parts.push(
+    P('mag', [0, -0.1, -0.02], [0.05, 0.12, 0.09], BLACK, { m: 'poly', mag: true }),
+    P('magBase', [0, -0.165, -0.02], [0.056, 0.012, 0.096], RED, { m: 'poly', mag: true, grp: 'mag' }),
+  );
+});
+
+export const CASE_ORDER = ['ar', 'burst', 'dmr', 'smg', 'mp', 'shotgun', 'autoshotgun', 'sniper', 'lmg', 'pistol', 'revolver'];

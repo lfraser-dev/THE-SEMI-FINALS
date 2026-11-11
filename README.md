@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.26: the semi-finals are now team deathmatch (4v4, first to 10 kills) on three small arenas built like the test range: BLOCKYARD, THE SPLIT and TWIN TOWERS.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
+**Build 0.27: ONLINE mode — host or join a room with a code and play 1v1 or 2v2 against friends. Five new guns (BR-3 burst rifle, FC-308 marksman rifle, MP-9 machine pistol, R-357 revolver, AS-20 auto shotgun), smarter AI, and TWIN TOWERS is now HIGH GROUND.** The semi-finals are 4v4 team deathmatch against AI (first to 10) on BLOCKYARD, THE SPLIT and HIGH GROUND. The Test Range, Parkour Course and underground bot arena are still there for warming up.
 
 ## Run it
 
@@ -155,7 +155,7 @@ Three small walled arenas in the test range's style: white grid blocks, charcoal
 
 - **BLOCKYARD** (68 × 48 m): a raised centre platform with stairs on both sides and cover on top, surrounded by cubes, pillars and walls.
 - **THE SPLIT** (72 × 52 m): a dividing wall down the middle with three gaps (the centre one half-blocked), a hut on each side with doors front and back, and a side deck with stairs.
-- **TWIN TOWERS** (80 × 52 m): a 4.2 m tower with parapets near each spawn, a low side deck each, and staggered trench walls and big rounded blocks through the middle.
+- **HIGH GROUND** (80 × 52 m): a 4.2 m lookout with parapets near each spawn, a low side deck each, and staggered trench walls and big rounded blocks through the middle.
 
 Matchmaking picks one at random. The bots can path anywhere, including up the stairs onto every platform.
 
@@ -165,7 +165,33 @@ PLAY → matchmaking → loadout (30 s) → team intro → a 4v4 team deathmatch
 
 On the HUD: both teams' kill counts along the top and the score (in the leading team's colour) underneath. Teammates always have their name and health shown; enemies only when you can see them. Kills show in the kill feed.
 
-**The AI** hunts the nearest enemy, with each squad member spreading out around the target instead of stacking up. They react after a short delay, aim better the longer they track you, strafe while shooting, duck into cover between bursts, stick with a target and finish off the wounded. When badly hurt they fall back to a teammate and heal after 5 seconds out of the fight. Moving fast, sliding, jumping and dashing all make you harder to hit.
+**The AI (build 0.27)** no longer knows where you are. A team only knows what its members have seen or heard: sightings are called out to the whole team instantly, gunfire gives away your rough position to any enemy within ~38 m (vaguer the further away), and getting shot reveals the shooter. Intel goes stale after 9 seconds.
+- **Roles:** two bots push the middle and one flanks down each side, swinging wide of the last known position. Heavies anchor on raised platforms on their half and only leave to chase someone close.
+- **Fighting:** a short reaction delay (less than half as long if you appear where they were already watching, since they pre-aim last known positions), aim that improves the longer they track you (and learns a predictable strafe), focus fire on whoever their team is shooting, strafing while firing, ducking into cover between bursts and while reloading.
+- **Magazines:** bots run dry and take about 2 seconds to reload, which is your window.
+- **Staying alive:** badly hurt bots fall back to a teammate and heal after 5 seconds out of the fight; when their team is outnumbered by two or more they hold position instead of charging in.
+
+## Online (build 0.27)
+
+Home → **ONLINE**. Pick a name, then:
+- **Host a room:** choose **1V1** or **2V2** and an arena (or random), press HOST, and send the 5-character room code to your friends. In 2v2 the host can swap players between teams (⇄). START MATCH once both teams have someone.
+- **Join a room:** type the code and press JOIN.
+
+It's team deathmatch, first to 10 kills, with your own class and loadout. Rooms run peer-to-peer over WebRTC: [PeerJS](https://peerjs.com)'s free public server only brokers the handshake, and the host relays game traffic between players. Each player simulates their own movement and reports position about 20 times a second, plus their shots (for tracers) and hits (the player who was hit takes the damage). The host keeps the score. There's no anti-cheat; play with people you trust. Very strict networks (some school or work Wi-Fi) can block WebRTC.
+
+For testing, add `?net=local` to the URL and two tabs in the same browser can play each other without the internet.
+
+## Guns (build 0.27)
+
+| Gun | Type | Class | Notes |
+| --- | --- | --- | --- |
+| BR-3 | Burst rifle | Medium | Three-round bursts (tap to fire one), 23 damage, tight spread |
+| FC-308 | Marksman rifle | Medium | Semi-auto, 44 damage, 15 rounds, long barrel, 0.6× zoom |
+| MP-9 | Machine pistol | Light | 1,100 RPM, 24-round extended mag |
+| R-357 | Revolver | Light, Heavy | Six shots, 58 damage, heavy recoil |
+| AS-20 | Auto shotgun | Heavy | Mag-fed, 8 pellets, 210 RPM |
+
+They're built on the existing guns' models and animations, take the same attachments as the gun they're based on, and sit in the test range's weapon wall, which now holds 11 cases.
 
 ## Performance (build 0.25)
 
@@ -300,7 +326,8 @@ src/props.js          dummies, destructible walls, weapon cases, 7-seg signs
 src/audio.js          procedural sound effects
 src/maps/testRange.js the test range (data + build function), incl. the parkour annex
 src/maps/arenas.js    the three semi-finals arenas (layouts as data + a shared builder)
-src/tdm.js            team deathmatch: scoring, respawns, team AI
+src/tdm.js            team deathmatch: scoring, respawns, team AI (intel, roles, reloads)
+src/net.js            online rooms: transports (PeerJS / BroadcastChannel), lobby, remote players, sync
 src/nav.js            bot navigation: walkable grid per level, stair links, A*
 src/matchmaking.js    PLAY flow: matchmaking, 30 s loadout pick, team intro
 ```

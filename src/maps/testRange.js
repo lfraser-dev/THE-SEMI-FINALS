@@ -64,7 +64,7 @@ export default {
       band(H - 0.35, H, 0.25, { color: CHAR });
       // pilasters every 8m
       for (let t = -S + 4; t <= S - 4; t += 8) {
-        if (w.a === 0 && w.fixed === S && Math.abs(t) < 17) continue; // keep the weapon wall clear
+        if (w.a === 0 && w.fixed === S && Math.abs(t) < 30) continue; // keep the weapon wall clear
         if (east && t > GZ0 - 0.5 && t < GZ1 + 0.5) continue;           // keep the doorway clear
         const min = [0, 0, 0], max = [0, H, 0];
         const across = w.a === 0 ? 2 : 0;
@@ -148,8 +148,8 @@ export default {
     add(boxAt(-14.2, 0, -4, 0.4, 1.3, 6));
 
     // ---------------- weapon wall (south) ----------------
-    deco([-16.5, 0, 28.6], [16.5, 0.02, 31.8], { color: [0.3, 0.31, 0.34], edges: false });
-    deco([-16.5, 0, 28.45], [16.5, 0.03, 28.6], { color: RED, emissive: 0.7, edges: false });
+    deco([-29.5, 0, 28.6], [29.5, 0.02, 31.8], { color: [0.3, 0.31, 0.34], edges: false });
+    deco([-29.5, 0, 28.45], [29.5, 0.03, 28.6], { color: RED, emissive: 0.7, edges: false });
     // spawn pad
     deco([-1.5, 0, 24.5], [1.5, 0.02, 27.5], { color: LANE, edges: true });
 
@@ -159,7 +159,7 @@ export default {
   },
 
   // weapon cases along the south wall (the slot number is shown above each)
-  cases: { z: 31.15, xs: [-15, -10, -5, 5, 10, 15] },
+  cases: { z: 31.15, xs: [-27.6, -23, -18.4, -13.8, -9.2, -4.6, 4.6, 9.2, 13.8, 18.4, 23] },
   bench: { pos: [0, 0, 30.6] },            // gunsmith workbench (front edge), in the middle of the weapon stands
 
   dummies: [

@@ -7,6 +7,8 @@ import { compose, mat4, clamp } from './math.js';
 
 export const GOAL = 10;
 const BOT_RESPAWN = 4;
+const MAGS = { rifle: 30, rusher: 32, heavy: 60 };
+const INTEL_TTL = 9;       // seconds a sighting / sound stays useful
 const TYPE_OF = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
@@ -40,6 +42,10 @@ class Agent {
     this.stuckT = 0; this.lastPos = [...pos];
     this.strafe = Math.random() < 0.5 ? 1 : -1;
     this.dead = false;
+    this.mag = MAGS[TYPE_OF[this.cls] || 'rifle']; this.ammo = this.mag; this.reloadT = 0;
+    // a role for the squad: two push the middle, one flanks each side; heavies like to hold high ground
+    this.role = this.cls === 'heavy' && this.co.map.nav.levels.length > 1 ? 'anchor' : ['push', 'flankL', 'push', 'flankR'][this.slot % 4];
+    this.facing = null;     // where I'm watching (last known enemy position), for pre-aiming
   }
 
   get pos() { return this.bot.pos; }
@@ -102,7 +108,11 @@ class Agent {
       this.seg = null;
     }
 
-    // ---- who am I shooting? the closest threat I can see (sticking with my current target, finishing off the wounded)
+    // ---- reloading: a few seconds to top up, spent getting into cover
+    if (this.reloadT > 0) { this.reloadT -= dt; if (this.reloadT <= 0) this.ammo = this.mag; }
+
+    // ---- who am I shooting? the closest threat I can see (sticking with my current target, finishing off the wounded,
+    //      helping a teammate who's already on someone). Anything I see gets called out to the team.
     this.targetT -= dt;
     if (this.targetT <= 0) {
       this.targetT = 0.22 + Math.random() * 0.12;
@@ -117,10 +127,21 @@ class Agent {
         if (e === prev) score -= 6;                                  // stick with a target
         if (!e.isPlayer && e.hpFrac < 0.4) score -= 5;                // finish off the wounded
         if (score > best) continue;
+        if (co.focus(this.team) === e) score -= 4;                     // focus fire
         if (!b.canSee(b.eye(), e.eye(), e.isPlayer ? null : e.bot)) continue;
         best = score; this.target = e;
       }
-      if (this.target !== prev) { this.react = 0.22 + Math.random() * 0.3; this.track = 0; this.cover = null; }
+      if (this.target) co.spot(this.team, this.target, this.target.pos, true);
+      if (this.target !== prev && this.target) {
+        // quicker on the draw if they show up where I was already watching
+        let react = 0.22 + Math.random() * 0.3;
+        if (this.facing) {
+          const a1 = Math.atan2(this.facing[0] - b.pos[0], this.facing[2] - b.pos[2]), a2 = Math.atan2(this.target.pos[0] - b.pos[0], this.target.pos[2] - b.pos[2]);
+          let da = Math.abs(a1 - a2); if (da > Math.PI) da = 2 * Math.PI - da;
+          if (da < 0.35) react *= 0.45;
+        }
+        this.react = react; this.track = 0; this.cover = null;
+      } else if (!this.target) this.cover = null;
     }
     const tgt = this.target && this.target.alive ? this.target : null;
     const tDist = tgt ? Math.hypot(tgt.pos[0] - b.pos[0], tgt.pos[2] - b.pos[2]) : 0;
@@ -142,7 +163,7 @@ class Agent {
       return st;
     };
     if (tgt && tDist < hi * 1.5) {
-      const wantCover = this.pauseCd > 0.35 || this.hpFrac < 0.5;
+      const wantCover = this.pauseCd > 0.35 || this.hpFrac < 0.5 || this.reloadT > 0;
       if (wantCover && !this.cover) this.cover = co.findCover(this, tgt) || { none: true };
       if (!wantCover) this.cover = null;
       if (this.cover && !this.cover.none) {
@@ -168,7 +189,10 @@ class Agent {
 
     // ---- face the target, or where I'm going
     let want = b.yaw;
+    const intel = tgt ? null : co.nearestIntel(this);
+    this.facing = tgt ? [...tgt.pos] : intel ? intel.pos : null;
     if (tgt) want = Math.atan2(-(tgt.pos[0] - b.pos[0]), -(tgt.pos[2] - b.pos[2]));
+    else if (intel && dist2(intel.pos, b.pos) < 30 && this.goal?.mode !== 'retreat') want = Math.atan2(-(intel.pos[0] - b.pos[0]), -(intel.pos[2] - b.pos[2]));   // pre-aim where they were
     else if (this.path && this.pi < this.path.length) { const p = this.path[this.pi]; if (dist2(p, b.pos) > 0.2) want = Math.atan2(-(p[0] - b.pos[0]), -(p[2] - b.pos[2])); }
     let dy = want - b.yaw;
     while (dy > Math.PI) dy -= Math.PI * 2;
@@ -182,13 +206,14 @@ class Agent {
     // ---- shoot in bursts, after a moment to react; not from inside cover
     this.shotCd -= dt; this.pauseCd -= dt;
     const inCover = this.cover && !this.cover.none && dist2(b.pos, this.cover.pos) < 0.4;
-    if (tgt && tDist < 48 && Math.abs(dy) < 0.45 && this.react <= 0 && !inCover) {
+    if (tgt && tDist < 48 && Math.abs(dy) < 0.45 && this.react <= 0 && !inCover && this.reloadT <= 0) {
       if (this.burst <= 0 && this.pauseCd <= 0) { const [a, c] = b.t.burst; this.burst = a + Math.floor(Math.random() * (c - a + 1)); }
       if (this.burst > 0 && this.shotCd <= 0) {
         this.shotCd = 60 / b.t.rpm;
         this.burst--;
         if (this.burst === 0) { const [p0, p1] = b.t.pause; this.pauseCd = p0 + Math.random() * (p1 - p0); }
         this.fire(tgt, tDist, g);
+        if (--this.ammo <= 0) { this.reloadT = 2 + Math.random() * 0.6; this.burst = 0; }
       }
     } else this.burst = 0;
 
@@ -219,13 +244,14 @@ class Agent {
 
   fire(tgt, dist, g) {
     const b = this.bot, from = b.muzzle();
+    this.co.heard(this, from);
     b.muzzleT = 0.05; b.recoil = 1;
     const aim = [tgt.pos[0], tgt.pos[1] + 1.2, tgt.pos[2]];
     let chance;
     if (tgt.isPlayer) {
       const pl = g.player, hs = Math.hypot(pl.vel[0], pl.vel[2]);
       chance = (0.42 - Math.max(0, dist - 8) * 0.016) * b.t.acc * 0.85;
-      chance -= Math.min(hs / 14, 1) * 0.3;
+      chance -= Math.min(hs / 14, 1) * 0.3 * (this.track > 1 && !pl.dash ? 0.65 : 1);   // a long track learns your strafe
       if (pl.sliding) chance -= 0.1;
       if (!pl.grounded) chance -= 0.08;
       if (pl.dash || pl.grapple?.phase === 'pull') chance -= 0.2;
@@ -282,7 +308,9 @@ export class Deathmatch {
       get pos() { return player.pos; }, get alive() { return !player.dead; }, eye: () => player.eye(),
     };
     this.agents = [];
+    for (const t of this.teams) t.intel = new Map();     // enemy → { pos, t, seen }
     match.teams.forEach((t, i) => t.players.forEach((p, k) => { if (!p.you) this.agents.push(new Agent(this, this.teams[i], p, k)); }));
+    this.anchors = this.highSpots();
     this.over = null;
     this.youDead = false;
     this.t = 0;
@@ -313,23 +341,90 @@ export class Deathmatch {
 
   onDeath(a) { a.deaths = (a.deaths || 0) + 1; this.score(a, a.lastHitBy || null); a.lastHitBy = null; }
 
-  // ---- what an AI should do: hunt the nearest enemy, spread round them so the squad doesn't stack up
+  // ---- what the team knows: sightings (shared instantly, like callouts) and gunfire heard nearby
+  spot(team, e, pos, seen) {
+    if (team === e.team) return;
+    team.intel.set(e, { pos: [...pos], t: this.t, seen });
+  }
+
+  heard(shooter, from) {
+    for (const t of this.teams) {
+      if (t === shooter.team) continue;
+      for (const a of this.agents) {
+        if (a.team !== t || !a.alive) continue;
+        const d = dist2(a.pos, from);
+        if (d < 38) {
+          const n = d * 0.12;      // the further away, the vaguer
+          this.spot(t, shooter, [from[0] + (Math.random() - 0.5) * n, shooter.pos[1], from[2] + (Math.random() - 0.5) * n], false);
+          break;
+        }
+      }
+    }
+  }
+
+  // the freshest-and-closest thing my team knows about
+  nearestIntel(a) {
+    let best = null, bs = Infinity;
+    for (const [e, k] of a.team.intel) {
+      if (!e.alive || this.t - k.t > INTEL_TTL) { if (!e.alive) a.team.intel.delete(e); continue; }
+      const sc = dist2(k.pos, a.pos) + (this.t - k.t) * 3;
+      if (sc < bs) { bs = sc; best = { e, pos: k.pos, age: this.t - k.t }; }
+    }
+    return best;
+  }
+
+  // who most of my team is shooting
+  focus(team) {
+    const n = new Map();
+    for (const a of this.agents) if (a.team === team && a.alive && a.target?.alive) n.set(a.target, (n.get(a.target) || 0) + 1);
+    let best = null, bn = 1;
+    for (const [e, c] of n) if (c > bn) { bn = c; best = e; }
+    return best;
+  }
+
+  // nav points on raised platforms, for anchors to hold
+  highSpots() {
+    const nav = this.nav, out = [];
+    if (!nav?.levels || nav.levels.length < 2) return out;
+    for (let n = 0; n < nav.N; n++) if (nav.Y[n] > nav.levels[0] + 1) out.push(n);
+    return out;
+  }
+
+  // ---- what an AI should do
   goalFor(a) {
     if (this.over) return { pos: a.pos, mode: 'idle' };
-    let best = null, bd = Infinity;
-    for (const e of this.entities()) {
-      if (e.team === a.team || !e.alive) continue;
-      const d = dist2(e.pos, a.pos) + (e.isPlayer ? -4 : 0);
-      if (d < bd) { bd = d; best = e; }
+    const o = this.map.origin, W = this.map.W || 30, D = this.map.D || 20;
+    const myEnd = a.team.spawn.pos[0] < o[0] ? -1 : 1;
+    const intel = this.nearestIntel(a);
+    const mates = this.agents.filter((m) => m.team === a.team && m.alive).length + (this.you.team === a.team && this.you.alive ? 1 : 0);
+    const foes = this.entities().filter((e) => e.team !== a.team && e.alive).length;
+    // outnumbered: hold a defensive spot near my team instead of running in
+    if (foes - mates >= 2 && intel && dist2(intel.pos, a.pos) < 24) return { pos: [...a.pos], mode: 'hold', r: 3 };
+    // anchors hold the high ground on their half, and only leave it to chase something close
+    if (a.role === 'anchor' && this.anchors.length && !(intel && intel.age < 3 && dist2(intel.pos, a.pos) < 14)) {
+      if (a.anchorN == null || Math.random() < 0.01) {
+        const mine = this.anchors.filter((n) => Math.sign(this.nav.X[n] - o[0]) === myEnd || Math.abs(this.nav.X[n] - o[0]) < 6);
+        const list = mine.length ? mine : this.anchors;
+        a.anchorN = list[Math.floor(Math.random() * list.length)];
+      }
+      return { pos: this.nav.point(a.anchorN), mode: 'anchor', r: 1.5 };
     }
-    if (!best) {
-      // nobody to fight: push to the middle
-      const o = this.map.origin;
-      return { pos: [o[0] + (a.slot - 1.5) * 4, o[1], o[2] + (a.slot - 1.5) * 5], mode: 'push', r: 3 };
+    if (intel) {
+      // go where they were last seen; flankers swing wide of it, pushers spread round it
+      const p = intel.pos, far = dist2(p, a.pos) > 16;
+      if (far && (a.role === 'flankL' || a.role === 'flankR')) {
+        const side = (a.role === 'flankL' ? -1 : 1) * myEnd;
+        const fz = clamp(p[2] + side * 10, o[2] - D + 2, o[2] + D - 2);
+        return { pos: [p[0] - myEnd * 4, p[1], fz], mode: 'flank', r: 3 };
+      }
+      const ang = (a.slot / 4) * Math.PI * 2 + a.team.idx * 0.8, r = far ? 5 : 2.5;
+      return { pos: [p[0] + Math.cos(ang) * r, p[1], p[2] + Math.sin(ang) * r], mode: intel.age < 2 ? 'hunt' : 'search', r: 2.5 };
     }
-    const ang = (a.slot / 4) * Math.PI * 2 + a.team.idx * 0.8;
-    const r = bd > 20 ? 6 : 3;
-    return { pos: [best.pos[0] + Math.cos(ang) * r, best.pos[1], best.pos[2] + Math.sin(ang) * r], mode: 'hunt', r: 2.5 };
+    // nothing known: sweep forward down my lane toward their end
+    const lane = a.role === 'flankL' ? -0.6 : a.role === 'flankR' ? 0.6 : (a.slot % 2 ? 0.2 : -0.2);
+    const push = clamp(this.t * 0.012, 0, 1);
+    const x = o[0] - myEnd * W * (0.1 + 0.45 * push);
+    return { pos: [x, o[1], o[2] + lane * D * myEnd], mode: 'sweep', r: 3 };
   }
 
   // a nearby spot the target can't see from (for ducking out of a fight between bursts)
@@ -367,6 +462,8 @@ export class Deathmatch {
   update(dt, g) {
     if (!this.active) return;
     this.t += dt;
+    // being shot tells you where the shooter is
+    for (const a of this.agents) if (a.alive && a.lastHitBy && a.hurtT === 0) this.spot(a.team, a.lastHitBy, a.lastHitBy.pos, false);
     for (const a of this.agents) a.update(dt, g);
     // your own deaths count too
     if (!this.you.alive && !this.youDead) { this.youDead = true; this.you.deaths++; this.score(this.you, this.player.lastHitBy || null); this.player.lastHitBy = null; }

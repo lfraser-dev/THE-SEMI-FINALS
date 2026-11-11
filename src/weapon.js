@@ -115,7 +115,7 @@ export class Weapon {
   }
 
   drawEvents(q0, q1, ctx) {
-    for (const [at, snd, jolt] of DRAW_BEATS[this.def.id] || []) {
+    for (const [at, snd, jolt] of DRAW_BEATS[this.def.style || this.def.id] || []) {
       if (!crossed(q0, q1, at)) continue;
       if (snd === 'click') ctx.sounds?.click(2600, 0.3, 4); else ctx.sounds?.[snd]?.();
       if (jolt) this.events.push({ type: 'jolt', amt: jolt });
@@ -126,7 +126,7 @@ export class Weapon {
   update(dt, input, player, ctx) {
     const d = this.def;
     const eq0 = this.equipT;
-    this.equipT = Math.min(1, this.equipT + dt / (DRAW_TIME[d.id] || 0.5));
+    this.equipT = Math.min(1, this.equipT + dt / (DRAW_TIME[d.style || d.id] || 0.5));
     if (eq0 < 1) this.drawEvents(eq0, this.equipT, ctx);
 
     const tr = player.trav;
@@ -154,7 +154,13 @@ export class Weapon {
     this.sinceShot += dt;
     if (input.fireHit) this.queued = 0.18; // click buffer for semi-autos
     this.queued -= dt;
-    const trigger = d.auto ? input.fireDown : this.queued > 0;
+    let trigger = d.auto ? input.fireDown : this.queued > 0;
+    // burst guns: a click starts a burst, which then fires itself out
+    if (d.burst) {
+      if (trigger && !(this.burstLeft > 0) && this.cool <= 0 && this.ammo > 0 && !this.reload) this.burstLeft = d.burst;
+      if (this.ammo <= 0 || this.reload) this.burstLeft = 0;
+      trigger = this.burstLeft > 0 || (trigger && this.ammo <= 0);
+    }
 
     if (trigger && this.reload?.shell && this.ammo > 0) this.reload.interrupt = true;
     // the show-off end of a draw never gets in the way: shoot or aim and it snaps straight to ready
@@ -196,6 +202,7 @@ export class Weapon {
     const d = this.def;
     this.queued = 0;
     this.cool = Math.max(this.cool, 0) + 60 / d.rpm;
+    if (d.burst) { this.burstLeft--; if (this.burstLeft <= 0) this.cool += d.burstGap; }
     this.ammo--;
     this.sinceShot = 0;
     ctx.fire(this);
@@ -333,7 +340,7 @@ export class Weapon {
     const fl = [0, 0, 0, 0, 0, 0];
     let magSpin = 0, shellSpin = 0;
     let shine = -1;                                 // 0..1 = a highlight sweeping from the stock to the muzzle
-    const heavy = d.id === 'lmg', pistol = !!d.slide;
+    const heavy = (d.style || d.id) === 'lmg', pistol = !!d.slide || (d.style || d.id) === 'pistol';
 
     const r = this.reload;
     if (r && !r.shell) {
@@ -436,7 +443,7 @@ export class Weapon {
       const q = this.equipT;
       const settle = (t0, amp, f = 55, k = 18) => { const u = q - t0; return u > 0 ? Math.sin(u * f) * Math.exp(-u * k) * amp : 0; };
       const TAU = Math.PI * 2;
-      const style = d.id;
+      const style = d.style || d.id;
       if (style === 'pistol') {
         // flipped up from the hip with two flips and a roll, caught, gunslinger twirl, press check
         const up = seg(q, 0, 0.32), fall = seg(q, 0.32, 0.5);
