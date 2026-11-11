@@ -39,40 +39,89 @@ function loadPeerJS() {
   return peerLib;
 }
 
+// How players find each other through firewalls: STUN works out each player's public address; when a network won't
+// let two players talk directly (common on school, work and mobile networks), TURN relays the traffic instead.
+const ICE = {
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] },
+    { urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+      username: 'openrelayproject', credential: 'openrelayproject' },
+  ],
+};
+const PEER_OPTS = { config: ICE, debug: 1 };
+const ERR = {
+  noRoom: "NO ROOM WITH THAT CODE. CHECK IT, AND THAT THE HOST HASN'T CLOSED THEIR GAME.",
+  blocked: "FOUND THE ROOM BUT COULDN'T CONNECT. YOUR NETWORK MAY BE BLOCKING IT: TRY AGAIN, OR TRY ANOTHER NETWORK (LIKE A PHONE HOTSPOT).",
+  server: "COULDN'T REACH THE ONLINE SERVER. CHECK YOUR INTERNET AND TRY AGAIN.",
+};
+
 class PeerTransport {
   constructor() { this.conns = new Map(); this.id = null; }
   async listen(code) {
     const Peer = await loadPeerJS();
     return new Promise((res, rej) => {
-      const peer = new Peer(PREFIX + code);
+      const peer = new Peer(PREFIX + code, PEER_OPTS);
       this.peer = peer;
-      peer.on('open', (id) => { this.id = id; res(code); });
-      peer.on('error', (e) => rej(new Error(e.type === 'unavailable-id' ? 'taken' : e.message || String(e))));
+      let opened = false;
+      const fail = setTimeout(() => { if (!opened) rej(new Error(ERR.server)); }, 15000);
+      peer.on('open', (id) => { opened = true; clearTimeout(fail); this.id = id; res(code); });
+      peer.on('error', (e) => {
+        if (!opened) { clearTimeout(fail); rej(new Error(e.type === 'unavailable-id' ? 'taken' : ['network', 'server-error', 'socket-error', 'socket-closed'].includes(e.type) ? ERR.server : e.message || String(e))); }
+      });
+      // lost the matchmaking server (not the players): get back on it with the same code
+      peer.on('disconnected', () => { if (!peer.destroyed) setTimeout(() => { try { peer.reconnect(); } catch { /* ignore */ } }, 1000); });
       peer.on('connection', (c) => {
         c.on('open', () => { this.conns.set(c.peer, c); this.onPeer?.(c.peer); });
         c.on('data', (d) => this.onData?.(c.peer, d));
-        c.on('close', () => { this.conns.delete(c.peer); this.onLeave?.(c.peer); });
-        c.on('error', () => { this.conns.delete(c.peer); this.onLeave?.(c.peer); });
+        c.on('close', () => { if (this.conns.get(c.peer) === c) { this.conns.delete(c.peer); this.onLeave?.(c.peer); } });
+        c.on('error', () => { if (this.conns.get(c.peer) === c) { this.conns.delete(c.peer); this.onLeave?.(c.peer); } });
       });
     });
   }
-  async connect(code) {
+  async connect(code, onStatus) {
     const Peer = await loadPeerJS();
-    return new Promise((res, rej) => {
-      const peer = new Peer();
-      this.peer = peer;
-      const fail = setTimeout(() => rej(new Error('No room with that code (or it timed out).')), 12000);
-      peer.on('error', (e) => { clearTimeout(fail); rej(new Error(e.type === 'peer-unavailable' ? 'No room with that code.' : e.message || String(e))); });
-      peer.on('open', (id) => {
-        this.id = id;
-        const c = peer.connect(PREFIX + code, { reliable: true });
-        this.host = c;
-        c.on('open', () => { clearTimeout(fail); res(id); });
-        c.on('data', (d) => this.onData?.(d));
-        c.on('close', () => this.onLeave?.());
-        c.on('error', () => this.onLeave?.());
-      });
+    // get on the matchmaking server first
+    const peer = await new Promise((res, rej) => {
+      const p = new Peer(PEER_OPTS);
+      const fail = setTimeout(() => rej(new Error(ERR.server)), 15000);
+      p.on('open', (id) => { clearTimeout(fail); this.id = id; res(p); });
+      p.on('error', (e) => { clearTimeout(fail); rej(new Error(ERR.server + ` (${e.type || e.message})`)); });
     });
+    this.peer = peer;
+    peer.on('disconnected', () => { if (!peer.destroyed) setTimeout(() => { try { peer.reconnect(); } catch { /* ignore */ } }, 1000); });
+    // then try the host a few times (the first try sometimes loses the race with the network setup)
+    let lastErr = ERR.blocked;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      onStatus?.(attempt === 1 ? 'CONNECTING TO THE HOST…' : `RETRYING (${attempt}/3)…`);
+      try {
+        await new Promise((res, rej) => {
+          const c = peer.connect(PREFIX + code, { serialization: 'json' });
+          const done = (err) => { clearTimeout(fail); peer.off?.('error', onErr); if (err) { try { c.close(); } catch { /* ignore */ } rej(err); } else res(); };
+          const onErr = (e) => { if (e.type === 'peer-unavailable') done(Object.assign(new Error(ERR.noRoom), { fatal: true })); };
+          const fail = setTimeout(() => done(new Error(ERR.blocked)), 14000);
+          peer.on('error', onErr);
+          c.on('open', () => {
+            this.host = c;
+            c.on('data', (d) => this.onData?.(d));
+            c.on('close', () => this.onLeave?.());
+            done();
+          });
+          c.on('error', () => done(new Error(ERR.blocked)));
+          // ICE gave up on every route: no point waiting out the timer
+          const watch = setInterval(() => {
+            const st = c.peerConnection?.iceConnectionState;
+            if (st === 'failed') { clearInterval(watch); done(new Error(ERR.blocked)); }
+            if (c.open || st === 'connected' || st === 'completed') clearInterval(watch);
+          }, 300);
+          setTimeout(() => clearInterval(watch), 15000);
+        });
+        return this.id;
+      } catch (e) {
+        lastErr = e.message;
+        if (e.fatal) break;
+      }
+    }
+    throw new Error(lastErr);
   }
   sendTo(id, msg) { const c = this.conns.get(id); if (c?.open) c.send(msg); }
   send(msg) { if (this.host?.open) this.host.send(msg); }
@@ -230,7 +279,7 @@ export class Online {
     this.isHost = false;
     this.tx = this.local ? new LocalTransport() : new PeerTransport();
     this.code = code.toUpperCase().trim();
-    this.myId = await this.tx.connect(this.code);
+    this.myId = await this.tx.connect(this.code, (m) => this.ui.status?.(m));
     this.tx.onData = (m) => this.handle(m);
     this.tx.onLeave = () => { this.ui.status?.('THE HOST LEFT'); this.ui.onHostLeft?.(); this.leave(); };
     this.inRoom = true;

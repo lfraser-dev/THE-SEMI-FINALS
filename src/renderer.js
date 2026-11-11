@@ -650,9 +650,9 @@ export class Renderer {
     this.indexCount = cube.count;
     this.cube = cube;
     this.meshes = { sphere: this.makeMesh(sphereGeometry()), cyl: this.makeMesh(cylinderGeometry()) };
-    this.meshesLo = { sphere: this.makeMesh(sphereGeometry(14, 9)), cyl: this.makeMesh(cylinderGeometry(12)) };
+    this.meshesLo = { sphere: this.makeMesh(sphereGeometry(20, 13)), cyl: this.makeMesh(cylinderGeometry(18)) };
     this.camPos = [0, 0, 0];
-    this.lodDist = 11;      // past this, curved parts use the low-poly meshes
+    this.lodDist = 16;      // past this, curved parts use the lighter meshes (still smooth)
     this.rounded = new Map();
     gl.bindVertexArray(this.vao);
 
@@ -722,7 +722,7 @@ export class Renderer {
       const [r1, r2] = shape.cap, rm = Math.max(r1, r2);
       const L = Math.max(0.002, scl[2] - 2 * rm);
       key = `c${q(L)}_${q(r1)}_${q(r2)}${lo ? 'l' : ''}`;
-      make = () => capsuleGeometry(q(L) / 500, q(r1) / 500, q(r2) / 500, lo ? 12 : 32, lo ? 3 : 10);
+      make = () => capsuleGeometry(q(L) / 500, q(r1) / 500, q(r2) / 500, lo ? 18 : 32, lo ? 5 : 10);
     } else {
       key = `${q(scl[0])}_${q(scl[1])}_${q(scl[2])}_${q(shape)}${lo ? 'l' : ''}`;
       make = () => roundedBoxGeometry([q(scl[0]) / 500, q(scl[1]) / 500, q(scl[2]) / 500], q(shape) / 500, lo ? 1 : q(shape) < 4 ? 2 : 4);   // small bevels need fewer steps

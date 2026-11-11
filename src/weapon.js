@@ -946,11 +946,10 @@ export class Weapon {
       // the sleeve, wrist end narrow (the capsule's back end points at the wrist)
       const capS = [re * 2, re * 2, len];
       put(I, h.map((v, k) => v + u[k] * len / 2), ang, capS, L.sleeve, { cap: [re, rw] }, 'cloth');
-      put(I, h.map((v, k) => v + u[k] * 0.006), ang, [0.066, 0.066, 0.034], Gd, 'cyl', 'rubber');                 // glove cuff
-      put(I, h.map((v, k) => v + u[k] * 0.07), ang, [0.078, 0.078, 0.03], L.sleeveDark, 'cyl', 'cloth');          // rolled sleeve
-      put(I, h.map((v, k) => v + u[k] * 0.083), ang, [0.0795, 0.0795, 0.004], L.accent.map((v) => v * 0.7), 'cyl');   // stripe
+      put(I, h.map((v, k) => v + u[k] * 0.006), ang, [0.064, 0.064, 0.04], Gd, { cap: [0.031, 0.031] }, 'rubber');      // glove cuff (soft band)
+      put(I, h.map((v, k) => v + u[k] * 0.07), ang, [0.08, 0.08, 0.04], L.sleeveDark, { cap: [0.039, 0.039] }, 'cloth');   // rolled sleeve
       if (isLeft) {
-        put(I, h.map((v, k) => v + u[k] * 0.03), ang, [0.064, 0.064, 0.018], [0.08, 0.08, 0.09], 'cyl', 'rubber'); // watch strap
+        put(I, h.map((v, k) => v + u[k] * 0.03), ang, [0.063, 0.063, 0.02], [0.08, 0.08, 0.09], { cap: [0.031, 0.031] }, 'rubber'); // watch strap
         const face = [h[0] + u[0] * 0.03, h[1] + u[1] * 0.03 + 0.03, h[2] + u[2] * 0.03];
         put(I, face, ang, [0.024, 0.012, 0.024], [0.12, 0.12, 0.13], 0.003, 'metal');
         out.push({ ...out[out.length - 1], color: L.accent, emissive: 0.5, scale: [0.016, 0.004, 0.016],

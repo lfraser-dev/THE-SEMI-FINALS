@@ -394,8 +394,8 @@ export class Bot {
     box(gunC, GB, [0.075, 0.11, 0.4], 0.02, GUN, emD);                                          // receiver
     box(gat([0, 0.07, 0.02]), GB, [0.06, 0.04, 0.14], 0.015, GUN2, emD);                        // top rail / optic
     ell(gat([0, 0.09, 0.0]), GB, [0.03, 0.03, 0.02], GLOW, fl ? 1 : 0.9);                      // optic lens
-    bd.cyl(W(add3(gunC, gd.map((v) => v * 0.28))), GB, [0.038 * s, 0.038 * s, 0.2 * s], col(GUN2), emD);   // barrel
-    bd.cyl(W(add3(gunC, gd.map((v) => v * 0.36))), GB, [0.05 * s, 0.05 * s, 0.05 * s], col(GUN), emD);     // muzzle
+    bd.rbox(W(add3(gunC, gd.map((v) => v * 0.28))), GB, [0.038 * s, 0.038 * s, 0.2 * s], 0.017 * s, col(GUN2), emD);   // barrel
+    bd.rbox(W(add3(gunC, gd.map((v) => v * 0.36))), GB, [0.05 * s, 0.05 * s, 0.05 * s], 0.018 * s, col(GUN), emD);     // muzzle
     box(gat([0, -0.1, 0.06]), pitchBasis(GB, 0.2), [0.05, 0.13, 0.08], 0.015, GUN2, emD);    // mag
     box(gat([0.04, 0.0, 0.0]), GB, [0.006, 0.022, 0.3], 0.003, GLOW, fl ? 1 : 0.8);          // light strip
     const muz = add3(gunC, gd.map((v) => v * 0.39));
