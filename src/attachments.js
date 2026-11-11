@@ -57,8 +57,8 @@ const MOUNT = {
 const NO_SLOT = { bullpup: ['stock'], double: ['magazine', 'barrel', 'muzzle'], lever: ['magazine'], minigun: ['barrel', 'muzzle', 'underbarrel', 'stock'] };
 
 // Base effective range (m) before damage falls off
-export const RANGE = { ar: 35, smg: 18, shotgun: 10, sniper: 120, lmg: 40, pistol: 20, burst: 40, dmr: 60, mp: 14, revolver: 28, autoshotgun: 9,
-  kv: 16, bullpup: 32, lever: 70, minigun: 30, double: 11 };
+export const RANGE = { ar: 35, smg: 16, shotgun: 9, sniper: 120, lmg: 40, pistol: 20, burst: 45, dmr: 65, mp: 13, revolver: 30, autoshotgun: 8,
+  kv: 14, bullpup: 30, lever: 70, minigun: 26, double: 10 };
 
 // variants take the attachments (and mounting points) of the gun they're built on
 export const STYLE = { burst: 'ar', dmr: 'ar', mp: 'pistol', revolver: 'pistol', autoshotgun: 'shotgun',

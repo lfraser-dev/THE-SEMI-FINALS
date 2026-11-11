@@ -795,4 +795,29 @@ fit('shotgun', 'padLine', (p) => { p.grp = 'stock'; });
 addTo('kv', P('gripTop', [0, -0.018, 0.05], [0.05, 0.028, 0.07], BLACK, { m: 'poly' }));
 fit('revolver', 'hammer', (p) => { p.c[1] = 0.042; p.s[1] = 0.03; });
 
+// ---------------------------------------------------------------- balance pass (build 0.34)
+// Body-shot time to kill a Medium (250 HP), by role: SMGs ~0.7 s up close but fall off fast; rifles ~0.85–0.95 s at
+// any range; marksman / lever / revolver reward hits (4–5 shots, headshots matter); shotguns kill in 2 close shots
+// and are useless at range; the heavy guns trade mobility for big magazines. moveMul = how fast you move carrying it.
+const BALANCE = {
+  ar: { dmg: 22, rpm: 720, moveMul: 1 },
+  burst: { dmg: 28, rpm: 1000, burstGap: 0.22, moveMul: 1 },
+  dmr: { dmg: 52, rpm: 330, headMult: 2.2, moveMul: 0.96 },
+  bullpup: { dmg: 20, rpm: 860, moveMul: 1.02 },
+  smg: { dmg: 21, rpm: 950, moveMul: 1.06 },
+  kv: { dmg: 17, rpm: 1200, moveMul: 1.06 },
+  mp: { dmg: 17, rpm: 1100, moveMul: 1.08 },
+  shotgun: { dmg: 13, pellets: 10, rpm: 85, moveMul: 1 },
+  autoshotgun: { dmg: 9, pellets: 8, rpm: 210, mag: 8, moveMul: 0.95 },
+  double: { dmg: 11, pellets: 12, rpm: 240, moveMul: 1.02 },
+  sniper: { dmg: 110, headMult: 2.3, rpm: 48, moveMul: 0.94 },
+  lever: { dmg: 72, rpm: 140, headMult: 1.9, moveMul: 0.98 },
+  lmg: { dmg: 24, rpm: 620, mag: 100, moveMul: 0.9 },
+  minigun: { dmg: 10, rpm: 1300, mag: 200, spin: 0.7, moveMul: 0.82,
+    spread: { base: 0.02, move: 0.04, air: 0.05, bloom: 0.0015, bloomMax: 0.035, ads: 0.7 } },
+  pistol: { dmg: 26, rpm: 400, moveMul: 1.08 },
+  revolver: { dmg: 64, rpm: 150, headMult: 2, moveMul: 1.06 },
+};
+for (const [id, b] of Object.entries(BALANCE)) Object.assign(WEAPONS[id], b);
+
 export const CASE_ORDER = ['ar', 'burst', 'dmr', 'bullpup', 'smg', 'kv', 'mp', 'shotgun', 'autoshotgun', 'double', 'sniper', 'lever', 'lmg', 'minigun', 'pistol', 'revolver'];

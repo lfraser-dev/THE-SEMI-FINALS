@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.33: online joining fixed for real networks** (relay servers for networks that block direct connections, automatic retries, and clear messages for a wrong code vs a blocked network), **and smoother hands and bodies** (rounded arm bands, smoother characters at a distance, no flat cylinders). **Build 0.32: real hands and a military armoury.** The first-person hands are a jointed rig: a soft palm, three-bone tapered fingers that curl round the grip (index on the trigger), a proper thumb, nails on bare hands and knuckle armour on tactical gloves. The weapon crates are olive-drab military crates with steel corners, rope handles, stencilling and hazard bands, lids propped open, with stacked ammo cans (look at the open one and press E to fill both guns), loose mags, shell boxes and belts of rounds. **Build 0.31: no more gaps.** Every part of every gun (and every one of the 49 attachments, in every combination) now touches the rest of the gun: attachments measure the gun's real surfaces and sit flush, swapped stocks get a link to the receiver, and the models were fixed where pieces floated. Guns get a worn metal finish (grain, machining streaks, paint worn bright on the edges) with no cartoon outlines, and the hands are smooth with overlapping finger joints and a wrist joining each hand to its sleeve. **Build 0.30: proper first-person hands** (jointed fingers, a thumb, a trigger finger, a C-clamp support grip, tapered sleeves, glove cuffs and a watch; bare skin or gloves to match your class and cosmetics). **Build 0.29: every gun has its own model and its own reload.** The ten newer guns were rebuilt from scratch (a proper six-barrel minigun, an AA-12-style drum shotgun, a break-action side-by-side, a brass lever-action, a real swing-out revolver, a Vector-style SMG and more), the original six got extra detail, and all 16 reload differently. Also: 49 attachments with a Delta Force-style gunsmith and a Battlefield 2042-style quick swap (hold B), online 1v1/2v2, and 4v4 team deathmatch against AI.
+**Build 0.34: balance pass and better reloads.** Every gun was tuned against a target time-to-kill for its role (SMGs ~0.7 s close, rifles ~0.9 s, shotguns two-shot up close, precision guns reward headshots); the minigun is down from 320 to 217 DPS with a 200-round box, a longer spin-up, wider spread and a movement penalty (heavier guns slow you down; a spinning minigun slows you a lot). In reloads the free hand now holds mags from underneath, pinches charging handles, bolts and shells, and turns palm-down to reach over the top; the SF-47 got a cleaner reload. **Build 0.33: online joining fixed for real networks** (relay servers for networks that block direct connections, automatic retries, and clear messages for a wrong code vs a blocked network), **and smoother hands and bodies** (rounded arm bands, smoother characters at a distance, no flat cylinders). **Build 0.32: real hands and a military armoury.** The first-person hands are a jointed rig: a soft palm, three-bone tapered fingers that curl round the grip (index on the trigger), a proper thumb, nails on bare hands and knuckle armour on tactical gloves. The weapon crates are olive-drab military crates with steel corners, rope handles, stencilling and hazard bands, lids propped open, with stacked ammo cans (look at the open one and press E to fill both guns), loose mags, shell boxes and belts of rounds. **Build 0.31: no more gaps.** Every part of every gun (and every one of the 49 attachments, in every combination) now touches the rest of the gun: attachments measure the gun's real surfaces and sit flush, swapped stocks get a link to the receiver, and the models were fixed where pieces floated. Guns get a worn metal finish (grain, machining streaks, paint worn bright on the edges) with no cartoon outlines, and the hands are smooth with overlapping finger joints and a wrist joining each hand to its sleeve. **Build 0.30: proper first-person hands** (jointed fingers, a thumb, a trigger finger, a C-clamp support grip, tapered sleeves, glove cuffs and a watch; bare skin or gloves to match your class and cosmetics). **Build 0.29: every gun has its own model and its own reload.** The ten newer guns were rebuilt from scratch (a proper six-barrel minigun, an AA-12-style drum shotgun, a break-action side-by-side, a brass lever-action, a real swing-out revolver, a Vector-style SMG and more), the original six got extra detail, and all 16 reload differently. Also: 49 attachments with a Delta Force-style gunsmith and a Battlefield 2042-style quick swap (hold B), online 1v1/2v2, and 4v4 team deathmatch against AI.
 
 ## Run it
 
@@ -180,6 +180,29 @@ Home → **ONLINE**. Pick a name, then:
 It's team deathmatch, first to 10 kills, with your own class and loadout. Rooms run peer-to-peer over WebRTC: [PeerJS](https://peerjs.com)'s free public server only brokers the handshake, and the host relays game traffic between players. Each player simulates their own movement and reports position about 20 times a second, plus their shots (for tracers) and hits (the player who was hit takes the damage). The host keeps the score. There's no anti-cheat; play with people you trust. Very strict networks (some school or work Wi-Fi) can block WebRTC.
 
 For testing, add `?net=local` to the URL and two tabs in the same browser can play each other without the internet.
+
+## Balance (build 0.34)
+
+Body-shot time to kill a Medium (250 HP):
+
+| Gun | Damage | RPM | 5 m | 30 m | Notes |
+| --- | --- | --- | --- | --- | --- |
+| SF-47 | 22 | 720 | 0.92 s | 0.92 s | all-rounder |
+| BR-3 | 28 | 1000 (bursts) | 0.92 s | 0.92 s | longest-ranged rifle |
+| BX-56 | 20 | 860 | 0.84 s | 0.84 s | handier, less range |
+| FC-308 | 52 | 330 | 0.73 s | 0.73 s | 5 hits; headshots ×2.2 |
+| V9-S | 21 | 950 | 0.69 s | 1.07 s | close-range king |
+| KV-45 | 17 | 1200 | 0.70 s | 1.20 s | falls off hard |
+| MP-9 | 17 | 1100 | 0.76 s | 2.9 s | sidearm-like range |
+| SG-12 | 13×10 | 85 | 2 shots point-blank | — | |
+| AS-20 | 9×8 | 210 | 4 shots point-blank | — | |
+| DB-2 | 11×12 | 240 | both barrels point-blank | — | then a 2 s reload |
+| LH-7 | 110 | 48 | 3 body / 1 head | | headshot one-shots a Medium |
+| LV-44 | 72 | 140 | 1.29 s | 1.29 s | |
+| M60-X | 24 | 620 | 0.97 s | 0.97 s | 100 rounds, 10% slower to move |
+| ROTARY-X | 10 | 1300 | 1.8 s incl. spin-up | 1.95 s | 200 rounds, 18% slower, 28% more while spinning |
+| P-19 | 26 | 400 | 1.35 s | 1.65 s | |
+| R-357 | 64 | 150 | 1.20 s | 1.20 s | 4 hits |
 
 ## Guns (builds 0.27–0.28)
 

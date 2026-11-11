@@ -38,7 +38,7 @@ export function partShape(p) {
 }
 // how long each gun's draw animation takes (s)
 // reload animation per original gun (the newer guns set reloadAnim themselves)
-const RELOAD_ANIM = { ar: 'classic', pistol: 'classic', smg: 'flick', sniper: 'bolt', lmg: 'belt' };
+const RELOAD_ANIM = { ar: 'rifle', pistol: 'classic', smg: 'flick', sniper: 'bolt', lmg: 'belt' };
 const DRAW_TIME = { pistol: 0.85, smg: 0.85, ar: 1.05, shotgun: 1.05, sniper: 1.1, lmg: 1.1 };
 // moments in each draw animation that get a sound + camera jolt: [time, sound, jolt]
 const DRAW_BEATS = {
@@ -112,6 +112,7 @@ export class Weapon {
     this.ammo = def.mag;
     this.reload = null;
     this.cycleT = null;
+    this.magHalf = null;
   }
 
   // laser emitter position in view space (after viewmodel() ran this frame), or null
@@ -360,7 +361,7 @@ export class Weapon {
     let tilt = 0, rollDir = 1, bump = 0;
     let magOff = [0, 0, 0], magVisible = true, magRot = 0;
     let handT = 0, handTarget = d.foreGrip;
-    let boltBack = 0, pumpBack = 0, brkAng = 0, coverAng = 0, spinExtra = 0;
+    let boltBack = 0, pumpBack = 0, brkAng = 0, coverAng = 0, spinExtra = 0, pinchT = 0;
     let shellVisible = false, shellPos = d.magPos;
 
     // extra flourish offsets on top of everything: pos xyz + rot xyz
@@ -382,11 +383,12 @@ export class Weapon {
           magOff = [dir[0] * k + 0.05 * (1 - rise), dir[1] * k, dir[2] * k + 0.07 * (1 - ins)];
         }
         handT = Math.max(handT, seg(p, o0 - 0.07, o0) * (1 - seg(p, s1 + 0.04, s1 + 0.14)));
-        handTarget = add3(add3(d.magPos, magOff), dir.map((v) => v * 0.05));
+        const mh = this.magHalf ?? (this.magHalf = (() => { const mp0 = d.parts.find((q) => q.mag && !q.hidden && q.name === 'mag'); return mp0 ? mp0.s[1] / 2 : 0.05; })());
+        handTarget = add3(add3(d.magPos, magOff), dir.map((v) => v * (mh + 0.01)));
       };
-      const reach = (t0, t1, target) => {    // the free hand goes somewhere between t0 and t1
+      const reach = (t0, t1, target) => {    // the free hand goes somewhere between t0 and t1, fingers pinched
         const h = seg(p, t0, t0 + 0.05) * (1 - seg(p, t1 - 0.05, t1));
-        if (h > handT || (p > t0 && p < t1)) { handT = Math.max(handT, h); handTarget = target; }
+        if (h > handT || (p > t0 && p < t1)) { handT = Math.max(handT, h); handTarget = target; pinchT = Math.max(pinchT, h); }
       };
       const settleEnd = (t0, amp, f = 70, k = 25) => { const u = p - t0; if (u > 0) fl[5] += Math.sin(u * f) * Math.exp(-u * k) * amp; };
       const charge = (t0, side = 1) => {      // rip the charging handle back and let it slam
@@ -395,7 +397,20 @@ export class Weapon {
         bump = Math.max(bump, seg(p, t0 + 0.06, t0 + 0.08) * (1 - seg(p, t0 + 0.08, t0 + 0.16)));
       };
       const k = (a, b, c, e) => seg(p, a, b) * (1 - seg(p, c, e));
-      if (anim === 'tap') {
+      if (anim === 'rifle') {
+        // SF-47: rolled so the mag well faces you, mag out and a fresh one seated with a slap, then (if it ran dry)
+        // the charging handle at the top rear pulled and let go, and a quick settle back to ready
+        tilt = k(0, 0.12, 0.84, 0.97) * 0.8;
+        fl[1] += k(0, 0.12, 0.84, 0.97) * 0.02;
+        swap(0.12, 0.2, 0.33, 0.47, 0.58);
+        const slap = k(0.57, 0.6, 0.61, 0.7); bump = Math.max(bump, slap); fl[3] += slap * 0.1;
+        if (r.empty) {
+          reach(0.66, 0.86, [0.01, 0.068, 0.11 + 0.04 * k(0.72, 0.76, 0.77, 0.8)]);
+          boltBack = Math.max(boltBack, k(0.72, 0.76, 0.77, 0.8));
+          fl[3] -= k(0.66, 0.72, 0.8, 0.86) * 0.12; fl[2] += k(0.66, 0.72, 0.8, 0.86) * 0.03;
+        }
+        settleEnd(0.92, 0.05);
+      } else if (anim === 'tap') {
         // BR-3: tilted left, mag swapped, palm-slap the bolt release on the left side, snapped back up
         rollDir = -1; tilt = k(0, 0.12, 0.84, 0.97) * 0.85;
         swap(0.12, 0.2, 0.33, 0.47, 0.58);
@@ -454,7 +469,7 @@ export class Weapon {
         shellVisible = p > 0.36 && p < 0.62;
         shellPos = add3(add3(d.magPos, magOff), [0, 0, 0.035 + 0.14 * (1 - rise)]);
         shellSpin = 0;
-        handT = k(0.3, 0.37, 0.62, 0.7); handTarget = add3(shellPos, [0, -0.03, 0.03]);
+        handT = k(0.3, 0.37, 0.62, 0.7); handTarget = add3(shellPos, [0, -0.03, 0.03]); pinchT = handT;
         const f = k(0.8, 0.84, 0.85, 0.95);
         fl[5] += f * 0.6; bump = Math.max(bump, f);
       } else if (anim === 'break') {
@@ -465,7 +480,7 @@ export class Weapon {
         shellVisible = p > 0.28 && p < 0.6 && sp < 1;
         shellPos = [first ? -0.017 : 0.017, 0.02 + 0.12 * (1 - sp), -0.035 + 0.08 * (1 - sp)];
         shellSpin = Math.PI / 2 * (1 - sp);
-        handT = k(0.24, 0.3, 0.6, 0.66); handTarget = add3(shellPos, [0, -0.03, 0.03]);
+        handT = k(0.24, 0.3, 0.6, 0.66); handTarget = add3(shellPos, [0, -0.03, 0.03]); pinchT = handT;
         const s2 = k(0.78, 0.81, 0.82, 0.9);
         fl[3] += 0.3 * s2; bump = Math.max(bump, s2);
         boltBack = Math.max(boltBack, k(0.86, 0.9, 0.92, 0.98));
@@ -576,6 +591,7 @@ export class Weapon {
         fl[5] += bump * 0.12 * (this.ammo % 2 ? 1 : -1); // gun rocks with each shell
         handT = 1;
         handTarget = add3(shellPos, [0, -0.035, 0.01]);
+        pinchT = 1;
       } else {
         const len = r.needPump ? 0.62 : 0.34;
         const back = 1 - seg(r.t, 0, Math.min(len, 0.3));
@@ -707,6 +723,7 @@ export class Weapon {
         const hb = seg(p, 0, 0.15) * (1 - seg(p, 0.85, 1));
         handT = hb;
         handTarget = add3(d.bolt || [0.04, 0.02, 0.02], [0.035, 0, 0.02]);
+        pinchT = hb;
         boltBack = seg(p, 0.25, 0.45) * (1 - seg(p, 0.55, 0.72));
         tilt = 0.4 * hb;
         fl[5] += hb * 0.25; fl[3] += seg(p, 0.55, 0.62) * (1 - seg(p, 0.62, 0.8)) * 0.08;   // roll in, snap the bolt home
@@ -919,11 +936,23 @@ export class Weapon {
     } else {
       // C-clamp under the handguard: palm up against it, fingers curled up the far side, thumb up the near side,
       // the back of the hand toward you
-      const az = norm3([1, 0.4, 0]), ax = [0, 0, 1], ay = cross3(az, ax);
-      const o = add3(left, [-0.03, -0.012, 0]);
+      // under the gun: palm up (C-clamp, holding a mag). Reaching over the top (charging handles, the feed cover):
+      // the hand turns palm-down and comes in from above and behind
+      const over = smooth(clamp((left[1] - (d.sightY ?? 0.08) * 0.45) / 0.03, 0, 1)) * Math.min(1, handT * 1.5);
+      const lerpV = (u0, v0) => norm3(u0.map((x, i) => x + (v0[i] - x) * over));
+      const az = lerpV(norm3([1, 0.4, 0]), norm3([0.25, -0.35, -1]));
+      const ax0 = lerpV([0, 0, 1], [-1, 0, 0]);
+      const ay = norm3(cross3(az, ax0)), ax = cross3(ay, az);
+      const o = add3(left, lerp3([-0.03, -0.012, 0], [-0.012, 0.03, 0.0], over));
       compose(this.tmp, o, [0, 0, 0], [1, 1, 1]);
       mul(LF, this.root, this.tmp);
-      LH = drawHand(this.root, ax, ay, az, o, -1, CLAMP);
+      // pinch (handles, bolts, shells) blends in from the clamp
+      const PINCH = { f: [[1.05, 1.25, 0.9, 0.1], [1.35, 1.35, 0.9], [1.5, 1.35, 0.85], [1.55, 1.3, 0.8, -0.08]],
+        t: [[0.55, -0.7, 0.45], [0.55, -0.45, 0.7], [0.4, -0.25, 0.88]] };
+      const pt = smooth(Math.min(1, pinchT));
+      const mixA = (a0, b0) => a0.map((v, i) => v + ((b0[i] ?? 0) - v) * pt);
+      const pose = pt > 0.01 ? { f: CLAMP.f.map((f, i) => mixA([...f, f[3] ?? 0], [...PINCH.f[i], PINCH.f[i][3] ?? 0])), t: CLAMP.t.map((t0, i) => mixA(t0, PINCH.t[i])) } : CLAMP;
+      LH = drawHand(this.root, ax, ay, az, o, -1, pose);
     }
 
     // forearms: tapered sleeves from wrist to elbow, glove cuff, rolled sleeve cuff (and a watch on the left wrist)

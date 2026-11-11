@@ -1635,7 +1635,6 @@ function updateFall() {
 
 function updateStadium(dt) {
   updateFall();
-  if (tdm.active) player.speedMul = CLASSES[classLo.cls].speed;
   const shoe = stadium.refs?.shoe;
   if (shoe) {
     if (!shoe.base) shoe.base = shoe.map((b) => [...b.center]);
@@ -1743,6 +1742,8 @@ function frameBody(now) {
     elevator.update(dt, player, sounds);
     for (const l of lifts) l.update(dt, player, sounds);
     if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
+    // heavier guns slow you down; a spinning minigun slows you a lot more
+    player.speedMul = CLASSES[classLo.cls].speed * (w.def.moveMul ?? 1) * (w.def.spin && (w.spinT || 0) > 0.05 ? 0.72 : 1);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
     if (inStadium()) updateStadium(dt);
     updateCombat(dt);
