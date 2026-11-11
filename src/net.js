@@ -1,7 +1,7 @@
 // Online play: 1v1 and 2v2 team deathmatch with friends, first to 10.
 //
-// Rooms use WebRTC data channels through PeerJS (its free public server only brokers the handshake; game traffic
-// goes player to player). The host's room code is the host's peer id; everyone else connects to the host, and the
+// By default rooms run through a public MQTT message server over a secure WebSocket (RelayTransport), which gets
+// through networks that block direct connections. `?net=p2p` uses WebRTC through PeerJS instead (player to player). The host's room code is the host's peer id; everyone else connects to the host, and the
 // host relays messages between them (a star). Each player simulates their own movement and shooting and reports
 // it: positions ~20 times a second, shots for tracers, and hits to the player they hit, who applies the damage.
 // The host keeps the score and calls the winner.
@@ -15,7 +15,7 @@ import { CLASSES } from './classes.js';
 export const NET_GOAL = 10;
 const PEERJS = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
 const PREFIX = 'semifinals-room-';
-const SEND_HZ = 20;
+const SEND_HZ = 15;     // position updates per second (through the relay server)
 const TYPE_OF = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
 const COLS = ['#ff7a1a', '#2f8cff'];
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -126,6 +126,148 @@ class PeerTransport {
   sendTo(id, msg) { const c = this.conns.get(id); if (c?.open) c.send(msg); }
   send(msg) { if (this.host?.open) this.host.send(msg); }
   close() { try { this.peer?.destroy(); } catch { /* ignore */ } this.conns.clear(); }
+}
+
+// ---------------------------------------------------------------- relay transport (the default)
+// Game traffic goes through a public MQTT message server over a normal secure WebSocket, so it works on networks that
+// block direct player-to-player connections (school, work, mobile). The host picks the first server that answers and
+// posts a "beacon" there; a joiner checks every server for that room's beacon and joins on the one the host is using.
+const MQTTJS = 'https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js';
+const BROKERS = [
+  { name: 'shiftr', url: 'wss://public.cloud.shiftr.io', username: 'public', password: 'public' },
+  { name: 'emqx', url: 'wss://broker.emqx.io:8084/mqtt' },
+  { name: 'hivemq', url: 'wss://broker.hivemq.com:8884/mqtt' },
+  { name: 'mosquitto', url: 'wss://test.mosquitto.org:8081/mqtt' },
+];
+const TOPIC = 'semifinals-tsf/v1/';
+let mqttLib = null;
+function loadMQTT() {
+  if (window.mqtt) return Promise.resolve(window.mqtt);
+  if (mqttLib) return mqttLib;
+  mqttLib = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = MQTTJS; s.async = true;
+    s.onload = () => (window.mqtt ? res(window.mqtt) : rej(new Error("COULDN'T LOAD THE ONLINE LIBRARY.")));
+    s.onerror = () => { mqttLib = null; rej(new Error("COULDN'T LOAD THE ONLINE LIBRARY. CHECK YOUR CONNECTION.")); };
+    document.head.append(s);
+  });
+  return mqttLib;
+}
+// connect to one broker; resolves with the client once connected, rejects on timeout / error
+function openBroker(mqtt, b, id) {
+  return new Promise((res, rej) => {
+    let c;
+    try {
+      c = mqtt.connect(b.url, { clientId: `tsf_${id}_${Math.random().toString(36).slice(2, 6)}`, username: b.username, password: b.password,
+        clean: true, connectTimeout: 7000, reconnectPeriod: 0, keepalive: 20, protocolVersion: 4 });
+    } catch (e) { rej(e); return; }
+    const t = setTimeout(() => { try { c.end(true); } catch { /* ignore */ } rej(new Error('timeout')); }, 8000);
+    c.once('connect', () => { clearTimeout(t); c.options.reconnectPeriod = 2000; res(c); });
+    c.once('error', (e) => { clearTimeout(t); try { c.end(true); } catch { /* ignore */ } rej(e); });
+  });
+}
+const firstOf = (ps) => new Promise((res, rej) => {
+  let left = ps.length;
+  if (!left) rej(new Error('none'));
+  ps.forEach((p) => p.then(res, () => { if (--left === 0) rej(new Error('none')); }));
+});
+
+class RelayTransport {
+  constructor() { this.id = rid(); this.peers = new Map(); }   // peer id -> last heard (ms)
+  pub(topic, obj, retain = false) { try { this.c?.publish(TOPIC + this.code + topic, JSON.stringify(obj), { qos: 0, retain }); } catch { /* ignore */ } }
+  async listen(code) {
+    const mqtt = await loadMQTT();
+    this.code = code;
+    const tries = BROKERS.map((b) => openBroker(mqtt, b, this.id).then((c) => ({ c, b })));
+    let got;
+    try { got = await firstOf(tries); } catch { throw new Error("COULDN'T REACH ANY GAME SERVER. CHECK YOUR INTERNET AND TRY AGAIN."); }
+    this.c = got.c; this.broker = got.b.name;
+    // drop the other servers that also answered
+    tries.forEach((p) => p.then(({ c }) => { if (c !== this.c) c.end(true); }, () => {}));
+    this.c.subscribe(TOPIC + code + '/h');
+    this.c.on('message', (topic, buf) => {
+      let m; try { m = JSON.parse(buf.toString()); } catch { return; }
+      if (!m || !m.from) return;
+      const known = this.peers.has(m.from);
+      this.peers.set(m.from, Date.now());
+      if (m.kind === 'hello') { this.pub('/c/' + m.from, { kind: 'welcome', from: 'host' }); if (!known) this.onPeer?.(m.from); }
+      else if (m.kind === 'bye') { this.peers.delete(m.from); this.onLeave?.(m.from); }
+      else if (m.kind === 'ping') { /* keep-alive */ }
+      else if (known) this.onData?.(m.from, m.msg);
+    });
+    // beacon (so joiners can find this server) + keep-alives + drop players that went quiet
+    const beat = () => {
+      this.pub('/beacon', { t: Date.now(), broker: this.broker }, true);
+      for (const [p, t] of this.peers) { this.pub('/c/' + p, { kind: 'ping', from: 'host' }); if (Date.now() - t > 9000) { this.peers.delete(p); this.onLeave?.(p); } }
+    };
+    beat();
+    this.timer = setInterval(beat, 2500);
+    return code;
+  }
+  async connect(code, onStatus) {
+    const mqtt = await loadMQTT();
+    this.code = code;
+    onStatus?.('LOOKING FOR THE ROOM…');
+    // every server we can reach; the one carrying this room's fresh beacon wins
+    const found = await new Promise((res, rej) => {
+      const clients = [];
+      let pending = BROKERS.length, done = false;
+      const finish = (val, err) => {
+        if (done) return; done = true; clearTimeout(t);
+        for (const c of clients) if (!val || c !== val.c) { try { c.end(true); } catch { /* ignore */ } }
+        if (val) res(val); else rej(err);
+      };
+      const t = setTimeout(() => finish(null, new Error(clients.length
+        ? "NO ROOM WITH THAT CODE. CHECK IT, AND THAT THE HOST'S GAME IS STILL OPEN ON THE ONLINE SCREEN."
+        : "COULDN'T REACH ANY GAME SERVER. CHECK YOUR INTERNET AND TRY AGAIN.")), 12000);
+      BROKERS.forEach((b) => openBroker(mqtt, b, this.id).then((c) => {
+        if (done) { c.end(true); return; }
+        clients.push(c);
+        c.subscribe(TOPIC + code + '/beacon');
+        c.on('message', (topic, buf) => {
+          if (!topic.endsWith('/beacon')) return;
+          let m; try { m = JSON.parse(buf.toString()); } catch { return; }
+          if (m && m.t && Math.abs(Date.now() - m.t) < 5 * 60 * 1000) finish({ c, b });
+        });
+      }, () => { if (--pending === 0 && !clients.length) finish(null, new Error("COULDN'T REACH ANY GAME SERVER. CHECK YOUR INTERNET AND TRY AGAIN.")); }));
+    });
+    this.c = found.c; this.broker = found.b.name;
+    this.c.unsubscribe(TOPIC + code + '/beacon');
+    onStatus?.('JOINING…');
+    await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error("FOUND THE ROOM BUT THE HOST DIDN'T ANSWER. ASK THEM TO STAY ON THE ROOM SCREEN AND TRY AGAIN.")), 9000);
+      this.lastHost = Date.now();
+      this.c.subscribe(TOPIC + code + '/c/' + this.id, () => this.pub('/h', { kind: 'hello', from: this.id }));
+      this.c.on('message', (topic, buf) => {
+        let m; try { m = JSON.parse(buf.toString()); } catch { return; }
+        if (!m) return;
+        this.lastHost = Date.now();
+        if (m.kind === 'welcome') { clearTimeout(t); res(); }
+        else if (m.kind === 'ping') { /* keep-alive */ }
+        else if (m.msg) this.onData?.(m.msg);
+      });
+    });
+    // keep-alives both ways; if the host goes quiet for 10 s they've gone
+    this.timer = setInterval(() => {
+      this.pub('/h', { kind: 'ping', from: this.id });
+      if (Date.now() - this.lastHost > 10000) { clearInterval(this.timer); this.onLeave?.(); }
+    }, 2500);
+    return this.id;
+  }
+  sendTo(id, msg) { this.pub('/c/' + id, { from: 'host', msg }); }
+  send(msg) { this.pub('/h', { from: this.id, msg }); }
+  close() {
+    clearInterval(this.timer);
+    if (this.c) {
+      try {
+        if (this.peers.size || this.timer) this.pub(this.lastHost ? '/h' : '/beacon', this.lastHost ? { kind: 'bye', from: this.id } : '', !this.lastHost);
+        if (!this.lastHost) this.c.publish(TOPIC + this.code + '/beacon', '', { retain: true });   // clear the room's beacon
+      } catch { /* ignore */ }
+      const c = this.c;
+      setTimeout(() => { try { c.end(true); } catch { /* ignore */ } }, 300);
+    }
+    this.c = null;
+  }
 }
 
 // same API over a BroadcastChannel (tabs in one browser), for testing
@@ -248,9 +390,12 @@ export class Online {
     this.events = [];
     this.box = { carrier: null };
     this.local = /[?&]net=local/.test(location.search);
+    this.p2p = /[?&]net=p2p/.test(location.search);
     this.sendT = 0;
     this.parts = [];
   }
+
+  makeTransport() { return this.local ? new LocalTransport() : this.p2p ? new PeerTransport() : new RelayTransport(); }
 
   // ---------------- lobby
   async host(mode, arena) {
@@ -259,7 +404,7 @@ export class Online {
     this.max = mode === '2v2' ? 4 : 2;
     let code;
     for (let tries = 0; tries < 4; tries++) {
-      this.tx = this.local ? new LocalTransport() : new PeerTransport();
+      this.tx = this.makeTransport();
       try { code = await this.tx.listen(code5()); break; } catch (e) { this.tx.close(); if (e.message !== 'taken') throw e; }
     }
     this.code = code;
@@ -277,7 +422,7 @@ export class Online {
   async join(code) {
     this.leave();
     this.isHost = false;
-    this.tx = this.local ? new LocalTransport() : new PeerTransport();
+    this.tx = this.makeTransport();
     this.code = code.toUpperCase().trim();
     this.myId = await this.tx.connect(this.code, (m) => this.ui.status?.(m));
     this.tx.onData = (m) => this.handle(m);
@@ -539,7 +684,7 @@ export class Lobby {
       if (on.isHost) code.append(btn('nt-copy', 'COPY', () => { navigator.clipboard?.writeText(on.code); this.msg = 'CODE COPIED — SEND IT TO A FRIEND'; this.render(); }));
       box.append(code);
       if (l) {
-        box.append(el('div', 'nt-meta', `${l.mode.toUpperCase()} · ${l.arena >= 0 ? this.o.arenas[l.arena] : 'RANDOM ARENA'} · FIRST TO ${NET_GOAL} KILLS`));
+        box.append(el('div', 'nt-meta', `${l.mode.toUpperCase()} · ${l.arena >= 0 ? this.o.arenas[l.arena] : 'RANDOM ARENA'} · FIRST TO ${NET_GOAL} KILLS${on.tx?.broker ? ' · SERVER ' + on.tx.broker.toUpperCase() : ''}`));
         const teams = el('div', 'nt-teams');
         [0, 1].forEach((k) => {
           const t = el('div', 'nt-team');
