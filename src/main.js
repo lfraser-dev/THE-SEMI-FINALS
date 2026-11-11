@@ -2,7 +2,7 @@ import { Renderer } from './renderer.js';
 import { World, moveBoxTo } from './world.js';
 import { Input } from './input.js';
 import { Player } from './player.js';
-import { Weapon } from './weapon.js';
+import { Weapon, setHandLook } from './weapon.js';
 import { WEAPONS, CASE_ORDER } from './weapons.js';
 import { Effects } from './effects.js';
 import { Sounds } from './audio.js';
@@ -74,6 +74,7 @@ const classLo = loadLoadout();
 let loadouts = {};
 try { loadouts = JSON.parse(localStorage.getItem('semifinals.loadouts') || '{}') || {}; } catch { /* ignore */ }
 const cosmetics = loadCosmetics();
+setHandLook(buildOutfit(cosmetics, classLo.cls));
 let skinClass = null;    // class whose weapon skin to show (defaults to the active class)
 const defFor = (id) => skinDef(buildDef(WEAPONS[id], loadouts[id] || {}), gunSkinFor(cosmetics, skinClass || classLo.cls));
 const cases = gunCrates(world, CASE_ORDER.map((id) => defFor(id)), map.bench.pos);   // guns jammed in two crates by the workbench
@@ -134,6 +135,7 @@ function applyClass() {
   slots[1] = new Weapon(defFor(b));
   current = 0; lastSlot = 1;
   equippedAbility = classLo[classLo.cls].ability;
+  setHandLook(buildOutfit(cosmetics, classLo.cls));
   player.resetAbilities?.();
   updateSlotHud();
   classDirty = false;
@@ -1001,6 +1003,7 @@ function renderShop() {
     if (!own && !buy(cosmetics, tryOn)) { sounds.dry?.(); return; }
     if (!own) sounds.pickup?.();
     cosmetics.equip[cls][it.slot] = tryOn;
+    if (cls === classLo.cls) setHandLook(buildOutfit(cosmetics, cls));
     saveCosmetics(cosmetics);
     if (it.slot === 'wskin') refreshGuns();
     renderMenu();
@@ -1010,6 +1013,7 @@ function renderShop() {
 }
 // rebuild guns after a weapon-skin change (in your hands, the cases and the showroom)
 function refreshGuns() {
+  setHandLook(buildOutfit(cosmetics, classLo.cls));
   slots.forEach((w) => { const a = w.ammo; w.setDef(defFor(w.def.id)); w.ammo = Math.min(a, w.def.mag); });
   cases.forEach((c) => { c.def = defFor(c.def.id); });
   showroomKey = '';

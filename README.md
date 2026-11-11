@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.29: every gun has its own model and its own reload.** The ten newer guns were rebuilt from scratch (a proper six-barrel minigun, an AA-12-style drum shotgun, a break-action side-by-side, a brass lever-action, a real swing-out revolver, a Vector-style SMG and more), the original six got extra detail, and all 16 reload differently. Also: 49 attachments with a Delta Force-style gunsmith and a Battlefield 2042-style quick swap (hold B), online 1v1/2v2, and 4v4 team deathmatch against AI.
+**Build 0.30: proper first-person hands** (jointed fingers, a thumb, a trigger finger, a C-clamp support grip, tapered sleeves, glove cuffs and a watch; bare skin or gloves to match your class and cosmetics). **Build 0.29: every gun has its own model and its own reload.** The ten newer guns were rebuilt from scratch (a proper six-barrel minigun, an AA-12-style drum shotgun, a break-action side-by-side, a brass lever-action, a real swing-out revolver, a Vector-style SMG and more), the original six got extra detail, and all 16 reload differently. Also: 49 attachments with a Delta Force-style gunsmith and a Battlefield 2042-style quick swap (hold B), online 1v1/2v2, and 4v4 team deathmatch against AI.
 
 ## Run it
 
