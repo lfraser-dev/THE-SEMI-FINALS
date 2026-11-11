@@ -433,7 +433,7 @@ variant('revolver', 'pistol', {
 // AS-20: magazine-fed automatic shotgun.
 variant('autoshotgun', 'shotgun', {
   name: 'AS-20', type: 'AUTO SHOTGUN', auto: true, rpm: 210, mag: 8, dmg: 8, headMult: 1.4, pellets: 8,
-  action: undefined, reloadStyle: 'mag', reload: 2.4, reloadEmpty: 2.9, magPos: [0, -0.1, -0.02],
+  action: undefined, reloadStyle: 'mag', reload: 2.4, reloadEmpty: 2.9, magPos: [0, -0.1, -0.02], bolt: [0.04, 0.02, 0.02],
   spread: { base: 0.06, move: 0.012, air: 0.018, bloom: 0.006, bloomMax: 0.02, ads: 0.8 },
   recoil: { up: 0.035, side: 0.014, vm: 1.8 },
   sound: { freq: 1400, thump: 85, gain: 0.8, dur: 0.24 },

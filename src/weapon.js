@@ -373,7 +373,7 @@ export class Weapon {
       if (r.empty && !pistol) {
         // charging handle: counter-roll the gun, rip the handle back, let it slam home
         const bh = seg(p, 0.68, 0.76) * (1 - seg(p, 0.88, 0.95));
-        if (bh > 0) { handT = bh; handTarget = add3(d.bolt, [0.035, 0, 0.02]); }
+        if (bh > 0) { handT = bh; handTarget = add3(d.bolt || [0.04, 0.02, 0.02], [0.035, 0, 0.02]); }
         const over = seg(p, 0.66, 0.76) * (1 - seg(p, 0.86, 0.97));
         fl[5] -= over * 0.75; fl[3] -= over * 0.3; fl[4] -= over * 0.1; fl[0] -= over * 0.02; fl[1] += over * 0.02;
         boltBack = seg(p, 0.77, 0.81) * (1 - seg(p, 0.82, 0.85));
@@ -482,7 +482,7 @@ export class Weapon {
         const rack = seg(q, 0.38, 0.45) * (1 - seg(q, 0.52, 0.6));
         fl[5] -= rack * 0.6; fl[3] += rack * 0.1;
         handT = Math.max(handT, rack);
-        if (rack > 0) handTarget = add3(d.bolt, [0.035, 0, 0.02]);
+        if (rack > 0) handTarget = add3(d.bolt || [0.04, 0.02, 0.02], [0.035, 0, 0.02]);
         boltBack = Math.max(boltBack, seg(q, 0.45, 0.49) * (1 - seg(q, 0.5, 0.54)));
         const show = seg(q, 0.57, 0.66) * (1 - seg(q, 0.8, 0.88));
         fl[4] -= show * 0.95; fl[5] -= show * 0.45; fl[3] += show * 0.12; fl[0] -= show * 0.07; fl[1] += show * 0.04; fl[2] -= show * 0.05;
@@ -510,7 +510,7 @@ export class Weapon {
         fl[3] += settle(0.36, 0.12, 40, 13);
         const work = seg(q, 0.4, 0.46) * (1 - seg(q, 0.58, 0.66));
         handT = Math.max(handT, work);
-        if (work > 0) handTarget = add3(d.bolt, [0.035, 0, 0.02]);
+        if (work > 0) handTarget = add3(d.bolt || [0.04, 0.02, 0.02], [0.035, 0, 0.02]);
         boltBack = Math.max(boltBack, seg(q, 0.46, 0.52) * (1 - seg(q, 0.54, 0.6)));
         fl[5] += work * 0.5;
         const look = seg(q, 0.64, 0.72) * (1 - seg(q, 0.84, 0.92));
@@ -543,7 +543,7 @@ export class Weapon {
       } else {
         const hb = seg(p, 0, 0.15) * (1 - seg(p, 0.85, 1));
         handT = hb;
-        handTarget = add3(d.bolt, [0.035, 0, 0.02]);
+        handTarget = add3(d.bolt || [0.04, 0.02, 0.02], [0.035, 0, 0.02]);
         boltBack = seg(p, 0.25, 0.45) * (1 - seg(p, 0.55, 0.72));
         tilt = 0.4 * hb;
         fl[5] += hb * 0.25; fl[3] += seg(p, 0.55, 0.62) * (1 - seg(p, 0.62, 0.8)) * 0.08;   // roll in, snap the bolt home

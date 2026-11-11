@@ -1585,7 +1585,15 @@ let last = performance.now(), time = 0, fovKick = 0, timeScale = 1;
 const weaponCtx = { fire, sounds };
 
 let perfT = 0, perfN = 0, perfLast = 0;
+// a bug in one frame must never stop the game loop (that freezes the game with the mouse still locked)
+let frameErr = 0;
 function frame(now) {
+  try { frameBody(now); } catch (e) {
+    if (frameErr++ < 3) console.error(e);
+    requestAnimationFrame(frame);
+  }
+}
+function frameBody(now) {
   const rdt = Math.min((now - last) / 1000, 0.05);
   if (slowmo > 0) slowmo -= rdt;
   const dt = rdt * timeScale * (slowmo > 0 ? 0.3 : 1);
