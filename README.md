@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.36: online fixed** — rooms now run through public message servers over a normal secure web connection (like any website), so school/work/mobile networks that block player-to-player connections can't stop it. The host grabs the first of four servers that answers, joiners find the room on whichever server it's on. **Build 0.35: cleaner hands** — the pads on either side of the palm and the stacked wrist bands (glove cuff, rolled sleeve, watch) are gone; each forearm is one smooth tapered sleeve with the glove running into it, and the thumb grows out of the palm. **Build 0.34: balance pass and better reloads.** Every gun was tuned against a target time-to-kill for its role (SMGs ~0.7 s close, rifles ~0.9 s, shotguns two-shot up close, precision guns reward headshots); the minigun is down from 320 to 217 DPS with a 200-round box, a longer spin-up, wider spread and a movement penalty (heavier guns slow you down; a spinning minigun slows you a lot). In reloads the free hand now holds mags from underneath, pinches charging handles, bolts and shells, and turns palm-down to reach over the top; the SF-47 got a cleaner reload. **Build 0.33: online joining fixed for real networks** (relay servers for networks that block direct connections, automatic retries, and clear messages for a wrong code vs a blocked network), **and smoother hands and bodies** (rounded arm bands, smoother characters at a distance, no flat cylinders). **Build 0.32: real hands and a military armoury.** The first-person hands are a jointed rig: a soft palm, three-bone tapered fingers that curl round the grip (index on the trigger), a proper thumb, nails on bare hands and knuckle armour on tactical gloves. The weapon crates are olive-drab military crates with steel corners, rope handles, stencilling and hazard bands, lids propped open, with stacked ammo cans (look at the open one and press E to fill both guns), loose mags, shell boxes and belts of rounds. **Build 0.31: no more gaps.** Every part of every gun (and every one of the 49 attachments, in every combination) now touches the rest of the gun: attachments measure the gun's real surfaces and sit flush, swapped stocks get a link to the receiver, and the models were fixed where pieces floated. Guns get a worn metal finish (grain, machining streaks, paint worn bright on the edges) with no cartoon outlines, and the hands are smooth with overlapping finger joints and a wrist joining each hand to its sleeve. **Build 0.30: proper first-person hands** (jointed fingers, a thumb, a trigger finger, a C-clamp support grip, tapered sleeves, glove cuffs and a watch; bare skin or gloves to match your class and cosmetics). **Build 0.29: every gun has its own model and its own reload.** The ten newer guns were rebuilt from scratch (a proper six-barrel minigun, an AA-12-style drum shotgun, a break-action side-by-side, a brass lever-action, a real swing-out revolver, a Vector-style SMG and more), the original six got extra detail, and all 16 reload differently. Also: 49 attachments with a Delta Force-style gunsmith and a Battlefield 2042-style quick swap (hold B), online 1v1/2v2, and 4v4 team deathmatch against AI.
+**Build 0.37: bigger arenas, THE COLOSSEUM and set class abilities.** The three arenas are about twice the floor area with more cover, and a fourth arena, THE COLOSSEUM, is a round sand pit inside a stone bowl with tiered stands, a colonnade and a gate tunnel at each end. Every class now has one set ability on Q: Light gets a better-looking grapple (a braided line that snakes out, a three-claw hook that bites and reels back in), Medium drops a bounce pad that launches anyone sky high, and Heavy slams a steel barricade out of the floor (450 HP, two at once; heavy bots use them too). Barricades and pads show up for everyone online. **Build 0.36: online fixed** — rooms now run through public message servers over a normal secure web connection (like any website), so school/work/mobile networks that block player-to-player connections can't stop it. The host grabs the first of four servers that answers, joiners find the room on whichever server it's on. **Build 0.35: cleaner hands** — the pads on either side of the palm and the stacked wrist bands (glove cuff, rolled sleeve, watch) are gone; each forearm is one smooth tapered sleeve with the glove running into it, and the thumb grows out of the palm. **Build 0.34: balance pass and better reloads.** Every gun was tuned against a target time-to-kill for its role (SMGs ~0.7 s close, rifles ~0.9 s, shotguns two-shot up close, precision guns reward headshots); the minigun is down from 320 to 217 DPS with a 200-round box, a longer spin-up, wider spread and a movement penalty (heavier guns slow you down; a spinning minigun slows you a lot). In reloads the free hand now holds mags from underneath, pinches charging handles, bolts and shells, and turns palm-down to reach over the top; the SF-47 got a cleaner reload. **Build 0.33: online joining fixed for real networks** (relay servers for networks that block direct connections, automatic retries, and clear messages for a wrong code vs a blocked network), **and smoother hands and bodies** (rounded arm bands, smoother characters at a distance, no flat cylinders). **Build 0.32: real hands and a military armoury.** The first-person hands are a jointed rig: a soft palm, three-bone tapered fingers that curl round the grip (index on the trigger), a proper thumb, nails on bare hands and knuckle armour on tactical gloves. The weapon crates are olive-drab military crates with steel corners, rope handles, stencilling and hazard bands, lids propped open, with stacked ammo cans (look at the open one and press E to fill both guns), loose mags, shell boxes and belts of rounds. **Build 0.31: no more gaps.** Every part of every gun (and every one of the 49 attachments, in every combination) now touches the rest of the gun: attachments measure the gun's real surfaces and sit flush, swapped stocks get a link to the receiver, and the models were fixed where pieces floated. Guns get a worn metal finish (grain, machining streaks, paint worn bright on the edges) with no cartoon outlines, and the hands are smooth with overlapping finger joints and a wrist joining each hand to its sleeve. **Build 0.30: proper first-person hands** (jointed fingers, a thumb, a trigger finger, a C-clamp support grip, tapered sleeves, glove cuffs and a watch; bare skin or gloves to match your class and cosmetics). **Build 0.29: every gun has its own model and its own reload.** The ten newer guns were rebuilt from scratch (a proper six-barrel minigun, an AA-12-style drum shotgun, a break-action side-by-side, a brass lever-action, a real swing-out revolver, a Vector-style SMG and more), the original six got extra detail, and all 16 reload differently. Also: 49 attachments with a Delta Force-style gunsmith and a Battlefield 2042-style quick swap (hold B), online 1v1/2v2, and 4v4 team deathmatch against AI.
 
 ## Run it
 
@@ -34,9 +34,7 @@ Then open http://localhost:8000.
 | Right mouse / V | Aim down sights (the sniper scopes in) |
 | R | Reload |
 | E | Take a gun from a case, use the workbench, press a lift button, pick up / deposit the cash box |
-| Q | Dash (2 charges, works in the air) |
-| G | Grapple (works in the air; press again or jump to let go) |
-| Z | Ground slam (dive and send out a shockwave; leaps first if you're on the ground) |
+| Q | Class ability (rebindable): Light grapple, Medium bounce pad, Heavy barricade |
 | 1 / 2 / scroll | Switch weapon |
 | T | Reset the range |
 | X | Restart the parkour course |
@@ -149,13 +147,14 @@ PLAY runs a match lobby before you drop in:
 
 After that, PLAY resumes your match until you change your loadout.
 
-## The arenas (build 0.26)
+## The arenas (builds 0.26, 0.37)
 
-Three small walled arenas in the test range's style: white grid blocks, charcoal trim and pilasters, red light strips, and floodlights in the corners. The obstacles are simple and chunky: cubes, low and tall walls, pillars, platforms with stairs. Every layout is point-symmetric, so neither team has the better side. Each team spawns in a dark zone at its end; a red line marks halfway.
+Three walled arenas in the test range's style: white grid blocks, charcoal trim and pilasters, red light strips, and floodlights in the corners. The obstacles are simple and chunky: cubes, low and tall walls, pillars, platforms with stairs. Every layout is point-symmetric, so neither team has the better side. Each team spawns in a dark zone at its end; a red line marks halfway. In build 0.37 each layout was scaled up across the floor (×1.4–1.45, heights unchanged) and given extra cover.
 
-- **BLOCKYARD** (68 × 48 m): a raised centre platform with stairs on both sides and cover on top, surrounded by cubes, pillars and walls.
-- **THE SPLIT** (72 × 52 m): a dividing wall down the middle with three gaps (the centre one half-blocked), a hut on each side with doors front and back, and a side deck with stairs.
-- **HIGH GROUND** (80 × 52 m): a 4.2 m lookout with parapets near each spawn, a low side deck each, and staggered trench walls and big rounded blocks through the middle.
+- **BLOCKYARD** (99 × 70 m): a raised centre platform with stairs on both sides and cover on top, a corner deck each side, surrounded by cubes, pillars and walls.
+- **THE SPLIT** (101 × 73 m): a dividing wall down the middle with three gaps (the centre one half-blocked), a hut on each side with doors front and back, and a side deck with stairs.
+- **HIGH GROUND** (112 × 73 m): a 4.2 m lookout with parapets near each spawn, a low side deck each, and staggered trench walls and big rounded blocks through the middle.
+- **THE COLOSSEUM** (80 m across): a round sand floor inside a stone ring wall (too tall to climb) with a red light strip, five tiers of stands, a colonnade and floodlight masts above. Each team comes out of a gate tunnel with a portcullis. Inside: a raised dais with a column in the middle, a ring of columns (some broken), low stone walls, blocks and a small deck each side.
 
 Matchmaking picks one at random. The bots can path anywhere, including up the stairs onto every platform.
 
@@ -311,13 +310,17 @@ There's no music. The game only plays sound effects.
 
 **Survival.** You have 150 HP, which regenerates after 4 s without taking damage. You also get damage-direction arrows, near-miss whizzes, a kill feed, and an eliminated screen that respawns you in the arena after 3 s.
 
-## Abilities
+## Abilities (build 0.37)
 
-| Ability | Key | Cooldown | Notes |
+Each class has one set ability, on Q (rebind it in settings).
+
+| Class | Ability | Cooldown | Notes |
 | --- | --- | --- | --- |
-| Dash | Q | 2 charges, 2.2 s each | A burst in the direction you're holding. You keep the speed afterwards, and a mid-air dash catches your fall. |
-| Grapple | G | 4.5 s | A hook up to 45 m away reels you in. The crosshair turns into a ring when a target is in range. Jump to let go with a boost. |
-| Ground slam | Z | 7 s | Dives into the ground. The shockwave damages dummies and breaks destructible wall chunks, and it hits harder the further you fall. |
+| Light | Grapple | 4.5 s | A hook up to 45 m away reels you in. The crosshair turns into a ring when a target is in range. Press again or jump to let go with a boost. The line snakes out behind a spinning three-claw hook, twangs taut when it bites and reels back into your hand when you let go. Other players see your line online. |
+| Medium | Bounce pad | 14 s | Drops a pad where you aim (within 9 m) or at your feet. Anyone who steps on it is launched about 5.5 m up, keeping (and boosting) their run speed. Lasts 30 s, one at a time. |
+| Heavy | Barricade | 10 s | A steel wall (2.8 × 2 m) rises out of the floor in front of you, square to where you're facing. It blocks movement, bullets and sight, takes 450 damage (your team's bullets don't hurt it) and lasts 45 s; up to two at once, the oldest goes when you place a third. Heavy bots put one up when they're losing a fight with nowhere to hide. |
+
+Dash and ground slam are still in the code (player.js) but no class uses them.
 
 ## Workbench and attachments
 
@@ -394,6 +397,7 @@ src/audio.js          procedural sound effects
 src/maps/testRange.js the test range (data + build function), incl. the parkour annex
 src/maps/arenas.js    the three semi-finals arenas (layouts as data + a shared builder)
 src/tdm.js            team deathmatch: scoring, respawns, team AI (intel, roles, reloads)
+src/gadgets.js        class gadgets: barricades and bounce pads (world boxes, synced online), the grapple line and hook
 src/bench.js          the gunsmith (workbench overlay)
 src/net.js            online rooms: transports (PeerJS / BroadcastChannel), lobby, remote players, sync
 src/nav.js            bot navigation: walkable grid per level, stair links, A*

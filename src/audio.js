@@ -121,6 +121,12 @@ export class Sounds {
   elevatorDing() { this.burst(0.25, 300, 0.25); this.click(1400, 0.25, 3); }   // car settles
   hit() { this.tone(1400, 1100, 0.05, 0.18, 'square'); }
   kill() { this.tone(900, 1800, 0.12, 0.2, 'triangle'); this.burst(0.35, 1800, 0.35, 'bandpass', 1.2); }
+  barricade() { this.burst(0.3, 260, 0.45); this.click(900, 0.4, 2); setTimeout(() => { this.click(1800, 0.35, 4); this.burst(0.12, 1400, 0.12); }, 180); }
+  barricadeHit() { this.click(1100 + Math.random() * 400, 0.16, 3); }
+  barricadeBreak() { this.burst(0.5, 500, 0.5); this.burst(0.3, 2600, 0.15, 'bandpass', 1.5); this.tone(160, 50, 0.4, 0.2); }
+  padDrop() { this.click(1500, 0.3, 3); this.tone(500, 900, 0.12, 0.06, 'triangle'); }
+  bounce() { this.tone(180, 720, 0.22, 0.16, 'triangle'); this.burst(0.25, 900, 0.28, 'bandpass', 0.9); this.click(2600, 0.2, 4); }
+  denied() { this.tone(320, 220, 0.12, 0.08, 'square'); }
   crumble() { this.burst(0.3, 700, 0.35); }
   dry() { this.tone(2200, 1800, 0.03, 0.12, 'square'); }
   jump() { this.burst(0.08, 500, 0.12); }

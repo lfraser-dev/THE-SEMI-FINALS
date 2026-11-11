@@ -105,7 +105,7 @@
 
   /* abilities */
   #abilities { position: absolute; left: 26px; bottom: 84px; display: flex; gap: 8px; }
-  .ab { --p: 0; position: relative; width: 74px; height: 58px; background: rgba(17,18,22,.82); color: #fff; overflow: hidden;
+  .ab { --p: 0; position: relative; min-width: 74px; padding: 0 8px; box-sizing: border-box; height: 58px; background: rgba(17,18,22,.82); color: #fff; overflow: hidden;
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; }
   .ab::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--p) * 100%); background: rgba(0,0,0,.55); }
   .ab b { font-size: 13px; font-weight: 800; font-style: italic; letter-spacing: .1em; opacity: .45; z-index: 1; }
@@ -608,9 +608,9 @@
   <div class="panel hidden" id="wavepanel"><div id="wavetitle">WAVE 1</div><div id="waveinfo"></div></div>
   <div id="banner"><b></b><span></span></div>
   <div id="abilities">
-    <div class="ab" id="ab-dash"><kbd>Q</kbd><b>DASH</b><span class="cd"></span><div class="pips"><i class="pip"></i><i class="pip"></i></div></div>
-    <div class="ab" id="ab-grapple"><kbd>G</kbd><b>GRAPPLE</b><span class="cd"></span></div>
-    <div class="ab" id="ab-slam"><kbd>Z</kbd><b>SLAM</b><span class="cd"></span></div>
+    <div class="ab" id="ab-grapple"><kbd>Q</kbd><b>GRAPPLE</b><span class="cd"></span></div>
+    <div class="ab" id="ab-pad"><kbd>Q</kbd><b>BOUNCE PAD</b><span class="cd"></span></div>
+    <div class="ab" id="ab-barricade"><kbd>Q</kbd><b>BARRICADE</b><span class="cd"></span><div class="pips"><i class="pip"></i><i class="pip"></i></div></div>
   </div>
   <div id="teams"></div>
   <div id="objective" class="hidden"><b></b><span></span><i></i></div>
@@ -645,7 +645,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.36</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.37</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -711,7 +711,7 @@
           sprint-jump along a wall to wall run · <kbd>SPACE</kbd> wall jump<br>
           <kbd>LMB</kbd>/<kbd class="keyhint-fire">F</kbd>shoot · <kbd>RMB</kbd>/<kbd class="keyhint-aim">V</kbd>aim<br>
           <kbd>R</kbd>reload · <kbd>E</kbd>take gun from case<br>
-          <kbd class="keyhint-dash">Q</kbd>dash · <kbd class="keyhint-grapple">G</kbd>grapple · <kbd class="keyhint-slam">Z</kbd>ground slam (whichever your class has equipped)<br>
+          <kbd class="keyhint-ability">Q</kbd>class ability: Light grapple · Medium bounce pad · Heavy barricade<br>
           <kbd>E</kbd>at the workbench for attachments<br>
           take the elevator (west wall) down to the <b>underground arena</b> · <kbd>E</kbd> at the console to fight bots<br>
           <kbd>1</kbd><kbd>2</kbd>/scroll swap · <kbd>T</kbd>reset range · <kbd>ESC</kbd> main menu<br>
@@ -727,9 +727,7 @@
           <span>AIM KEY</span><button id="bind-aim" type="button">V</button>
           <span>SHOOT KEY</span><button id="bind-fire" type="button">F</button>
           <span>AIM MODE</span><button id="aim-mode" type="button">HOLD</button>
-          <span>DASH</span><button id="bind-dash" type="button">Q</button>
-          <span>GRAPPLE</span><button id="bind-grapple" type="button">G</button>
-          <span>GROUND SLAM</span><button id="bind-slam" type="button">Z</button>
+          <span>CLASS ABILITY</span><button id="bind-ability" type="button">Q</button>
         </div>
         <div id="bindnote"></div>
       </div>
@@ -747,37 +745,38 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.36-1794405832",
-  "./src/audio.js": "./src/audio.js?v=0.36-1794405832",
-  "./src/batch.js": "./src/batch.js?v=0.36-1794405832",
-  "./src/bench.js": "./src/bench.js?v=0.36-1794405832",
-  "./src/bots.js": "./src/bots.js?v=0.36-1794405832",
-  "./src/classes.js": "./src/classes.js?v=0.36-1794405832",
-  "./src/contestant.js": "./src/contestant.js?v=0.36-1794405832",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.36-1794405832",
-  "./src/course.js": "./src/course.js?v=0.36-1794405832",
-  "./src/effects.js": "./src/effects.js?v=0.36-1794405832",
-  "./src/elevator.js": "./src/elevator.js?v=0.36-1794405832",
-  "./src/input.js": "./src/input.js?v=0.36-1794405832",
-  "./src/main.js": "./src/main.js?v=0.36-1794405832",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.36-1794405832",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.36-1794405832",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.36-1794405832",
-  "./src/math.js": "./src/math.js?v=0.36-1794405832",
-  "./src/nav.js": "./src/nav.js?v=0.36-1794405832",
-  "./src/net.js": "./src/net.js?v=0.36-1794405832",
-  "./src/player.js": "./src/player.js?v=0.36-1794405832",
-  "./src/props.js": "./src/props.js?v=0.36-1794405832",
-  "./src/renderer.js": "./src/renderer.js?v=0.36-1794405832",
-  "./src/rig.js": "./src/rig.js?v=0.36-1794405832",
-  "./src/tdm.js": "./src/tdm.js?v=0.36-1794405832",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.36-1794405832",
-  "./src/weapon.js": "./src/weapon.js?v=0.36-1794405832",
-  "./src/weapons.js": "./src/weapons.js?v=0.36-1794405832",
-  "./src/world.js": "./src/world.js?v=0.36-1794405832"
+  "./src/attachments.js": "./src/attachments.js?v=0.37-1794419449",
+  "./src/audio.js": "./src/audio.js?v=0.37-1794419449",
+  "./src/batch.js": "./src/batch.js?v=0.37-1794419449",
+  "./src/bench.js": "./src/bench.js?v=0.37-1794419449",
+  "./src/bots.js": "./src/bots.js?v=0.37-1794419449",
+  "./src/classes.js": "./src/classes.js?v=0.37-1794419449",
+  "./src/contestant.js": "./src/contestant.js?v=0.37-1794419449",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.37-1794419449",
+  "./src/course.js": "./src/course.js?v=0.37-1794419449",
+  "./src/effects.js": "./src/effects.js?v=0.37-1794419449",
+  "./src/elevator.js": "./src/elevator.js?v=0.37-1794419449",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.37-1794419449",
+  "./src/input.js": "./src/input.js?v=0.37-1794419449",
+  "./src/main.js": "./src/main.js?v=0.37-1794419449",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.37-1794419449",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.37-1794419449",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.37-1794419449",
+  "./src/math.js": "./src/math.js?v=0.37-1794419449",
+  "./src/nav.js": "./src/nav.js?v=0.37-1794419449",
+  "./src/net.js": "./src/net.js?v=0.37-1794419449",
+  "./src/player.js": "./src/player.js?v=0.37-1794419449",
+  "./src/props.js": "./src/props.js?v=0.37-1794419449",
+  "./src/renderer.js": "./src/renderer.js?v=0.37-1794419449",
+  "./src/rig.js": "./src/rig.js?v=0.37-1794419449",
+  "./src/tdm.js": "./src/tdm.js?v=0.37-1794419449",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.37-1794419449",
+  "./src/weapon.js": "./src/weapon.js?v=0.37-1794419449",
+  "./src/weapons.js": "./src/weapons.js?v=0.37-1794419449",
+  "./src/world.js": "./src/world.js?v=0.37-1794419449"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.36-1794405832"></script>
+<script type="module" src="src/main.js?v=0.37-1794419449"></script>
 </body>
 </html>

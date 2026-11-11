@@ -25,6 +25,7 @@ import { Matchmaking } from './matchmaking.js';
 import { Deathmatch } from './tdm.js';
 import { Lobby } from './net.js';
 import { StaticBatches } from './batch.js';
+import { Gadgets, ropeParts, hookParts } from './gadgets.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -40,7 +41,7 @@ try {
 }
 
 // ---------- settings ----------
-const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold', dashKey: 'KeyQ', grappleKey: 'KeyG', slamKey: 'KeyZ' };
+const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold', dashKey: 'KeyQ', grappleKey: 'KeyG', slamKey: 'KeyZ', abilityKey: 'KeyQ' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('semifinals.settings') || '{}')); } catch { /* ignore */ }
 const saveSettings = () => { try { localStorage.setItem('semifinals.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 
@@ -59,6 +60,7 @@ const zoneOf = (b) => {
 const effects = new Effects(world);
 const input = new Input(canvas);
 const sounds = new Sounds();
+const gadgets = new Gadgets(world, effects, sounds);     // barricades and bounce pads
 const applyBinds = () => { input.binds = { aim: settings.aimKey, fire: settings.fireKey }; input.aimMode = settings.aimMode; };
 applyBinds();
 sounds.setVolume(settings.volume);
@@ -121,7 +123,7 @@ function pickUp(caseDef) {
 
 // ---------- classes (chosen in the Armoury) ----------
 // (classLo is hoisted into a var-like holder so defFor can be used while the file loads)
-let equippedAbility = classLo[classLo.cls].ability;
+let equippedAbility = CLASSES[classLo.cls].abilities[0];
 let classDirty = true;          // class changed since the current test-range session started
 function classWeapons() {
   const c = CLASSES[classLo.cls], primary = classLo[classLo.cls].weapon;
@@ -134,7 +136,7 @@ function applyClass() {
   slots[0] = new Weapon(defFor(a));
   slots[1] = new Weapon(defFor(b));
   current = 0; lastSlot = 1;
-  equippedAbility = classLo[classLo.cls].ability;
+  equippedAbility = CLASSES[classLo.cls].abilities[0];     // every class has its own set ability
   setHandLook(buildOutfit(cosmetics, classLo.cls));
   player.resetAbilities?.();
   updateSlotHud();
@@ -245,6 +247,15 @@ function fire(w) {
       e.head = e.head || b.head;
       perDummy.set(b.ref, e);
       anyHit = true;
+    } else if (b.tag === 'barricade') {
+      // steel: sparks, and it takes the hit unless it's your own team's
+      const g = b.ref;
+      if (!(tdm.active && g.team === tdm.myTeam?.idx)) {
+        const fall = 1 - 0.45 * clamp((hit.t - d.range) / (d.range * 1.2), 0, 1);
+        gadgetHit(g, Math.round(d.dmg * fall));
+      }
+      effects.impact(hit.point, hit.normal, [1, 0.8, 0.45]);
+      if (i === 0) sounds.barricadeHit();
     } else if (b.tag === 'chunk') {
       stats.chunks += b.ref.hit(b, dir);
       if (i === 0) sounds.crumble();
@@ -446,9 +457,17 @@ const botHooks = {
   shot: (bot, from, end, dist) => { effects.tracer(from, end); sounds.botShot(dist); },
   impact: (hit, u) => {
     if (hit.box.tag === 'glass') { breakGlass(hit.box, u || [0, 0, 0]); return; }
+    if (hit.box.tag === 'barricade') { gadgets.damage(hit.box.ref, 16); effects.impact(hit.point, hit.normal, [1, 0.8, 0.45]); return; }
     effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal);
   },
   onBotKill: (killer, victim) => { killFeed(killer.name, 'RIFLE', victim.name, false); },
+  barricade: (agent, tgt) => {
+    const p = agent.pos, yaw = Math.atan2(-(tgt.pos[0] - p[0]), -(tgt.pos[2] - p[2]));
+    const spot = gadgets.barricadeSpot(p, yaw);
+    if (!spot) return false;
+    gadgets.place({ gid: gadgets.newId(agent.name), k: 'bar', ...spot, owner: agent.name, team: agent.team.idx, teamCol: agent.team.rgb });
+    return true;
+  },
   whiz: (from, end) => {
     // did the round pass close to your head?
     const e = player.eye(), d = [end[0] - from[0], end[1] - from[1], end[2] - from[2]];
@@ -585,13 +604,47 @@ function updateCombat(dt) {
   if (!player.dead && player.hurtT > 4 && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 40 * dt);
 }
 
+// ---------- class gadgets: Medium's bounce pad, Heavy's barricade ----------
+const myGadgetOwner = () => (online.active ? online.myId : 'me');
+function useGadget(kind) {
+  const a = player.abil[kind];
+  if (!a || a.cd > 0 || player.dead) { if (a?.cd > 0) sounds.denied(); return; }
+  const spot = kind === 'barricade' ? gadgets.barricadeSpot(player.pos, player.yaw) : gadgets.padSpot(player.eye(), player.forward(), player.pos);
+  if (!spot) { sounds.denied(); banner('NO ROOM', 'NEEDS FLAT, OPEN FLOOR', 'bad', 0.9); return; }
+  const owner = myGadgetOwner(), team = tdm.active ? tdm.myTeam?.idx : -1;
+  const spec = { gid: gadgets.newId(owner), k: kind === 'barricade' ? 'bar' : 'pad', ...spot, owner, team, teamCol: tdm.active ? tdm.myTeam?.rgb : null };
+  gadgets.place(spec);
+  if (online.active) online.send({ t: 'gad', id: online.myId, g: spec });
+  a.cd = a.max;
+  if (kind === 'barricade') { player.camPitchV -= 0.5; player.shake = Math.max(player.shake || 0, 0.2); }
+}
+function gadgetHit(g, dmg) {
+  gadgets.damage(g, dmg);
+  if (online.active) online.send({ t: 'gdm', gid: g.gid, dmg });
+}
+// the player as something a bounce pad can throw
+const padRider = {
+  get pos() { return player.pos; }, get vel() { return player.vel; }, get dead() { return player.dead || !playing; }, padCd: 0,
+  onBounce(vy) {
+    player.cancelAbilities?.();
+    Object.assign(player, { sliding: false, grounded: false, trav: null, wallRun: null, coyote: 0 });
+    player.pos[1] += 0.05;
+    player.vel[1] = vy;
+    const hs = Math.hypot(player.vel[0], player.vel[2]);
+    if (hs > 1.5) { const k = Math.min(1.3, 16 / hs); player.vel[0] *= k; player.vel[2] *= k; }
+    player.shake = Math.max(player.shake || 0, 0.25);
+    player.camPitchV -= 0.9;
+    player.landV -= 0.4;
+  },
+};
+
 // ---------- HUD ----------
 const hud = {
   ammo: $('ammo'), reserve: $('reserve'), reload: $('reload'), speed: $('speed'), fps: $('fps'),
   kills: $('kills'), acc: $('acc'), chunks: $('chunks'), cross: $('crosshair'), hitmarker: $('hitmarker'),
   dmgLayer: $('damage'), state: $('state'), wname: $('weaponname'), wtype: $('weapontype'), prompt: $('prompt'),
   scope: $('scope'), slots: [$('slot1'), $('slot2')],
-  ab: { dash: $('ab-dash'), grapple: $('ab-grapple'), slam: $('ab-slam') },
+  ab: { grapple: $('ab-grapple'), pad: $('ab-pad'), barricade: $('ab-barricade') },
   hp: $('health'), hpBar: $('hpbar'), hpNum: $('hpnum'), dmg: $('dmgdirs'), lowhp: $('lowhp'), killfeed: $('killfeed'),
   wave: $('wavepanel'), waveTitle: $('wavetitle'), waveInfo: $('waveinfo'), banner: $('banner'), death: $('death'), deathSub: $('deathsub'),
   speedo: $('speedo'), speedBar: $('speedbar'), speedNum: $('speednum'), chain: $('chain'),
@@ -624,22 +677,19 @@ function updateAbilityHud() {
     el.classList.toggle('ready', ready);
     el.querySelector('.cd').textContent = extra;
   };
-  const dRem = a.dash.charges < a.dash.max ? 1 - a.dash.t / a.dash.recharge : 0;
-  set(hud.ab.dash, a.dash.charges > 0 ? 0 : dRem, a.dash.charges > 0);
-  hud.ab.dash.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < a.dash.charges));
   const gActive = player.grapple && player.grapple.phase !== 'miss';
   set(hud.ab.grapple, gActive ? 0 : a.grapple.cd / a.grapple.max, a.grapple.cd <= 0 || gActive, a.grapple.cd > 0 && !gActive ? a.grapple.cd.toFixed(1) : '');
   hud.ab.grapple.classList.toggle('active', !!gActive);
-  set(hud.ab.slam, a.slam.cd / a.slam.max, a.slam.cd <= 0, a.slam.cd > 0 ? a.slam.cd.toFixed(1) : '');
+  for (const k of ['pad', 'barricade']) set(hud.ab[k], a[k].cd / a[k].max, a[k].cd <= 0, a[k].cd > 0 ? a[k].cd.toFixed(1) : '');
+  const mine = gadgets.list.filter((g) => g.owner === myGadgetOwner() && g.k === 'bar').length;
+  hud.ab.barricade.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < 2 - mine));
+  for (const k of ['grapple', 'pad', 'barricade']) hud.ab[k].classList.toggle('hidden', k !== equippedAbility);
   // grapple range hint on the crosshair
-  for (const k of ['dash', 'grapple', 'slam']) hud.ab[k].classList.toggle('hidden', k !== equippedAbility);
   grappleOk = equippedAbility === 'grapple' && a.grapple.cd <= 0 && !player.grapple && !!player.grappleTarget();
   hud.cross.classList.toggle('grapple', grappleOk);
 }
 function refreshAbilityKeys() {
-  hud.ab.dash.querySelector('kbd').textContent = keyLabel(settings.dashKey);
-  hud.ab.grapple.querySelector('kbd').textContent = keyLabel(settings.grappleKey);
-  hud.ab.slam.querySelector('kbd').textContent = keyLabel(settings.slamKey);
+  for (const k of ['grapple', 'pad', 'barricade']) hud.ab[k].querySelector('kbd').textContent = keyLabel(settings.abilityKey);
 }
 
 function updateSlotHud() {
@@ -769,7 +819,7 @@ function updateHud(dt, fovRad) {
   hud.scope.style.opacity = w.scoped ? 1 : 0;
 
   const lb = playing && !player.dead && inStadium() ? lookLiftButton() : null;
-  const hk = settings.grappleKey.replace(/^Key/, '');
+  const hk = settings.abilityKey.replace(/^Key/, '');
   if (inStadium() && stadium.hook && playing && !player.dead && player.grapple?.anchor) {
     hud.prompt.innerHTML = `<kbd>${hk}</kbd> CUT THE LINE <span>OR JUMP</span>`;
     hud.prompt.style.opacity = 1;
@@ -848,6 +898,7 @@ function enterRange() {
   if (where !== 'range') {
     if (tdm.active) endMatch(false);
     where = 'range';
+    gadgets.clear();
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
     document.body.classList.remove('stadium');
@@ -868,6 +919,7 @@ function enterStadium() {
   if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
   if (arriving) {
     where = 'stadium';
+    gadgets.clear();
     botMgr.stop();
     course.reset();
     cutscene = null; pressSeq = null;
@@ -1053,6 +1105,9 @@ const netHooks = {
   feed: (a, b, wid) => killFeed(a, WEAPONS[wid]?.name || 'GUN', b, false),
   banner: (...a) => banner(...a),
   weaponId: () => weapon().def.id,
+  grapplePoint: () => (player.grapple && player.grapple.phase !== 'miss' ? player.grapple.point.map((v) => +v.toFixed(2)) : null),
+  remoteGadget: (spec) => gadgets.place(spec),
+  remoteGadgetHit: (gid, dmg) => gadgets.damage(gadgets.byId(gid), dmg),
 };
 function startOnline(info) {
   if (ai.active) ai.stop();
@@ -1066,6 +1121,7 @@ function startOnline(info) {
   menu.classList.add('hidden');
   enterStadium();
   batches.world = null;
+  gadgets.clear();
   resetGlass();
   const sp = stadium.spawns[info.team];
   player.spawn(sp.pos, sp.yaw);
@@ -1093,6 +1149,7 @@ function setTeamsHud(m) {
 function startMatch(m) {
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
+  gadgets.clear();
   resetGlass();
   walls.forEach((w) => w.reset());
   tdm.start(m, stadium, player, classLo.cls);
@@ -1104,6 +1161,7 @@ function startMatch(m) {
 }
 function endMatch(toMenu) {
   if (tdm === online) { online.leave(); tdm = ai; } else tdm.stop();
+  gadgets.clear();
   match = null;
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
@@ -1493,7 +1551,7 @@ bindSlider('vol', 'volume', (v) => `${Math.round(v * 100)}%`, (v) => sounds.setV
 // ---------- keyboard aim / shoot, rebindable ----------
 const RESERVED = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ControlLeft', 'KeyC', 'KeyR', 'KeyE',
   'KeyT', 'KeyX', 'Digit1', 'Digit2', 'Escape', 'KeyP', 'Enter'];
-const BINDS = { aimKey: 'bind-aim', fireKey: 'bind-fire', dashKey: 'bind-dash', grappleKey: 'bind-grapple', slamKey: 'bind-slam' };
+const BINDS = { aimKey: 'bind-aim', fireKey: 'bind-fire', abilityKey: 'bind-ability' };
 const keyName = (code) => code.replace(/^Key/, '').replace(/^Digit/, '').replace(/Left$|Right$/, (m) => ` ${m.toUpperCase()}`).toUpperCase();
 let rebinding = null;
 function refreshBindButtons() {
@@ -1501,7 +1559,7 @@ function refreshBindButtons() {
   $('aim-mode').textContent = settings.aimMode === 'toggle' ? 'TOGGLE' : 'HOLD';
   document.querySelectorAll('.keyhint-aim').forEach((el) => { el.textContent = keyName(settings.aimKey); });
   document.querySelectorAll('.keyhint-fire').forEach((el) => { el.textContent = keyName(settings.fireKey); });
-  for (const k of ['dash', 'grapple', 'slam']) document.querySelectorAll(`.keyhint-${k}`).forEach((el) => { el.textContent = keyName(settings[`${k}Key`]); });
+  document.querySelectorAll('.keyhint-ability').forEach((el) => { el.textContent = keyName(settings.abilityKey); });
 }
 function startRebind(which, btn) {
   rebinding = { which, btn };
@@ -1545,25 +1603,39 @@ function beam(i, a, b, thick, color, emissive, alpha) {
   compose(beamPool[i], [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], anglesFor(d), s);
   return { model: beamPool[i], scale: s, color, emissive, alpha };
 }
+let reel = null;           // the grapple line reeling back in after you let go
 function worldBeams(w) {
   const out = [];
   const g = player.grapple;
-  if (g && !bench.open) {
+  if (!bench.open && (g || reel)) {
     const hm = w.handModels[0];
     const hand = vmToWorld([hm[12], hm[13], hm[14]]);
-    let tip;
-    if (g.phase === 'fire') {
+    let tip, sag = 0, wave = 0, open = 0, spin = time * 26;
+    if (g && g.phase === 'fire') {
+      // the hook flies out spinning, the line snaking after it
       const k = Math.min(g.t / g.travel, 1);
       tip = hand.map((c, i) => c + (g.point[i] - c) * k);
-    } else if (g.phase === 'pull') tip = g.point;
-    else {
+      wave = 0.12 + 0.3 * (1 - k); sag = 0.15;
+    } else if (g && g.phase === 'pull') {
+      // it bites: claws open, the line twangs and pulls taut
+      const ten = Math.min(1, g.t / 0.3);
+      tip = g.point; open = 1; spin = g.spin ??= time * 26;
+      wave = 0.2 * (1 - ten) * Math.cos(g.t * 30); sag = 0.35 * (1 - ten) * (1 - ten);
+    } else if (g) {
       const k = g.t < 0.16 ? g.t / 0.16 : Math.max(0, 1 - (g.t - 0.16) / 0.16);
       tip = g.from.map((c, i) => c + g.dir[i] * 45 * k);
+      wave = 0.3; sag = 0.5 * k;
+    } else {
+      // let go: the line reels back into the launcher
+      const k = Math.min(1, (time - reel.t0) / 0.2);
+      tip = reel.tip.map((c, i) => c + (hand[i] - c) * k * k);
+      if (k >= 1) reel = null;
+      wave = 0.25 * (1 - k); sag = 0.6 * (1 - k); open = 1 - k;
     }
-    const r = beam(0, hand, tip, 0.018, [0.12, 0.12, 0.13], 0, 1);
-    if (r) out.push(r);
-    const hook = beam(1, tip.map((c, i) => c - (tip[i] - hand[i]) * 0.0), tip.map((c, i) => c + (tip[i] - hand[i]) / (Math.hypot(...tip.map((v, j) => v - hand[j])) || 1) * 0.12), 0.07, [0.95, 0.15, 0.1], 0.4, 1);
-    if (hook) out.push(hook);
+    if (g && g.phase !== 'miss') reel = { tip: [...tip], t0: time };
+    const dir = tip.map((c, i) => c - hand[i]);
+    out.push(...ropeParts(hand, tip, { sag, wave, t: time, thick: 0.017 }));
+    if (Math.hypot(...dir) > 0.3) out.push(...hookParts(tip, dir, spin, open));
   }
   const lp = !bench.open && !w.scoped ? w.laserPoint() : null;
   if (lp) {
@@ -1727,18 +1799,16 @@ function frameBody(now) {
     w = weapon();
     // only your class's equipped specialisation works
     let hooked = false;
-    if (inStadium() && stadium.hook && input.hit(settings.grappleKey)) {
+    if (inStadium() && stadium.hook && input.hit(settings.abilityKey)) {
       if (player.grapple && player.grapple.phase !== 'miss') { player.releaseGrapple(false); sounds.grappleRelease(); hooked = true; }
       else {
         const t = hookTarget();
         if (t) { player.hookTo(t.box, t.point); hooked = true; fallTop = null; }
       }
     }
-    const act = {
-      dash: equippedAbility === 'dash' && input.hit(settings.dashKey),
-      grapple: !hooked && equippedAbility === 'grapple' && input.hit(settings.grappleKey),
-      slam: equippedAbility === 'slam' && input.hit(settings.slamKey),
-    };
+    const abilityHit = !hooked && input.hit(settings.abilityKey);
+    const act = { grapple: equippedAbility === 'grapple' && abilityHit };
+    if (abilityHit && (equippedAbility === 'pad' || equippedAbility === 'barricade')) useGadget(equippedAbility);
     elevator.update(dt, player, sounds);
     for (const l of lifts) l.update(dt, player, sounds);
     if (inStadium()) for (const c of stadium.cargo || []) c.update(dt, player);
@@ -1754,6 +1824,7 @@ function frameBody(now) {
     handleWeaponEvents(w);
   }
   dummies.forEach((d) => d.update(dt, time));
+  if (playing && !bench.open) gadgets.update(dt, [padRider]);
   effects.update(dt);
 
   // ---- render ----
@@ -1896,4 +1967,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { gadgets, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

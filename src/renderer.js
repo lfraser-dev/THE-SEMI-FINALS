@@ -529,6 +529,13 @@ function cylinderGeometry(seg = 28) {
   return { verts: new Float32Array(v), indices: new Uint16Array(idx) };
 }
 
+// the same cylinder stood upright (along Y), for columns and pads
+function cylinderYGeometry(seg = 28) {
+  const g = cylinderGeometry(seg), v = g.verts;
+  for (let i = 0; i < v.length; i += 3) { const y = v[i + 1]; v[i + 1] = v[i + 2]; v[i + 2] = -y; }
+  return g;
+}
+
 // box with real (physical) rounded edges of radius r, for a box of size D; returned in unit space
 function roundedBoxGeometry(D, r, steps = 4) {
   r = Math.max(0.0005, Math.min(r, Math.min(...D) * 0.48));
@@ -649,8 +656,8 @@ export class Renderer {
     this.vao = cube.vao;
     this.indexCount = cube.count;
     this.cube = cube;
-    this.meshes = { sphere: this.makeMesh(sphereGeometry()), cyl: this.makeMesh(cylinderGeometry()) };
-    this.meshesLo = { sphere: this.makeMesh(sphereGeometry(20, 13)), cyl: this.makeMesh(cylinderGeometry(18)) };
+    this.meshes = { sphere: this.makeMesh(sphereGeometry()), cyl: this.makeMesh(cylinderGeometry()), cylY: this.makeMesh(cylinderYGeometry()) };
+    this.meshesLo = { sphere: this.makeMesh(sphereGeometry(20, 13)), cyl: this.makeMesh(cylinderGeometry(18)), cylY: this.makeMesh(cylinderYGeometry(18)) };
     this.camPos = [0, 0, 0];
     this.lodDist = 16;      // past this, curved parts use the lighter meshes (still smooth)
     this.rounded = new Map();
@@ -710,7 +717,7 @@ export class Renderer {
     return { vao, vb, ib, count: indices.length, id: ++this.meshIds };
   }
 
-  // shape: undefined = plain box, 'sphere', 'cyl' (along Z), or a number = box with rounded edges of that radius (m)
+  // shape: undefined = plain box, 'sphere', 'cyl' (along Z), 'cylY' (upright), or a number = box with rounded edges of that radius (m)
   // lo = a low-poly version for things far from the camera and for the shadow map
   meshFor(shape, scl, lo = false) {
     if (shape == null) return this.cube;

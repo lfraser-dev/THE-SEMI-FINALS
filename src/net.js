@@ -7,6 +7,7 @@
 // The host keeps the score and calls the winner.
 //
 // For testing, `?net=local` swaps WebRTC for a BroadcastChannel, so two tabs in one browser can play each other.
+import { ropeParts, hookParts } from './gadgets.js';
 import { Bot, teamPalette } from './bots.js';
 import { compose, mat4 } from './math.js';
 import { TEAM_NAMES } from './matchmaking.js';
@@ -331,7 +332,7 @@ class Remote {
 
   // a state packet: { p, y, pi, hp, mh, d, c, w }
   state(s) {
-    this.hp = s.hp; this.maxHp = s.mh; this.wep = s.w;
+    this.hp = s.hp; this.maxHp = s.mh; this.wep = s.w; this.gr = s.gr || null;
     if (s.d) return;
     if (!this.bot || this.dead || this.bot.removed) { this.spawn(s.p, s.y); }
     this.target = s;
@@ -508,6 +509,8 @@ export class Online {
       case 'start': this.begin(m); break;
       case 'st': { const r = this.byId(m.id); if (r) r.state(m); break; }
       case 'shot': { if (m.id === this.myId) break; const r = this.byId(m.id); if (r?.bot?.alive) { r.bot.muzzleT = 0.05; r.bot.recoil = 1; } this.g?.remoteShot(m.f, m.e, r); break; }
+      case 'gad': if (m.id !== this.myId && this.active) this.g?.remoteGadget?.(m.g); break;
+      case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
       case 'hit': if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head); break;
       case 'died': this.onDied(m); break;
       case 'score': if (this.teams) { this.teams.forEach((t, i) => { t.kills = m.k[i]; }); if (m.over != null && !this.over) this.finish(this.teams[m.over]); } break;
@@ -592,7 +595,7 @@ export class Online {
     if (this.sendT <= 0) {
       this.sendT = 1 / SEND_HZ;
       const p = g.player;
-      this.send({ t: 'st', id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.() });
+      this.send({ t: 'st', id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined });
     }
   }
 
@@ -602,6 +605,11 @@ export class Online {
       const b = a.bot;
       if (!b || b.removed) continue;
       out.push(...b.parts());
+      // their grappling line, from the hand to where it bit
+      if (b.alive && a.gr) {
+        const h = b.muzzle(), d = [a.gr[0] - h[0], a.gr[1] - h[1], a.gr[2] - h[2]];
+        out.push(...ropeParts(h, a.gr, { thick: 0.03 }), ...hookParts(a.gr, d, 0, 1));
+      }
       if (b.alive && b.muzzleT > 0) {
         const m = mat4(), s = [0.14, 0.14, 0.14];
         compose(m, b.muzzle(), [0, b.yaw, Math.random() * 3], s);

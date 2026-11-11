@@ -1,6 +1,7 @@
 // First-person movement: walk, sprint, crouch, slide, slide-hop chains, mantle, vault, ledge grab,
 // wall run + wall jump, air strafe, step-up, AABB collision, footsteps, plus camera feel.
-// Abilities: dash (2 charges), grapple, ground slam — all usable in the air.
+// Abilities: grapple (Light) lives here; dash and ground slam are still here but unused. Barricades and bounce
+// pads are world gadgets (gadgets.js); only their cooldowns live here.
 import { clamp, damp, forwardFrom, spring, easeOut, easeIn, smoothstep } from './math.js';
 
 const HW = 0.3;          // half width of the player box
@@ -73,6 +74,8 @@ export class Player {
       dash: { charges: DASH_CHARGES, max: DASH_CHARGES, t: 0, recharge: DASH_RECHARGE },
       grapple: { cd: 0, max: GRAPPLE_CD },
       slam: { cd: 0, max: SLAM_CD },
+      barricade: { cd: 0, max: 10 },
+      pad: { cd: 0, max: 14 },
     };
   }
 
@@ -80,7 +83,7 @@ export class Player {
   resetAbilities() {
     this.cancelAbilities();
     this.abil.dash.charges = DASH_CHARGES; this.abil.dash.t = 0;
-    this.abil.grapple.cd = 0; this.abil.slam.cd = 0;
+    this.abil.grapple.cd = 0; this.abil.slam.cd = 0; this.abil.barricade.cd = 0; this.abil.pad.cd = 0;
   }
 
   get mantle() { return this.trav?.kind === 'mantle'; }
@@ -513,6 +516,8 @@ export class Player {
     } else a.dash.t = 0;
     if (!this.grapple || this.grapple.phase === 'miss') a.grapple.cd = Math.max(0, a.grapple.cd - dt);
     if (!this.slam) a.slam.cd = Math.max(0, a.slam.cd - dt);
+    a.barricade.cd = Math.max(0, a.barricade.cd - dt);
+    a.pad.cd = Math.max(0, a.pad.cd - dt);
     this.shake *= Math.exp(-7 * dt);
   }
 

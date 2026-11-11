@@ -164,6 +164,11 @@ class Agent {
     };
     if (tgt && tDist < hi * 1.5) {
       const wantCover = this.pauseCd > 0.35 || this.hpFrac < 0.5 || this.reloadT > 0;
+      // heavies throw up a barricade when they're taking a beating with nowhere to hide
+      this.barCd = (this.barCd ?? 3) - dt;
+      if (wantCover && this.cls === 'heavy' && this.barCd <= 0 && this.hpFrac < 0.75 && tDist > 5 && g.barricade) {
+        this.barCd = g.barricade(this, tgt) ? 20 : 2;
+      }
       if (wantCover && !this.cover) this.cover = co.findCover(this, tgt) || { none: true };
       if (!wantCover) this.cover = null;
       if (this.cover && !this.cover.none) {
