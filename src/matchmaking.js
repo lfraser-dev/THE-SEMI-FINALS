@@ -1,5 +1,5 @@
 // Matchmaking for PLAY: search for contestants → MATCH FOUND → 30 s to pick class, weapon and
-// specialisation → team intro (4 teams of 3) → drop into the arena.
+// specialisation → team intro (2 teams of 4) → drop into the arena (one of the three, picked at random).
 // Team names are drawn from a pool of five; player handles are generated from name parts.
 import { CLASSES, CLASS_ORDER, ABILITIES, saveLoadout } from './classes.js';
 import { WEAPONS } from './weapons.js';
@@ -23,8 +23,8 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const rgb = (c) => `rgb(${c.map((v) => Math.round(v * 255)).join(',')})`;
 
 export class Matchmaking {
-  constructor({ root, classLo, sounds, onChange, onDone, onCancel }) {
-    Object.assign(this, { root, classLo, sounds, onChange, onDone, onCancel });
+  constructor({ root, classLo, sounds, onChange, onDone, onCancel, maps = [] }) {
+    Object.assign(this, { root, classLo, sounds, onChange, onDone, onCancel, maps });
     this.phase = null;
     this.timer = null;
   }
@@ -33,13 +33,16 @@ export class Matchmaking {
 
   start() {
     if (this.active) return;
-    // build the match: 4 teams from the pool of five names, 3 contestants each, you on one of them
+    // build the match: 2 teams from the pool of five names, 4 contestants each, you on one of them; a random arena
     const used = new Set();
-    const names = shuffle([...TEAM_NAMES]).slice(0, 4);
-    const mine = Math.floor(Math.random() * 4);
+    const names = shuffle([...TEAM_NAMES]).slice(0, 2);
+    const mine = Math.floor(Math.random() * 2);
+    this.map = Math.floor(Math.random() * Math.max(1, this.maps.length));
+    this.mapName = this.maps[this.map];
+    const cols = mine === 0 ? [TEAM_COLS[0], TEAM_COLS[1]] : [TEAM_COLS[1], TEAM_COLS[0]];   // your team is always orange
     this.teams = names.map((name, i) => ({
-      name, col: TEAM_COLS[i], mine: i === mine,
-      players: [0, 1, 2].map((k) => ({
+      name, col: cols[i], mine: i === mine,
+      players: [0, 1, 2, 3].map((k) => ({
         name: i === mine && k === 0 ? 'YOU' : handle(used),
         you: i === mine && k === 0,
         cls: pickOf(CLASS_ORDER), locked: false, lockAt: 4 + Math.random() * 20,
@@ -85,10 +88,10 @@ export class Matchmaking {
     this.t += dt;
     if (this.phase === 'search') {
       // contestants trickle in; your squad first
-      const want = Math.min(12, Math.floor(this.t * 2.1 + 1));
+      const want = Math.min(8, Math.floor(this.t * 1.5 + 1));
       if (want > this.found) { this.found = want; this.sounds?.click?.(2200 + this.found * 60, 0.15, 4); this.updateSearch(); }
       this.searchTime.textContent = `0:${String(Math.floor(this.t)).padStart(2, '0')}`;
-      if (this.found >= 12 && this.t > 6.2) this.setPhase('found');
+      if (this.found >= 8 && this.t > 6.2) this.setPhase('found');
     } else if (this.phase === 'found') {
       if (this.t > 1.8) { this.setPhase('loadout'); this.left = LOADOUT_TIME; }
     } else if (this.phase === 'loadout') {
@@ -104,23 +107,23 @@ export class Matchmaking {
       }
       if (this.left <= 0) { this.you.locked = true; this.setPhase('intro'); }
     } else if (this.phase === 'intro') {
-      const shown = Math.min(4, Math.floor(this.t / 0.9) + 1);
+      const shown = Math.min(2, Math.floor(this.t / 0.9) + 1);
       if (shown !== this.shown) { this.shown = shown; this.sounds?.startRun?.(); }
-      if (this.t > 4.4 && !this.dropShown) { this.dropShown = true; this.dropBtn.classList.add('on'); this.sounds?.finish?.(); }
+      if (this.t > 2.6 && !this.dropShown) { this.dropShown = true; this.dropBtn.classList.add('on'); this.sounds?.finish?.(); }
     }
   }
 
   // ---------------------------------------------------------------- search
   buildSearch() {
     const wrap = el('div', 'mk-search');
-    wrap.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'CONTAINER SHIP'} · 4 TEAMS OF 3`));
+    wrap.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'ARENA'} · TEAM DEATHMATCH · 4V4`));
     const title = el('div', 'mk-title');
     title.append(el('span', null, 'FINDING MATCH'), el('i', 'mk-dots'));
     wrap.append(title);
     this.searchTime = el('div', 'mk-time', '0:00');
     wrap.append(this.searchTime);
     this.slots = el('div', 'mk-slots');
-    for (let i = 0; i < 12; i++) this.slots.append(el('i'));
+    for (let i = 0; i < 8; i++) this.slots.append(el('i'));
     wrap.append(this.slots);
     this.searchInfo = el('div', 'mk-info');
     wrap.append(this.searchInfo);
@@ -134,13 +137,13 @@ export class Matchmaking {
 
   updateSearch() {
     [...this.slots.children].forEach((s, i) => s.classList.toggle('on', i < this.found));
-    this.searchInfo.textContent = `CONTESTANTS FOUND ${this.found} / 12`;
+    this.searchInfo.textContent = `CONTESTANTS FOUND ${this.found} / 8`;
   }
 
   // ---------------------------------------------------------------- found
   buildFound() {
     const w = el('div', 'mk-found');
-    w.append(el('b', null, 'MATCH FOUND'), el('span', null, this.mapName || 'CONTAINER SHIP'));
+    w.append(el('b', null, 'MATCH FOUND'), el('span', null, this.mapName || 'ARENA'));
     this.root.append(w);
     this.sounds?.checkpoint?.();
   }
@@ -148,7 +151,7 @@ export class Matchmaking {
   // ---------------------------------------------------------------- loadout (30 s)
   buildLoadout() {
     const left = el('div', 'mk-load');
-    left.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'CONTAINER SHIP'}`));
+    left.append(el('div', 'mk-kicker', `SEMI-FINALS · ${this.mapName || 'ARENA'}`));
     left.append(el('div', 'mk-title mk-title-s', 'CHOOSE YOUR LOADOUT'));
     this.loadBody = el('div', 'mk-load-body');
     left.append(this.loadBody);
@@ -234,7 +237,7 @@ export class Matchmaking {
     this.dropShown = false;
     const w = el('div', 'mk-intro');
     const top = el('div', 'mk-intro-top');
-    top.append(el('small', null, 'THE SEMI-FINALS · ROUND 1'), el('b', null, this.mapName || 'CONTAINER SHIP'));
+    top.append(el('small', null, 'THE SEMI-FINALS · ROUND 1'), el('b', null, this.mapName || 'ARENA'));
     w.append(top);
     const row = el('div', 'mk-teams');
     this.teams.forEach((tm, i) => {
@@ -255,7 +258,7 @@ export class Matchmaking {
       row.append(cd);
     });
     w.append(row);
-    w.append(el('div', 'mk-rule', 'TOP 2 TEAMS ADVANCE TO THE FINAL'));
+    w.append(el('div', 'mk-rule', 'TEAM DEATHMATCH · FIRST TO 10 KILLS · WINNERS ADVANCE TO THE FINAL'));
     this.dropBtn = el('button', 'mk-drop', 'DROP IN ▶');
     this.dropBtn.type = 'button';
     this.dropBtn.onclick = () => this.finish();
@@ -265,7 +268,7 @@ export class Matchmaking {
 
   finish() {
     if (this.phase !== 'intro') return;
-    const match = { teams: this.teams.map((t) => ({ name: t.name, col: t.col, mine: t.mine, players: t.players.map((p) => ({ name: p.name, cls: p.cls, you: p.you })) })) };
+    const match = { map: this.map, teams: this.teams.map((t) => ({ name: t.name, col: t.col, mine: t.mine, players: t.players.map((p) => ({ name: p.name, cls: p.cls, you: p.you })) })) };
     this.stop();
     this.onDone?.(match);       // called from the click, so the game can lock the mouse
   }

@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.24: the semi-finals map is one huge container ship in the fog, with containers that slide out of the fog across the deck. The bots are smarter, and the vault, cash box and cashout stations look like The Finals.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
+**Build 0.26: the semi-finals are now team deathmatch (4v4, first to 10 kills) on three small arenas built like the test range: BLOCKYARD, THE SPLIT and TWIN TOWERS.** The Test Range, Parkour Course and underground bot arena are still there for warming up.
 
 ## Run it
 
@@ -34,7 +34,6 @@ Then open http://localhost:8000.
 | Right mouse / V | Aim down sights (the sniper scopes in) |
 | R | Reload |
 | E | Take a gun from a case, use the workbench, press a lift button, pick up / deposit the cash box |
-| Hold E | Steal another team's cashout (stand on their station) |
 | Q | Dash (2 charges, works in the air) |
 | G | Grapple (works in the air; press again or jump to let go) |
 | Z | Ground slam (dive and send out a shockwave; leaps first if you're on the ground) |
@@ -150,15 +149,23 @@ PLAY runs a match lobby before you drop in:
 
 After that, PLAY resumes your match until you change your loadout.
 
-## Container Ship (build 0.24)
+## The arenas (build 0.26)
 
-The semi-finals map is one enormous container freighter, about 300 m long, ploughing through a foggy sea.
+Three small walled arenas in the test range's style: white grid blocks, charcoal trim and pilasters, red light strips, and floodlights in the corners. The obstacles are simple and chunky: cubes, low and tall walls, pillars, platforms with stairs. Every layout is point-symmetric, so neither team has the better side. Each team spawns in a dark zone at its end; a red line marks halfway.
 
-- **The deck** is a maze of container stacks, one to five high, in fifteen bays along the ship. There's a broken centre lane, cross lanes between the bays, walkways down both sides, and yellow lashing bridges three containers up. The stacks are lower along the edges so you can climb up (ledge-grab onto the next container). Three bays are left open as fighting pits for the vaults and cashout stations. There's an open foredeck at the bow, with winches and a mast light, and a bridge block and funnel at the stern.
-- **Containers** use their own material. Each 2.6 m level of a stack is its own container in its own colour, with corrugated sides, door ends with locking bars, top and bottom rails, rust streaks and a stencilled ID band.
-- **Out of the fog.** Two rails cross the ship on pylons standing in the sea. Containers slide out of the fog on one side, cross over the deck just above the four-high stacks (level with the five-high ones), and disappear into the fog on the other side. Climb on to ride across, but get off before it carries you back out over the sea.
-- **The sea** is animated, with a rolling swell, glints, whitecaps, a bow wave and a wake. Fall in and you're out ("OVERBOARD"). Drops of more than 18 m kill you; 9 m and over hurts.
-- **Grapple** works normally again (aim and fire). Nothing auto-targets containers.
+- **BLOCKYARD** (68 × 48 m): a raised centre platform with stairs on both sides and cover on top, surrounded by cubes, pillars and walls.
+- **THE SPLIT** (72 × 52 m): a dividing wall down the middle with three gaps (the centre one half-blocked), a hut on each side with doors front and back, and a side deck with stairs.
+- **TWIN TOWERS** (80 × 52 m): a 4.2 m tower with parapets near each spawn, a low side deck each, and staggered trench walls and big rounded blocks through the middle.
+
+Matchmaking picks one at random. The bots can path anywhere, including up the stairs onto every platform.
+
+## Team deathmatch (build 0.26)
+
+PLAY → matchmaking → loadout (30 s) → team intro → a 4v4 team deathmatch: you and three AI teammates against four AI enemies. Every elimination scores a point for the other team, and **the first team to 10 kills wins** and advances to the final. You respawn at your team's end after 3 seconds; bots come back after 4. There's no friendly fire.
+
+On the HUD: both teams' kill counts along the top and the score (in the leading team's colour) underneath. Teammates always have their name and health shown; enemies only when you can see them. Kills show in the kill feed.
+
+**The AI** hunts the nearest enemy, with each squad member spreading out around the target instead of stacking up. They react after a short delay, aim better the longer they track you, strafe while shooting, duck into cover between bursts, stick with a target and finish off the wounded. When badly hurt they fall back to a teammate and heal after 5 seconds out of the fight. Moving fast, sliding, jumping and dashing all make you harder to hit.
 
 ## Performance (build 0.25)
 
@@ -170,27 +177,6 @@ The semi-finals map is one enormous container freighter, about 300 m long, ploug
   the vertices per frame from ~7 million to under 0.5 million.
 - Dynamic resolution: if frames take longer than 1/50 s, the render scale drops (down to 55%) and comes back up when
   there's headroom. Pixel density is capped at 1.5×.
-
-## Cashout (builds 0.21–0.24)
-
-PLAY → matchmaking → loadout → team intro → a cashout match on the Container Ship. You and two AI teammates take on three AI teams of three.
-
-1. **The vault.** A cash box spawns in one of four vaults, **locked for 30 seconds**. A ◆ marker shows where it is and counts down.
-2. **Grab it.** Press E at the vault once it opens. You can keep shooting while you carry it (it sits in your left hand), but you move about 10% slower. If the carrier dies, the box drops where they fell for anyone to pick up.
-3. **Cash it out.** Two of the four cashout stations (⬢ markers) open each round. Press E at one to deposit the box, and a 45-second countdown starts.
-4. **Steals.** Any other team can steal a cashout by standing on the station for 5 seconds (you hold E). A defender standing on the station blocks the steal. The bots do this too, and fight over the station. The team holding the station when the timer hits zero banks **$1,000**.
-5. **First to $2,000 wins.** Then the next round starts with a new vault, and so on. The top two teams advance to the final.
-
-On the HUD: team cash along the top, the objective (vault timer, who has the box, cashout countdown, steal progress bar), markers for the vault, stations and the box carrier, pinned to the edge of the screen when they're off screen, with distances. Teammates always have their name and health shown in their team colour; enemies only when you can see them. Bots wear their team's colour, there's no friendly fire, and kills between bots show in the kill feed. You respawn at your team's spawn; dead bots come back after 8 seconds.
-
-**The bots** find their way round with a walking grid built over the deck. They queue round the locked vault, race for the box, escort their carrier, hunt enemy carriers, defend their station, and go after anyone else's. Build 0.24 made them smarter:
-- They take a moment to react to a new target, and their aim tightens the longer they track you.
-- They go for the box carrier first, then anyone stealing their cashout, then the closest threat, and they finish off the wounded.
-- Between bursts they duck behind the nearest container where you can't see them, then pop back out to shoot.
-- When badly hurt they fall back to a teammate, and they heal after 5 seconds out of the fight.
-- The carrier heads for the cashout station with the fewest enemies around it, and thieves wait for backup before pushing a steal unless time's running out.
-
-**Looks (build 0.24).** The vault is a big armoured safe with round doors, a gold spoked handle wheel and a status light bar (red while locked, green when it opens). The cash box is a dark armoured case with gold corner bumpers, glowing yellow light panels, a carry handle and a status light. The cashout station is a white terminal on a hazard-striped plinth, with screens, light fins, a cradle where the box sits and a floating hologram "$", all glowing in the team colour that holds it, plus a light beam while it's cashing out.
 
 ## Underground arena
 
@@ -313,20 +299,18 @@ src/effects.js        debris, tracers, decals
 src/props.js          dummies, destructible walls, weapon cases, 7-seg signs
 src/audio.js          procedural sound effects
 src/maps/testRange.js the test range (data + build function), incl. the parkour annex
-src/maps/containerShip.js the semi-finals arena: the freighter, container stacks, crossing rails, vaults and stations
-src/cargo.js          moving containers on crane rails (carry the player)
-src/lift.js           passenger lifts: car, sliding doors, call buttons, floor stops
-src/cashout.js        cashout mode: vault box, stations, steals, scoring, team AI
+src/maps/arenas.js    the three semi-finals arenas (layouts as data + a shared builder)
+src/tdm.js            team deathmatch: scoring, respawns, team AI
 src/nav.js            bot navigation: walkable grid per level, stair links, A*
 src/matchmaking.js    PLAY flow: matchmaking, 30 s loadout pick, team intro
 ```
 
-To add a map, copy `src/maps/containerShip.js` and change the boxes. Each map defines `spawn`, `build(world)`, `dummies` and `walls`. Arenas live far from the range (Fortune Stadium is 700 m away and 63 m up). Only the place you're in is drawn, and boxes outside the view or beyond the fog are skipped. The stadium file has helpers for facades with holes (`panel`, `walls4`), slabs with holes (`slab`), switchback stair cores (`stairCore`) and whole buildings (`building`).
+To add an arena, add a layout to `LAYOUTS` in `src/maps/arenas.js`: blocks `b`, platforms `p`, stairs `s` and huts `hut`, listed for one team's half (they're mirrored for the other) or under `mid`. The builder adds the walls, floodlights, spawn zones and the bot navigation for every platform. Arenas live 700 m from the range; only the place you're in is drawn.
 
 ## Roadmap
 
 - [ ] Online multiplayer
 - [x] First real map (Fortune Stadium)
-- [ ] Bots and objectives (cashout) in Fortune Stadium
+- [ ] More modes for the arenas
 - [ ] More weapons and classes (light / medium / heavy)
 - [ ] Enemies / players

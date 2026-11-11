@@ -15,13 +15,12 @@ import { Thumbs } from './thumbs.js';
 import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
 import { Bench } from './bench.js';
 import testRange from './maps/testRange.js';
-import stadium from './maps/containerShip.js';
+import { ARENAS } from './maps/arenas.js';
 import { Course, fmtTime } from './course.js';
 import { Elevator } from './elevator.js';
 import { BotManager } from './bots.js';
 import { Matchmaking } from './matchmaking.js';
-import { Lift } from './lift.js';
-import { Cashout, cashBoxParts } from './cashout.js';
+import { Deathmatch } from './tdm.js';
 import { StaticBatches } from './batch.js';
 
 const $ = (id) => document.getElementById(id);
@@ -45,10 +44,14 @@ const saveSettings = () => { try { localStorage.setItem('semifinals.settings', J
 // ---------- game objects ----------
 const world = new World();
 const batches = new StaticBatches(renderer);      // static scenery batches, made on the first frame
-// is a box in the match arena (true) or the practice range (false)?
-const inArea = (b) => {
-  const c = b.center, SA = stadium.area;
-  return c[0] > SA.min[0] && c[0] < SA.max[0] && c[1] > SA.min[1] && c[1] < SA.max[1] && c[2] > SA.min[2] && c[2] < SA.max[2];
+// which arena a box is in (its index in ARENAS), or -1 for the practice range
+const zoneOf = (b) => {
+  const c = b.center;
+  for (let i = 0; i < ARENAS.length; i++) {
+    const SA = ARENAS[i].area;
+    if (c[0] > SA.min[0] && c[0] < SA.max[0] && c[1] > SA.min[1] && c[1] < SA.max[1] && c[2] > SA.min[2] && c[2] < SA.max[2]) return i;
+  }
+  return -1;
 };
 const effects = new Effects(world);
 const input = new Input(canvas);
@@ -59,9 +62,10 @@ sounds.setVolume(settings.volume);
 const player = new Player(world);
 const map = testRange;
 map.build(world);
-stadium.build(world);    // the semi-finals arena, far away and high up (PLAY on the home screen)
-const dummies = [...map.dummies, ...stadium.dummies].map((d) => new Dummy(world, effects, d.pos, d.move));
-const walls = [...map.walls, ...stadium.walls].map((w) => new DestructibleWall(world, effects, w.origin, w));
+for (const a of ARENAS) a.build(world);    // the semi-finals arenas, far away (PLAY on the home screen)
+let stadium = ARENAS[0];                   // the arena the current match is in
+const dummies = [...map.dummies].map((d) => new Dummy(world, effects, d.pos, d.move));
+const walls = [...map.walls].map((w) => new DestructibleWall(world, effects, w.origin, w));
 // attachments: one saved loadout per weapon
 const classLo = loadLoadout();
 let loadouts = {};
@@ -74,8 +78,8 @@ const workbench = new Workbench(world, map.bench.pos);
 player.spawn(map.spawn.pos, map.spawn.yaw);
 const course = new Course(map.course, sounds);
 const elevator = new Elevator(world, map.elevator);
-const lifts = stadium.lifts.map((o) => new Lift(world, o));   // the tower's two passenger lifts
-const cashout = new Cashout(world, stadium);                    // the cashout match
+const lifts = [];        // (no lifts in the arenas)
+const tdm = new Deathmatch(world);          // the team deathmatch
 let where = 'range';       // 'range' or 'stadium'
 const inStadium = () => where === 'stadium';
 let padCd = 0, voidT = 0;
@@ -223,7 +227,7 @@ function fire(w) {
     if (i < 4) effects.tracer(muzzle, end);
     if (!hit) continue;
     const b = hit.box;
-    if (b.tag === 'bot' && cashout.active && b.ref.team === cashout.myTeam.idx) continue;   // no friendly fire
+    if (b.tag === 'bot' && tdm.active && b.ref.team === tdm.myTeam.idx) continue;   // no friendly fire
     if (b.tag === 'dummy' || b.tag === 'bot') {
       // damage falls off past the weapon's range (down to 55% at 2.2x range)
       const fall = 1 - 0.45 * clamp((hit.t - d.range) / (d.range * 1.2), 0, 1);
@@ -244,6 +248,7 @@ function fire(w) {
   if (anyHit) stats.hits++;
   for (const [dummy, e] of perDummy) {
     if (!dummy.alive) continue;
+    if (dummy.agent) dummy.agent.lastHitBy = tdm.you;      // deathmatch kill credit
     const dead = dummy.damage(e.dmg, e.dir);
     if (dead) stats.kills++;
     if (dead && dummy.name) killFeed('YOU', d.name, dummy.name, e.head);
@@ -421,7 +426,7 @@ function respawnPlayer() {
 
 const botHooks = {
   player,
-  hitPlayer: (dmg, bot, from) => damagePlayer(dmg, from, bot.name),
+  hitPlayer: (dmg, bot, from) => { player.lastHitBy = bot.agent || null; damagePlayer(dmg, from, bot.name); },
   shot: (bot, from, end, dist) => { effects.tracer(from, end); sounds.botShot(dist); },
   impact: (hit, u) => {
     if (hit.box.tag === 'glass') { breakGlass(hit.box, u || [0, 0, 0]); return; }
@@ -550,9 +555,9 @@ function updateCutscene(dt) {
 let lastCount = 0;
 function updateCombat(dt) {
   botMgr.update(dt, botHooks);
-  if (cashout.active) {
-    cashout.update(dt, botHooks, playing && !player.dead && input.down('KeyE') && cashout.playerAction(true) === 'steal');
-    cashoutEvents();
+  if (tdm.active) {
+    tdm.update(dt, botHooks);
+    matchEvents();
   }
   if (botMgr.state === 'countdown') {
     const n = Math.ceil(botMgr.timer);
@@ -748,7 +753,6 @@ function updateHud(dt, fovRad) {
   hud.scope.style.opacity = w.scoped ? 1 : 0;
 
   const lb = playing && !player.dead && inStadium() ? lookLiftButton() : null;
-  const ca = cashout.active && playing && !player.dead ? cashout.playerAction(true) : null;
   const hk = settings.grappleKey.replace(/^Key/, '');
   if (inStadium() && stadium.hook && playing && !player.dead && player.grapple?.anchor) {
     hud.prompt.innerHTML = `<kbd>${hk}</kbd> CUT THE LINE <span>OR JUMP</span>`;
@@ -758,10 +762,6 @@ function updateHud(dt, fovRad) {
     hud.prompt.style.opacity = 1;
   } else if (lb) {
     hud.prompt.innerHTML = `<kbd>E</kbd> ${lb.car ? (lb.dir > 0 ? 'GO UP' : 'GO DOWN') : 'CALL LIFT'} <b>${lb.dir > 0 ? '▲' : '▼'}</b>`;
-    hud.prompt.style.opacity = 1;
-  } else if (ca) {
-    hud.prompt.innerHTML = ca === 'pickup' ? '<kbd>E</kbd> PICK UP <b>CASH BOX</b>' : ca === 'deposit' ? '<kbd>E</kbd> DEPOSIT <b>CASH BOX</b> <span>START CASHOUT</span>'
-      : ca === 'steal' ? 'HOLD <kbd>E</kbd> <b>STEAL CASHOUT</b>' : `<b>VAULT LOCKED</b> <span>OPENS IN ${Math.ceil(cashout.box.t)} S</span>`;
     hud.prompt.style.opacity = 1;
   } else if (nearConsole() && !pressSeq && !cutscene && !player.dead) {
     hud.prompt.innerHTML = botMgr.running ? '<kbd>E</kbd> END SESSION' : `<kbd>E</kbd> START <b>COMBAT</b> <span>BEST WAVE ${botMgr.best}</span>`;
@@ -827,7 +827,7 @@ function start() {
 let sessionStarted = false;
 function enterRange() {
   if (where !== 'range') {
-    if (cashout.active) endMatch(false);
+    if (tdm.active) endMatch(false);
     where = 'range';
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
@@ -1003,11 +1003,12 @@ function refreshGuns() {
 // PLAY: matchmaking → loadout (30 s) → team intro → the arena. Once you're in a match, PLAY resumes it.
 let match = null;
 const mmk = new Matchmaking({
-  root: $('mmk'), classLo, sounds,
+  root: $('mmk'), classLo, sounds, maps: ARENAS.map((a) => a.name),
   onChange: () => { classDirty = true; renderMenu(); },
   onCancel: () => { menu.classList.remove('hidden'); renderMenu(); },
   onDone: (m) => {
     match = m;
+    stadium = ARENAS[m.map] || ARENAS[0];
     setTeamsHud(m);
     where = 'none';            // arrive fresh
     classDirty = true;
@@ -1021,59 +1022,56 @@ function setTeamsHud(m) {
     d.className = `tm${t.mine ? ' mine' : ''}`;
     d.style.setProperty('--t', t.col);
     const b = document.createElement('b'); b.textContent = t.name;
-    const c = document.createElement('span'); c.textContent = '$0';
+    const c = document.createElement('span'); c.textContent = '0';
     d.append(b, c);
     return d;
   }));
 }
-// ---------- cashout match: start / end, events, HUD ----------
+// ---------- tdm match: start / end, events, HUD ----------
 function startMatch(m) {
   batches.world = null;     // re-batch once the match props are set up
   resetGlass();
   walls.forEach((w) => w.reset());
-  cashout.start(m, player, classLo.cls);
+  tdm.start(m, stadium, player, classLo.cls);
   setTeamsHud(m);
-  const sp = stadium.spawns[cashout.myTeam.idx];
+  const sp = stadium.spawns[tdm.myTeam.idx];
   player.spawn(sp.pos, sp.yaw);
   Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1 });
   $('matchend').classList.add('hidden');
 }
 function endMatch(toMenu) {
-  cashout.stop();
+  tdm.stop();
   match = null;
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
   renderMenu();
 }
-function cashoutEvents() {
-  for (const ev of cashout.events) {
-    const mine = ev.team ? ev.team === cashout.myTeam : ev.who?.team === cashout.myTeam;
-    if (ev.type === 'round') { banner(`ROUND ${ev.round}`, 'VAULT OPENS IN 30 · FIRST TO $2,000', '', 2.6); sounds.startRun?.(); }
-    else if (ev.type === 'unlock') { banner('VAULT OPEN', 'GRAB THE CASH BOX', 'good', 1.8); sounds.checkpoint?.(); }
-    else if (ev.type === 'pickup') { sounds.pickup(); }
-    else if (ev.type === 'drop') { sounds.crumble(); }
-    else if (ev.type === 'deposit') { banner(mine ? 'CASHOUT STARTED' : `${ev.team.name} ARE CASHING OUT`, mine ? 'DEFEND THE STATION' : 'STEAL IT', mine ? 'good' : 'bad', 2.2); sounds.magIn?.(); }
-    else if (ev.type === 'steal') { banner(mine ? 'CASHOUT STOLEN!' : `${ev.team.name} STOLE THE CASHOUT`, mine ? 'NOW HOLD IT' : 'TAKE IT BACK', mine ? 'good' : 'bad', 2.2); sounds.alarm?.(); }
-    else if (ev.type === 'cashout') { banner(`${ev.team.name} +$1,000`, `${ev.team.name} · $${ev.team.cash.toLocaleString('en-GB')}`, mine ? 'good' : 'bad', 2.8); sounds.finish?.(); }
-    else if (ev.type === 'end') setTimeout(showMatchEnd, 2600);
+function matchEvents() {
+  for (const ev of tdm.events) {
+    if (ev.type === 'start') { banner('TEAM DEATHMATCH', `${stadium.name} · FIRST TO 10 KILLS`, '', 2.6); sounds.startRun?.(); }
+    else if (ev.type === 'kill') {
+      const mine = ev.team === tdm.myTeam, left = 10 - ev.team.kills;
+      if (ev.killer === tdm.you) { sounds.checkpoint?.(); banner('ELIMINATED', ev.victim.name, 'good', 1); }
+      if (left > 0 && left <= 3 && !tdm.over) banner(`${left} TO GO`, `${ev.team.name} ${mine ? '— YOUR TEAM' : ''}`.trim(), mine ? 'good' : 'bad', 1.4);
+    } else if (ev.type === 'end') { banner(`${ev.winner.name} WIN`, ev.winner === tdm.myTeam ? 'YOU ADVANCE' : 'ELIMINATED', ev.winner === tdm.myTeam ? 'good' : 'bad', 2.6); sounds.finish?.(); setTimeout(showMatchEnd, 2600); }
   }
-  cashout.events.length = 0;
+  tdm.events.length = 0;
 }
 function showMatchEnd() {
-  if (!cashout.over) return;
-  const st = cashout.over.standings, place = st.indexOf(cashout.myTeam);
+  if (!tdm.over) return;
+  const st = tdm.over.standings, place = st.indexOf(tdm.myTeam);
   const el = $('matchend');
   const card = document.createElement('div');
   card.className = 'me-card';
   const h = document.createElement('small'); h.textContent = `THE SEMI-FINALS · ${stadium.name}`;
-  const t = document.createElement('b'); t.textContent = place < 2 ? 'YOU ADVANCE TO THE FINAL' : 'ELIMINATED';
-  t.className = place < 2 ? 'win' : 'lose';
+  const t = document.createElement('b'); t.textContent = place < 1 ? 'YOU ADVANCE TO THE FINAL' : 'ELIMINATED';
+  t.className = place < 1 ? 'win' : 'lose';
   card.append(h, t);
   st.forEach((tm, i) => {
     const r = document.createElement('div');
-    r.className = `me-row${tm === cashout.myTeam ? ' mine' : ''}${i < 2 ? ' adv' : ''}`;
+    r.className = `me-row${tm === tdm.myTeam ? ' mine' : ''}${i < 1 ? ' adv' : ''}`;
     r.style.setProperty('--t', tm.col);
-    r.innerHTML = `<i>${i + 1}</i><b></b><span>$${tm.cash.toLocaleString('en-GB')}</span>`;
+    r.innerHTML = `<i>${i + 1}</i><b></b><span>${tm.kills} KILLS</span>`;
     r.querySelector('b').textContent = tm.name;
     card.append(r);
   });
@@ -1092,21 +1090,21 @@ function poolEl(pool, parent, cls, i) {
   return pool[i];
 }
 function updateMatchHud(dt) {
-  const on = cashout.active && inStadium() && (playing || !!cashout.over);
+  const on = tdm.active && inStadium() && (playing || !!tdm.over);
   $('objective').classList.toggle('hidden', !on);
   $('markers').classList.toggle('hidden', !on);
   $('tags').classList.toggle('hidden', !on);
   if (!on) return;
-  const o = cashout.objective();
+  const o = tdm.objective();
   const obj = $('objective');
   obj.children[0].textContent = o?.text || '';
   obj.children[0].style.color = o?.col || '#fff';
   obj.children[1].textContent = o?.sub || '';
   obj.children[2].style.setProperty('--p', (o?.steal || 0).toFixed(3));
   obj.children[2].style.opacity = o?.steal ? 1 : 0;
-  [...$('teams').children].forEach((d, i) => { const c = `$${cashout.teams[i].cash.toLocaleString('en-GB')}`; if (d.lastChild.textContent !== c) d.lastChild.textContent = c; });
+  [...$('teams').children].forEach((d, i) => { const c = String(tdm.teams[i].kills); if (d.lastChild.textContent !== c) d.lastChild.textContent = c; });
   // objective markers, pinned to the screen edge when off screen
-  const ms = cashout.markers(), eye = player.eye();
+  const ms = tdm.markers(), eye = player.eye();
   ms.forEach((m, i) => {
     const el = poolEl(markerEls, $('markers'), 'mkr', i);
     let sp = project(m.pos);
@@ -1126,23 +1124,23 @@ function updateMatchHud(dt) {
   for (let i = ms.length; i < markerEls.length; i++) markerEls[i].style.display = 'none';
   // name tags: teammates always, enemies when you can see them
   tagT -= dt;
-  const agents = cashout.agents;
+  const agents = tdm.agents;
   if (tagT <= 0) {
     tagT = 0.2;
     for (const a of agents) {
-      if (!a.alive || a.team === cashout.myTeam) continue;
+      if (!a.alive || a.team === tdm.myTeam) continue;
       const h = [a.pos[0], a.pos[1] + 1.6, a.pos[2]], d = [h[0] - eye[0], h[1] - eye[1], h[2] - eye[2]], L = Math.hypot(...d);
       a.seen = L < 45 && !world.raycast(eye, d.map((v) => v / L), L - 0.5, true, (b) => b.tag === 'glass' || b.tag === 'bot');
     }
   }
   let n = 0;
   for (const a of agents) {
-    const ally = a.team === cashout.myTeam;
+    const ally = a.team === tdm.myTeam;
     if (!a.alive || (!ally && !a.seen)) continue;
     const sp = project([a.pos[0], a.pos[1] + 2.2 * a.bot.sc, a.pos[2]]);
     if (!sp || sp[0] < 0 || sp[0] > innerWidth || sp[1] < 0 || sp[1] > innerHeight) continue;
     const el = poolEl(tagEls, $('tags'), 'tag', n++);
-    el.className = `tag${ally ? ' ally' : ''}${cashout.box.carrier === a ? ' carrier' : ''}`;
+    el.className = `tag${ally ? ' ally' : ''}`;
     el.style.setProperty('--c', a.team.col);
     el.style.transform = `translate(${sp[0].toFixed(1)}px, ${sp[1].toFixed(1)}px)`;
     el.children[0].textContent = ally ? '▼' : '';
@@ -1499,7 +1497,7 @@ function updateFall() {
 
 function updateStadium(dt) {
   updateFall();
-  if (cashout.active) player.speedMul = CLASSES[classLo.cls].speed * (cashout.box.carrier === cashout.you ? 0.9 : 1);
+  if (tdm.active) player.speedMul = CLASSES[classLo.cls].speed;
   const shoe = stadium.refs?.shoe;
   if (shoe) {
     if (!shoe.base) shoe.base = shoe.map((b) => [...b.center]);
@@ -1529,7 +1527,6 @@ function updateStadium(dt) {
 
 // ---------- main loop ----------
 const proj = mat4(), view = mat4(), vmProj = mat4(), identity = mat4();
-const vmBoxM = Array.from({ length: 6 }, () => mat4());
 let last = performance.now(), time = 0, fovKick = 0, timeScale = 1;
 const weaponCtx = { fire, sounds };
 
@@ -1554,7 +1551,7 @@ function frame(now) {
 
   if (playing && !bench.open && (cutscene || pressSeq || player.dead)) {
     // the player isn't in control right now
-    if (input.hit('KeyT') && !cashout.active) resetRange();
+    if (input.hit('KeyT') && !tdm.active) resetRange();
     if (cutscene) updateCutscene(dt);
     else if (pressSeq) {
       updatePress(dt);
@@ -1570,15 +1567,13 @@ function frame(now) {
     let w = weapon();
     const sens = settings.sens * 0.0022 * (1 - w.adsT * (1 - w.def.adsZoom) * 0.9);
     player.look(input.dx, input.dy, sens);
-    if (input.hit('KeyT') && !cashout.active) resetRange();
+    if (input.hit('KeyT') && !tdm.active) resetRange();
     if (input.hit('Digit1')) switchTo(0);
     if (input.hit('Digit2')) switchTo(1);
     nearCase = findCase();
     nearBench = findBench();
     const liftBtn = lookLiftButton();
-    const cashAct = cashout.active ? cashout.playerAction(true) : null;
     if (liftBtn && input.hit('KeyE')) liftBtn.lift.press(liftBtn, sounds);
-    else if ((cashAct === 'pickup' || cashAct === 'deposit') && input.hit('KeyE')) cashout.playerAction(false);
     else if (nearConsole() && input.hit('KeyE')) pressConsole();
     else if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
     else if (nearBench && input.hit('KeyE')) openBench();
@@ -1636,14 +1631,15 @@ function frame(now) {
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   worldVfov = vfov; worldAspect = aspect;
   const vmParts = bench.open || cutscene || player.dead ? [] : w.viewmodel(player, time);
-  const botParts = cashout.active && inStadium() ? [...botMgr.drawParts(), ...cashout.drawParts(time)] : botMgr.drawParts();
+  const botParts = tdm.active && inStadium() ? [...botMgr.drawParts(), ...tdm.drawParts()] : botMgr.drawParts();
   const beams = worldBeams(w);
 
   // shadow pass
   // keep the sun's shadow map centred on the player so the annex gets shadows too
   // only draw the place you're in (the range or the stadium), and only what the camera can see
   const st = inStadium(), SA = stadium.area;
-  const zoneOk = (b) => inArea(b) === st;
+  const curZone = st ? ARENAS.indexOf(stadium) : -1;
+  const zoneOk = (b) => zoneOf(b) === curZone;
   const shadowHalf = st ? stadium.shadowHalf : 50;
   const sc = [Math.round(player.pos[0] / 8) * 8, Math.round(player.pos[1] / 8) * 8, Math.round(player.pos[2] / 8) * 8];
   renderer.setShadowArea(sc, shadowHalf);
@@ -1666,7 +1662,7 @@ function frame(now) {
     return !!b.tag || r > 0.0022 * Math.sqrt(d2);     // skip tiny props far away (never targets)
   };
   // static scenery is drawn in instanced batches; only boxes that move or change are drawn one by one
-  if (!batches.world) batches.build(world, inArea);
+  if (!batches.world) batches.build(world, zoneOf);
   batches.sync();
   const live = world.boxes.filter((b) => !b.hidden && !b.batched && zoneOk(b));
   const sphereShadow = (c, r) => {
@@ -1693,7 +1689,7 @@ function frame(now) {
   };
   const caseVis = caseParts.filter(partView), botVis = botParts.filter(partView);
   renderer.beginShadow();
-  batches.drawShadows(st, sphereShadow);
+  batches.drawShadows(curZone, sphereShadow);
   for (const b of live) if (!b.noShadow && nearShadow(b)) renderer.shadowDraw(b.model, b.shape, b.scale);
   for (const p of caseParts) if (partShadow(p)) renderer.shadowDraw(p.model, p.shape, p.scale);
   effects.drawShadows(renderer);
@@ -1705,7 +1701,7 @@ function frame(now) {
   renderer.setCamera(proj, view, fogD, camEye, true);
   renderer.drawSky(camEye);
   renderer.setBlend(false);
-  batches.draw(st, sphereView);
+  batches.draw(curZone, sphereView);
   const vis = live.filter(inView);
   for (const b of vis) if (b.alpha >= 1) renderer.drawBox(b);
   for (const p of caseVis) renderer.drawPart(p);
@@ -1728,10 +1724,6 @@ function frame(now) {
     for (const p of Weapon.worldParts(defFor(bench.weaponId), previewM)) renderer.drawPart(p);
   } else {
     for (const p of vmParts) renderer.drawPart(p);
-    if (cashout.active && cashout.box.carrier === cashout.you && !player.dead && !cutscene) {
-      const sw = Math.sin(time * 6) * 0.01 * Math.min(1, player.hSpeed / 6);
-      for (const p of cashBoxParts(vmBoxM, [-0.5, -0.42 + sw, -0.85], [0.15, 0.55, 0.06], false)) renderer.drawPart(p);
-    }
   }
 
   updateHud(dt, vfov);
@@ -1741,4 +1733,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { batches, renderer, map, stadium, lifts, cashout, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, tdm, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
