@@ -21,6 +21,8 @@ export function partShape(p) {
   return Math.min(0.014, m * 0.3);                  // rounded edges scaled to the part
 }
 // how long each gun's draw animation takes (s)
+// reload animation per original gun (the newer guns set reloadAnim themselves)
+const RELOAD_ANIM = { ar: 'classic', pistol: 'classic', smg: 'flick', sniper: 'bolt', lmg: 'belt' };
 const DRAW_TIME = { pistol: 0.85, smg: 0.85, ar: 1.05, shotgun: 1.05, sniper: 1.1, lmg: 1.1 };
 // moments in each draw animation that get a sound + camera jolt: [time, sound, jolt]
 const DRAW_BEATS = {
@@ -264,9 +266,10 @@ export class Weapon {
     r.t += dt;
     if (!r.shell) {
       const p0 = prev / r.total, p = r.t / r.total;
-      if (crossed(p0, p, 0.2)) {
+      if (crossed(p0, p, d.dropAt ?? 0.2)) {
         s?.magOut();
-        this.events.push({ type: 'magdrop', pos: transformPoint(this.root, add3(d.magPos, [0, -0.08, 0])), part: d.parts.find((q) => q.mag) });
+        if (d.reloadEject) for (let n = 0; n < d.reloadEject; n++) this.eject();
+        else this.events.push({ type: 'magdrop', pos: transformPoint(this.root, add3(d.magPos, [0, -0.08, 0])), part: d.parts.find((q) => q.mag) });
       }
       if (crossed(p0, p, 0.6)) { s?.magIn(); this.events.push({ type: 'jolt', amt: 0.6 }); }
       if (r.empty && !d.slide && crossed(p0, p, 0.82)) this.events.push({ type: 'jolt', amt: 0.8 });
@@ -289,7 +292,7 @@ export class Weapon {
       }
     } else if (r.stage === 'out') {
       const len = r.needPump ? 0.62 : 0.34;
-      if (r.needPump && crossed(prev, r.t, 0.15)) { s?.pump(); this.events.push({ type: 'jolt', amt: 0.7 }); }
+      if (r.needPump && crossed(prev, r.t, 0.15)) { d.lever ? s?.bolt() : s?.pump(); this.events.push({ type: 'jolt', amt: 0.7 }); }
       if (crossed(prev, r.t, r.needPump ? 0.24 : 0.02)) s?.spin();
       if (crossed(prev, r.t, len - 0.06)) { s?.catch?.(); this.events.push({ type: 'jolt', amt: 0.4 }); }
       if (r.t >= len) this.reload = null;
@@ -341,7 +344,7 @@ export class Weapon {
     let tilt = 0, rollDir = 1, bump = 0;
     let magOff = [0, 0, 0], magVisible = true, magRot = 0;
     let handT = 0, handTarget = d.foreGrip;
-    let boltBack = 0, pumpBack = 0;
+    let boltBack = 0, pumpBack = 0, brkAng = 0, coverAng = 0, spinExtra = 0;
     let shellVisible = false, shellPos = d.magPos;
 
     // extra flourish offsets on top of everything: pos xyz + rot xyz
@@ -351,7 +354,142 @@ export class Weapon {
     const heavy = (d.style || d.id) === 'lmg', pistol = !!d.slide || (d.style || d.id) === 'pistol';
 
     const r = this.reload;
-    if (r && !r.shell) {
+    const anim = r && !r.shell ? d.reloadAnim || RELOAD_ANIM[d.id] || 'classic' : null;
+    if (r && !r.shell && anim !== 'classic') {
+      const p = r.t / r.total;
+      // the standard mag swap, used by most: out (o0→o1), gone, back up (g1→u1), seated (u1→s1), along `dir`
+      const swap = (o0, o1, g1, u1, s1, dir = [0, -1, 0], dist = 0.45) => {
+        if (p < o1) magOff = dir.map((v) => v * 0.07 * seg(p, o0, o1));
+        else if (p < g1) { magVisible = false; magOff = dir.map((v) => v * dist); }
+        else {
+          const rise = seg(p, g1, u1), ins = seg(p, u1, s1), k = (dist - 0.12) * (1 - rise) + 0.12 * (1 - ins);
+          magOff = [dir[0] * k + 0.05 * (1 - rise), dir[1] * k, dir[2] * k + 0.07 * (1 - ins)];
+        }
+        handT = Math.max(handT, seg(p, o0 - 0.07, o0) * (1 - seg(p, s1 + 0.04, s1 + 0.14)));
+        handTarget = add3(add3(d.magPos, magOff), dir.map((v) => v * 0.05));
+      };
+      const reach = (t0, t1, target) => {    // the free hand goes somewhere between t0 and t1
+        const h = seg(p, t0, t0 + 0.05) * (1 - seg(p, t1 - 0.05, t1));
+        if (h > handT || (p > t0 && p < t1)) { handT = Math.max(handT, h); handTarget = target; }
+      };
+      const settleEnd = (t0, amp, f = 70, k = 25) => { const u = p - t0; if (u > 0) fl[5] += Math.sin(u * f) * Math.exp(-u * k) * amp; };
+      const charge = (t0, side = 1) => {      // rip the charging handle back and let it slam
+        reach(t0 - 0.06, t0 + 0.14, add3(d.bolt || [0.04, 0.02, 0.02], [0.035 * side, 0, 0.02]));
+        boltBack = Math.max(boltBack, seg(p, t0, t0 + 0.04) * (1 - seg(p, t0 + 0.06, t0 + 0.1)));
+        bump = Math.max(bump, seg(p, t0 + 0.06, t0 + 0.08) * (1 - seg(p, t0 + 0.08, t0 + 0.16)));
+      };
+      const k = (a, b, c, e) => seg(p, a, b) * (1 - seg(p, c, e));
+      if (anim === 'tap') {
+        // BR-3: tilted left, mag swapped, palm-slap the bolt release on the left side, snapped back up
+        rollDir = -1; tilt = k(0, 0.12, 0.84, 0.97) * 0.85;
+        swap(0.12, 0.2, 0.33, 0.47, 0.58);
+        if (r.empty) { reach(0.6, 0.8, [-0.045, -0.005, 0.0]); const sl = k(0.66, 0.7, 0.72, 0.8); bump = Math.max(bump, sl); fl[0] += sl * 0.02; fl[5] += sl * 0.14; }
+        const f = seg(p, 0.86, 0.98); fl[1] += Math.sin(Math.PI * f) * 0.03; fl[3] -= Math.sin(Math.PI * f) * 0.08;
+      } else if (anim === 'check') {
+        // FC-308: pulls the mag and looks at it, tosses it, seats a fresh one, works the op-rod
+        tilt = k(0, 0.1, 0.84, 0.96) * 0.7;
+        const insp = k(0.18, 0.26, 0.3, 0.36);
+        if (p < 0.2) magOff = [0, -0.07 * seg(p, 0.1, 0.18), 0];
+        else if (p < 0.36) { magOff = [-0.09 * insp, -0.07 + 0.02 * insp, 0.12 * insp]; magRot = insp * 1.1; }
+        else if (p < 0.42) { magVisible = false; magOff = [0, -0.45, 0]; }
+        else { const rise = seg(p, 0.42, 0.52), ins = seg(p, 0.52, 0.6); magOff = [0.05 * (1 - rise), -0.33 * (1 - rise) - 0.12 * (1 - ins), 0.07 * (1 - ins)]; }
+        handT = k(0.04, 0.1, 0.6, 0.68); handTarget = add3(add3(d.magPos, magOff), [0, -0.05, 0]);
+        fl[3] += insp * 0.15; fl[4] -= insp * 0.12;
+        charge(0.72);
+        settleEnd(0.9, 0.06);
+      } else if (anim === 'bullpup') {
+        // BX-56: nose up and rolled toward you so the mag behind the grip faces you, then the forward charging handle
+        const u = k(0, 0.14, 0.82, 0.95);
+        fl[3] += 0.5 * u; fl[5] -= 0.35 * u; fl[2] += 0.06 * u; fl[0] -= 0.04 * u; fl[1] += 0.03 * u;
+        swap(0.13, 0.2, 0.33, 0.47, 0.58, [0, -1, 0.25]);
+        charge(0.72, -1);
+        settleEnd(0.92, 0.07);
+      } else if (anim === 'flick') {
+        // V9-S: one wrist flick throws the mag out sideways, a fresh one goes in, then a full barrel roll
+        const fk = k(0.12, 0.18, 0.2, 0.3);
+        fl[5] += fk * 0.6; fl[0] += fk * 0.03;
+        swap(0.14, 0.2, 0.32, 0.46, 0.56, [0.6, -1, 0]);
+        const roll = seg(p, 0.64, 0.86);
+        fl[5] += roll * Math.PI * 2; fl[1] += Math.sin(Math.PI * roll) * 0.05;
+        settleEnd(0.86, 0.08);
+      } else if (anim === 'spin') {
+        // KV-45: mag swapped, then the whole gun flipped end over end and caught, bolt knob slapped
+        swap(0.12, 0.2, 0.3, 0.45, 0.56, [0, -1, 0.2]);
+        const fp = seg(p, 0.6, 0.84);
+        fl[3] += fp * Math.PI * 2; fl[1] += Math.sin(Math.PI * fp) * 0.09; fl[2] -= Math.sin(Math.PI * fp) * 0.04;
+        if (r.empty) charge(0.86, -1);
+        settleEnd(0.84, 0.1);
+      } else if (anim === 'drop') {
+        // MP-9: turned on its side, the empty falls free, a new one is slammed up the grip, bolt yanked
+        const u = k(0, 0.12, 0.8, 0.92);
+        fl[5] -= 1.0 * u; fl[1] += 0.02 * u;
+        swap(0.1, 0.18, 0.3, 0.42, 0.52, [0, -1, 0], 0.6);
+        const sl = k(0.51, 0.54, 0.56, 0.66);
+        bump = Math.max(bump, sl); fl[1] += sl * 0.04; fl[3] += sl * 0.2;
+        charge(0.7, 0);
+      } else if (anim === 'revolver') {
+        // R-357: cylinder swings out, muzzle up to dump the brass, speedloader in, flicked shut with a spin
+        const sw = k(0.04, 0.14, 0.8, 0.88);
+        magOff = [-0.042 * sw, -0.014 * sw, 0];
+        magSpin = sw * 2 + seg(p, 0.82, 0.92) * Math.PI * 2;
+        const up = k(0.08, 0.16, 0.24, 0.34), dn = k(0.3, 0.4, 0.7, 0.8);
+        fl[3] += 0.9 * up - 0.45 * dn; fl[1] += up * 0.05; fl[5] -= 0.3 * sw;
+        const rise = seg(p, 0.38, 0.56);
+        shellVisible = p > 0.36 && p < 0.62;
+        shellPos = add3(add3(d.magPos, magOff), [0, 0, 0.035 + 0.14 * (1 - rise)]);
+        shellSpin = 0;
+        handT = k(0.3, 0.37, 0.62, 0.7); handTarget = add3(shellPos, [0, -0.03, 0.03]);
+        const f = k(0.8, 0.84, 0.85, 0.95);
+        fl[5] += f * 0.6; bump = Math.max(bump, f);
+      } else if (anim === 'break') {
+        // DB-2: snap it open, the empties pop out, two fresh shells thumbed in, snapped shut, hammers cocked
+        brkAng = 0.75 * k(0.05, 0.15, 0.76, 0.82);
+        fl[3] -= 0.25 * k(0.05, 0.15, 0.8, 0.9); fl[5] += 0.15 * k(0.05, 0.15, 0.8, 0.9);
+        const first = p < 0.46, sp = first ? seg(p, 0.3, 0.42) : seg(p, 0.46, 0.58);
+        shellVisible = p > 0.28 && p < 0.6 && sp < 1;
+        shellPos = [first ? -0.017 : 0.017, 0.02 + 0.12 * (1 - sp), -0.035 + 0.08 * (1 - sp)];
+        shellSpin = Math.PI / 2 * (1 - sp);
+        handT = k(0.24, 0.3, 0.6, 0.66); handTarget = add3(shellPos, [0, -0.03, 0.03]);
+        const s2 = k(0.78, 0.81, 0.82, 0.9);
+        fl[3] += 0.3 * s2; bump = Math.max(bump, s2);
+        boltBack = Math.max(boltBack, k(0.86, 0.9, 0.92, 0.98));
+      } else if (anim === 'drum') {
+        // AS-20: the whole gun rocked over, the drum rocked out and a fresh one rocked in, side handle slapped
+        const u = k(0, 0.12, 0.84, 0.95);
+        fl[5] += 0.55 * u; fl[3] += 0.1 * u;
+        swap(0.1, 0.2, 0.32, 0.48, 0.6, [0, -1, 0.15], 0.5);
+        magRot = p < 0.32 ? -0.6 * seg(p, 0.1, 0.2) : -0.5 * (1 - seg(p, 0.5, 0.6));
+        const thud = k(0.58, 0.61, 0.62, 0.72); bump = Math.max(bump, thud); fl[1] += thud * 0.02;
+        charge(0.72, -1);
+      } else if (anim === 'belt') {
+        // M60-X: feed cover flipped up, box swapped, belt laid in the tray, cover slammed, charged
+        const u = k(0, 0.1, 0.86, 0.96);
+        fl[5] -= 0.3 * u; fl[0] -= 0.03 * u; tilt = u * 0.4;
+        coverAng = 1.3 * k(0.06, 0.16, 0.72, 0.76);
+        reach(0.04, 0.14, [0, 0.085, 0.12]);
+        swap(0.18, 0.24, 0.36, 0.5, 0.58, [-0.5, -1, 0]);
+        reach(0.58, 0.72, [0, 0.075, 0.0]);
+        const sl = k(0.74, 0.77, 0.78, 0.86); bump = Math.max(bump, sl); fl[3] += sl * 0.15;
+        if (r.empty) charge(0.84);
+      } else if (anim === 'bolt') {
+        // LH-7: mag swapped from underneath, then the bolt lifted, run back and slammed home
+        tilt = k(0, 0.12, 0.6, 0.72) * 0.6;
+        swap(0.12, 0.2, 0.33, 0.47, 0.58);
+        const hb = k(0.62, 0.68, 0.84, 0.9);
+        reach(0.62, 0.9, add3(d.bolt, [0.035, 0, 0.02]));
+        boltBack = Math.max(boltBack, k(0.7, 0.75, 0.77, 0.82));
+        fl[5] += hb * 0.3; fl[3] += k(0.8, 0.82, 0.83, 0.9) * 0.1;
+        settleEnd(0.9, 0.05);
+      } else if (anim === 'minigun') {
+        // ROTARY-X: hefted over, the ammo box unhooked and a full one hung on, belt clipped to the chute, spin test
+        const u = k(0, 0.1, 0.85, 0.95);
+        fl[5] -= 0.4 * u; fl[1] -= 0.04 * u; fl[0] += 0.03 * u;
+        swap(0.12, 0.2, 0.36, 0.5, 0.6, [-1, -0.5, 0], 0.5);
+        reach(0.6, 0.72, [-0.08, -0.05, 0.02]);
+        const clip = k(0.68, 0.7, 0.71, 0.78); bump = Math.max(bump, clip);
+        spinExtra = seg(p, 0.74, 0.95) * Math.PI * 6;
+      }
+    } else if (r && !r.shell) {
       const p = r.t / r.total;
       // roll the gun in hard so the mag well faces you
       tilt = seg(p, 0, 0.12) * (1 - seg(p, 0.86, 1)) * (heavy ? 0.85 : 1);
@@ -431,6 +569,7 @@ export class Weapon {
         handTarget = add3(d.magPos, [0, -0.3, 0]);
         if (r.needPump) {
           pumpBack = seg(r.t, 0.12, 0.25) * (1 - seg(r.t, 0.3, 0.45));
+          if (d.lever) { boltBack = pumpBack; pumpBack = 0; }
           const whip = seg(r.t, 0.1, 0.22) * (1 - seg(r.t, 0.3, 0.5));   // whip the gun to rack it
           fl[3] += whip * 0.4; fl[1] += whip * 0.045; fl[5] -= whip * 0.25;
           const sc = seg(r.t, 0.24, 0.54);                               // spin-cock: full flip over the hand
@@ -598,17 +737,26 @@ export class Weapon {
       const rx = p.rx || 0, ry = p.ry || 0, rz = p.rz || 0;
       if (p.bolt) c = add3(c, [0, 0, (d.slide ? 0.04 : 0.05) * boltBack]);
       if (p.pump) c = add3(c, [0, 0, 0.09 * pumpBack]);
-      let rzs = rz;
-      if (p.spin && this.spinAng) {
-        const ca = Math.cos(this.spinAng), sa = Math.sin(this.spinAng);
+      let rzs = rz, rxs = rx;
+      const sa0 = (this.spinAng || 0) + spinExtra;
+      if (p.spin && sa0) {
+        const ca = Math.cos(sa0), sa = Math.sin(sa0);
         c = [c[0] * ca - c[1] * sa, c[0] * sa + c[1] * ca, c[2]];
-        rzs = rz + this.spinAng;
+        rzs = rz + sa0;
       }
+      // break-action barrels drop around the hinge; the LMG's feed cover flips up around its hinge
+      const hingeRot = (h, ang) => {
+        const yy = c[1] - h[1], zz = c[2] - h[2], ca = Math.cos(ang), sa = Math.sin(ang);
+        c = [c[0], h[1] + yy * ca - zz * sa, h[2] + yy * sa + zz * ca];
+        rxs = rx + ang;
+      };
+      if (p.brk && brkAng) hingeRot(d.hinge || [0, 0, 0], -brkAng);
+      if (p.cover && coverAng) hingeRot(d.coverHinge || [0, 0.07, 0.12], coverAng);
       if (p.mag) {
         if (!magVisible) continue;
-        compose(this.tmp, [c[0] - mp[0], c[1] - mp[1], c[2] - mp[2]], [rx, ry, rzs], p.s);
+        compose(this.tmp, [c[0] - mp[0], c[1] - mp[1], c[2] - mp[2]], [rxs, ry, rzs], p.s);
         mul(p.local, this.magFrame, this.tmp);
-      } else compose(p.local, c, [rx, ry, rzs], p.s);
+      } else compose(p.local, c, [rxs, ry, rzs], p.s);
       mul(p.model, this.root, p.local);
       if (shine >= 0) {
         const zS = this.zBack + (this.zFront - this.zBack) * shine;
@@ -627,7 +775,7 @@ export class Weapon {
       compose(this.tmp, shellPos, [shellSpin, 0, 0], s);
       const m = mat4();
       mul(m, this.root, this.tmp);
-      out.push({ model: m, scale: s, color: RED, emissive: 0.3, shape: 'cyl' });
+      out.push({ model: m, scale: s, color: d.shellCol || RED, emissive: 0.3, shape: 'cyl' });
     }
 
     // --- hands & arms ---

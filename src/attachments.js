@@ -33,7 +33,28 @@ const MOUNT = {
     under: { y: -0.025, z: -0.3, hide: ['bipod'] }, laser: [0.05, 0.0, -0.34] },
   pistol: { railY: 0.05, railZ: 0.02, sight: ['front', 'rearL', 'rearR'], muzzle: [], stock: [], barrelFront: -0.11,
     laser: [0, -0.034, -0.075] },
+  // the bespoke guns
+  burst: { railY: 0.07, railZ: 0.0, sight: ['sightL', 'sightR', 'sightTop', 'dot'], muzzle: ['muzzle'], stock: ['stock'],
+    under: { y: -0.024, z: -0.28 }, laser: [0.042, -0.006, -0.32] },
+  dmr: { railY: 0.064, railZ: 0.0, sight: ['frontPost', 'frontEarL', 'frontEarR', 'rearAp', 'rearHole'], muzzle: ['muzzle', 'lug'], stock: ['stock'],
+    under: { y: -0.034, z: -0.3 }, laser: [0.036, 0.0, -0.32] },
+  bullpup: { railY: 0.07, railZ: -0.02, sight: ['scope', 'scopeBase', 'scopeBell', 'scopeLens', 'scopeDot'], muzzle: ['muzzle'], stock: [],
+    under: { y: -0.042, z: -0.25, hide: ['fgrip'] }, laser: [0.04, 0.0, -0.22] },
+  kv: { railY: 0.056, railZ: -0.04, sight: ['flipF', 'flipR', 'flipRL', 'flipRR'], muzzle: ['muzzle'], stock: ['stock', 'stockLow', 'stockPad'],
+    under: { y: -0.085, z: -0.2 }, laser: [0.034, -0.01, -0.21] },
+  mp: { railY: 0.062, railZ: -0.02, sight: ['front', 'rearL', 'rearR'], muzzle: ['thread'], stock: [], barrelFront: -0.185,
+    laser: [0.022, 0.0, -0.13] },
+  revolver: { railY: 0.058, railZ: -0.1, sight: ['front', 'rearL', 'rearR'], muzzle: [], stock: [], barrelFront: -0.215,
+    laser: [0, -0.004, -0.15] },
+  autoshotgun: { railY: 0.12, railZ: -0.02, rail: true, sight: ['rear', 'frontPost'], muzzle: ['brake'], stock: ['stock'],
+    laser: [0.046, -0.02, -0.26] },
+  double: { railY: 0.05, railZ: 0.03, rail: true, sight: [], muzzle: [], stock: ['stock'], laser: [0.034, -0.012, -0.22] },
+  lever: { railY: 0.06, railZ: -0.05, rail: true, sight: ['rearSight', 'rearNotch'], muzzle: [], stock: ['stock'],
+    under: { y: -0.016, z: -0.3 }, laser: [0.03, -0.004, -0.26] },
+  minigun: { railY: 0.124, railZ: -0.08, rail: true, sight: [], muzzle: [], stock: [], laser: [0.07, 0.03, -0.24] },
 };
+// slots a gun simply doesn't have
+const NO_SLOT = { bullpup: ['stock'], double: ['magazine', 'barrel', 'muzzle'], lever: ['magazine'], minigun: ['barrel', 'muzzle', 'underbarrel', 'stock'] };
 
 // Base effective range (m) before damage falls off
 export const RANGE = { ar: 35, smg: 18, shotgun: 10, sniper: 120, lmg: 40, pistol: 20, burst: 40, dmr: 60, mp: 14, revolver: 28, autoshotgun: 9,
@@ -169,7 +190,7 @@ export const ATTACHMENTS = {
 export function optionsFor(weaponId, slot) {
   const st = styleOf(weaponId);
   if ((slot === 'barrel' || slot === 'stock') && st === 'pistol') return [];
-  if (slot === 'magazine' && weaponId === 'double') return [];
+  if (NO_SLOT[weaponId]?.includes(slot)) return [];
   return Object.entries(ATTACHMENTS)
     .filter(([, a]) => a.slot === slot && (a.for === 'all' || a.for.includes(weaponId) || a.for.includes(st)))
     .map(([id, a]) => ({ id, ...a }));

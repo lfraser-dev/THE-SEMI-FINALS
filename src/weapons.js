@@ -273,8 +273,8 @@ export const WEAPONS = {
     parts: [
 
       P('receiver', [0, 0, 0], [0.09, 0.12, 0.44], DARK, { m: 'metal' }),
-      P('feedCover', [0, 0.066, 0.02], [0.084, 0.018, 0.2], DARK2, { m: 'metal' }),
-      P('coverLatch', [0, 0.07, 0.125], [0.05, 0.014, 0.02], BLACK, { m: 'metal' }),
+      P('feedCover', [0, 0.066, 0.02], [0.084, 0.018, 0.2], DARK2, { m: 'metal', cover: true }),
+      P('coverLatch', [0, 0.07, 0.125], [0.05, 0.014, 0.02], BLACK, { m: 'metal', cover: true }),
       P('feedTray', [-0.046, 0.02, -0.02], [0.004, 0.04, 0.1], PORT),
       P('port', [0.0455, 0.0, 0.0], [0.002, 0.03, 0.1], PORT),
       ...[-0.15, -0.1, 0.1, 0.15].map((z) => P('rivet', [0.046, -0.04, z], [0.004, 0.008, 0.008], STEEL, { m: 'steel', shape: 'cyl', ry: H })),
@@ -364,183 +364,395 @@ const each = (parts, names, fn) => parts.forEach((p) => { if (names.includes(p.n
 const BLUE = [0.15, 0.55, 1];
 const OLIVE = [0.33, 0.35, 0.24];
 
-// BR-3: three-round burst rifle. Tap to fire a burst.
-variant('burst', 'ar', {
+// ---------------------------------------------------------------- bespoke guns
+// Each one has its own model (no recolours) and its own reload (`reloadAnim`, see weapon.js). They borrow the
+// handling basics (draw animation, attachment rules) of the gun type they're closest to (`style`).
+function bespoke(id, base, stats, parts) {
+  const w = clone(WEAPONS[base]);
+  delete w.parts;
+  WEAPONS[id] = Object.assign(w, stats, { id, style: base, parts });
+}
+const BRASS = [0.78, 0.6, 0.26];
+const GOLD = [0.95, 0.76, 0.3];
+const POLY = [0.2, 0.21, 0.23];
+const SAND = [0.66, 0.58, 0.44];
+const GREEN = [0.33, 0.37, 0.3];
+const ORANGE = [1, 0.48, 0.08];
+const YEL = [1, 0.78, 0.1];
+const ring = (name, c, n, r, s, col, extra = {}) => Array.from({ length: n }, (_, k) => {
+  const a = (k / n) * Math.PI * 2;
+  return P(name, [c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, c[2]], s, col, { rz: a, ...extra });
+});
+
+// BR-3: three-round burst rifle. Angular white polymer, a long faceted handguard, blue burst glow.
+bespoke('burst', 'ar', {
   name: 'BR-3', type: 'BURST RIFLE', auto: false, burst: 3, burstGap: 0.3, rpm: 950, mag: 30, dmg: 23, headMult: 2,
-  reload: 2.0, reloadEmpty: 2.5,
+  reload: 2.0, reloadEmpty: 2.5, reloadAnim: 'tap',
   spread: { base: 0.003, move: 0.016, air: 0.03, bloom: 0.004, bloomMax: 0.025, ads: 0.22 },
   recoil: { up: 0.009, side: 0.005, vm: 0.9 },
+  sightY: 0.088, adsZ: -0.27, hip: [0.17, -0.185, -0.56], muzzle: [0, 0.014, -0.62],
+  grip: [0, -0.08, 0.1], foreGrip: [0, -0.05, -0.26], eject: [0.04, 0.02, -0.02], magPos: [0, -0.11, -0.06], bolt: [0.04, 0.03, 0.02],
   sound: { freq: 2900, thump: 160, gain: 0.5 },
-}, (parts) => {
-  each(parts, ['receiver', 'handguard', 'stock', 'hgCap'], (p) => { p.col = WHITE; p.m = 'paint'; });
-  each(parts, ['stripe', 'hgStripe'], (p) => { p.col = BLUE; });
-  each(parts, ['mag', 'magRib', 'magBase', 'magWindow'], (p) => { p.col = DARK2; });
-});
+}, [
+  P('receiver', [0, 0.02, 0], [0.062, 0.064, 0.3], WHITE, { m: 'paint', shape: 0.008 }),
+  P('upperRidge', [0, 0.056, -0.02], [0.046, 0.012, 0.27], DARK2, { m: 'metal' }),
+  P('lower', [0, -0.028, 0.04], [0.056, 0.05, 0.2], POLY, { m: 'poly' }),
+  P('magwell', [0, -0.05, -0.06], [0.06, 0.055, 0.095], WHITE, { m: 'paint' }),
+  P('port', [0.0315, 0.024, -0.02], [0.002, 0.02, 0.07], PORT),
+  P('handguard', [0, 0.012, -0.285], [0.068, 0.072, 0.27], WHITE, { m: 'paint', shape: 0.008 }),
+  ...[-1, 1].map((sx) => P('hgFacet', [sx * 0.03, 0.044, -0.285], [0.016, 0.016, 0.27], POLY, { rz: sx * 0.78, m: 'poly' })),
+  ...[-0.2, -0.26, -0.32, -0.38].flatMap((z) => [-1, 1].map((sx) => P('hgPort', [sx * 0.0345, 0.004, z], [0.002, 0.012, 0.036], PORT))),
+  P('hgGlow', [0.035, -0.02, -0.29], [0.003, 0.005, 0.22], BLUE, { em: 1 }),
+  P('hgGlowL', [-0.035, -0.02, -0.29], [0.003, 0.005, 0.22], BLUE, { em: 1 }),
+  P('hgCap', [0, 0.012, -0.425], [0.06, 0.06, 0.012], POLY),
+  C('barrel', [0, 0.014, -0.49], 0.022, 0.13, BLACK, { m: 'metal' }),
+  C('muzzle', [0, 0.014, -0.585], 0.034, 0.06, DARK, { m: 'metal' }),
+  ...[-1, 1].map((sx) => P('mzPort', [sx * 0.017, 0.014, -0.58], [0.004, 0.012, 0.03], PORT, { grp: 'muzzle' })),
+  ...rail(0.07, 0.15, -0.41),
+  ...redDot(0.088, 0.0, POLY),
+  P('grip', [0, -0.085, 0.1], [0.042, 0.105, 0.048], BLACK, { rx: -0.28, m: 'rubber' }),
+  P('gripBack', [0, -0.08, 0.124], [0.038, 0.085, 0.012], BLUE, { rx: -0.28, m: 'poly' }),
+  P('guard', [0, -0.066, 0.04], [0.016, 0.006, 0.08], POLY),
+  P('trigger', [0, -0.048, 0.036], [0.006, 0.026, 0.008], STEEL, { m: 'steel', rx: 0.3 }),
+  P('selector', [-0.032, -0.01, 0.07], [0.004, 0.014, 0.022], BLUE, { em: 1 }),
+  ...[0, 1, 2].map((k) => P('burstPip', [-0.032, 0.02, 0.04 + k * 0.012], [0.003, 0.006, 0.006], BLUE, { em: 1 })),
+  C('stockTube', [0, 0.02, 0.2], 0.03, 0.1, DARK2, { m: 'metal', grp: 'stock' }),
+  P('stock', [0, -0.006, 0.29], [0.048, 0.092, 0.16], WHITE, { m: 'paint', shape: 0.006 }),
+  P('stockCut', [0.0245, -0.006, 0.29], [0.002, 0.05, 0.09], PORT, { grp: 'stock' }),
+  P('stockCutL', [-0.0245, -0.006, 0.29], [0.002, 0.05, 0.09], PORT, { grp: 'stock' }),
+  P('butt', [0, -0.01, 0.376], [0.052, 0.104, 0.02], BLACK, { m: 'rubber', grp: 'stock' }),
+  P('charge', [0, 0.062, 0.16], [0.03, 0.01, 0.026], BLACK, { m: 'metal' }),
+  P('bolt', [0.04, 0.03, 0.02], [0.014, 0.014, 0.03], STEEL, { bolt: true, m: 'steel' }),
+  P('mag', [0, -0.11, -0.06], [0.048, 0.13, 0.072], DARK2, { mag: true, rx: 0.1, m: 'poly' }),
+  ...[-1, 1].map((sx) => P('magRib', [sx * 0.025, -0.11, -0.06], [0.003, 0.1, 0.05], POLY, { mag: true, rx: 0.1, grp: 'mag' })),
+  P('magBase', [0, -0.178, -0.067], [0.054, 0.014, 0.078], BLUE, { mag: true, rx: 0.1, grp: 'mag', m: 'poly' }),
+]);
 
-// FC-308: semi-auto marksman rifle. Long barrel, straight mag, hits hard.
-variant('dmr', 'ar', {
+// FC-308: battle-rifle marksman. Walnut stock, parkerised steel, iron sights, flash hider and bayonet lug.
+bespoke('dmr', 'ar', {
   name: 'FC-308', type: 'MARKSMAN RIFLE', auto: false, rpm: 330, mag: 15, dmg: 44, headMult: 2.1,
-  reload: 2.2, reloadEmpty: 2.7, muzzle: [0, 0.012, -0.69],
+  reload: 2.2, reloadEmpty: 2.7, reloadAnim: 'check', dropAt: 0.36,
   spread: { base: 0.002, move: 0.022, air: 0.04, bloom: 0.012, bloomMax: 0.03, ads: 0.15 },
-  recoil: { up: 0.026, side: 0.006, vm: 1.6 }, adsZoom: 0.6, adsSpeed: 11,
+  recoil: { up: 0.026, side: 0.006, vm: 1.6 }, adsZoom: 0.72, adsSpeed: 11,
+  sightY: 0.076, adsZ: -0.3, hip: [0.17, -0.19, -0.6], muzzle: [0, 0.02, -0.82],
+  grip: [0, -0.075, 0.14], foreGrip: [0, -0.045, -0.3], eject: [0.04, 0.035, 0], magPos: [0, -0.078, -0.05], bolt: [0.035, 0.036, 0.02],
   sound: { freq: 2000, thump: 95, gain: 0.75, dur: 0.3 },
-}, (parts) => {
-  each(parts, ['barrel'], (p) => { p.s[2] = 0.36; p.c[2] = -0.49; });
-  each(parts, ['muzzle', 'mzSlot', 'mzCrown', 'gasBlock'], (p) => { p.c[2] -= 0.14; });
-  each(parts, ['receiver', 'lower', 'stock', 'handguard'], (p) => { p.col = OLIVE; });
-  each(parts, ['mag', 'magRib', 'magBase', 'magWindow'], (p) => { p.rx = 0.05; p.col = BLACK; if (p.name === 'mag') { p.s[1] = 0.11; p.c[1] = -0.09; } if (p.name === 'magBase') p.c[1] = -0.148; });
-});
+}, [
+  P('receiver', [0, 0.027, 0.0], [0.05, 0.052, 0.28], [0.27, 0.28, 0.27], { m: 'metal' }),
+  P('port', [0.0255, 0.035, 0.01], [0.002, 0.02, 0.07], PORT),
+  P('opRod', [0.03, 0.012, -0.16], [0.008, 0.014, 0.32], DARK2, { m: 'metal' }),
+  P('bolt', [0.035, 0.036, 0.02], [0.016, 0.014, 0.022], STEEL, { bolt: true, m: 'steel' }),
+  P('stockFront', [0, -0.008, -0.24], [0.058, 0.05, 0.34], WOOD, { m: 'wood' }),
+  P('hgTop', [0, 0.042, -0.27], [0.042, 0.016, 0.24], DARK, { m: 'poly' }),
+  ...[-0.2, -0.26, -0.32].map((z) => P('hgVent', [0, 0.051, z], [0.03, 0.002, 0.02], PORT)),
+  P('stockMid', [0, -0.02, 0.07], [0.056, 0.062, 0.22], WOOD, { m: 'wood' }),
+  P('wrist', [0, -0.07, 0.14], [0.042, 0.1, 0.05], WOOD, { rx: -0.45, m: 'wood' }),
+  P('stock', [0, -0.034, 0.3], [0.05, 0.1, 0.22], WOOD, { m: 'wood' }),
+  P('comb', [0, 0.02, 0.29], [0.044, 0.02, 0.16], WOOD, { m: 'wood', grp: 'stock' }),
+  P('butt', [0, -0.038, 0.415], [0.054, 0.116, 0.012], STEEL, { m: 'steel', grp: 'stock' }),
+  P('swivelR', [0, -0.09, 0.36], [0.006, 0.02, 0.02], STEEL, { m: 'steel', grp: 'stock' }),
+  C('barrel', [0, 0.02, -0.56], 0.024, 0.34, BLACK, { m: 'metal' }),
+  C('gasCyl', [0, -0.006, -0.43], 0.018, 0.12, DARK2, { m: 'metal' }),
+  P('frontBand', [0, 0.004, -0.42], [0.062, 0.052, 0.018], DARK2, { m: 'metal' }),
+  C('muzzle', [0, 0.02, -0.765], 0.03, 0.065, DARK, { m: 'metal' }),
+  ...[0, 1, 2, 3, 4].map((k) => P('mzSlot', [Math.cos(k * 1.256) * 0.0145, 0.02 + Math.sin(k * 1.256) * 0.0145, -0.775], [0.005, 0.005, 0.04], PORT, { grp: 'muzzle', rz: k * 1.256 })),
+  P('lug', [0, -0.006, -0.735], [0.012, 0.012, 0.03], DARK2, { m: 'metal' }),
+  P('frontPost', [0, 0.064, -0.74], [0.004, 0.034, 0.006], BLACK, { m: 'metal' }),
+  ...[-1, 1].map((sx) => P(sx < 0 ? 'frontEarL' : 'frontEarR', [sx * 0.012, 0.058, -0.74], [0.004, 0.024, 0.008], BLACK, { m: 'metal' })),
+  P('rearAp', [0, 0.066, 0.1], [0.026, 0.03, 0.012], DARK2, { m: 'metal' }),
+  P('rearHole', [0, 0.076, 0.093], [0.006, 0.006, 0.002], [0.9, 0.9, 0.9], { em: 0.3 }),
+  ...rail(0.056, 0.06, -0.06, {}, 0.026),
+  P('guard', [0, -0.05, 0.09], [0.014, 0.006, 0.07], STEEL, { m: 'steel' }),
+  P('trigger', [0, -0.036, 0.085], [0.006, 0.024, 0.008], STEEL, { m: 'steel', rx: 0.3 }),
+  P('mag', [0, -0.078, -0.05], [0.046, 0.11, 0.08], BLACK, { mag: true, rx: 0.04, m: 'metal' }),
+  P('magBase', [0, -0.135, -0.052], [0.05, 0.01, 0.084], DARK2, { mag: true, rx: 0.04, grp: 'mag', m: 'metal' }),
+  ...[-1, 1].map((sx) => P('magRib', [sx * 0.0235, -0.08, -0.05], [0.002, 0.08, 0.01], DARK2, { mag: true, rx: 0.04, grp: 'mag' })),
+]);
 
-// MP-9: full-auto machine pistol with an extended mag. Shreds up close.
-variant('mp', 'pistol', {
-  name: 'MP-9', type: 'MACHINE PISTOL', auto: true, rpm: 1100, mag: 24, dmg: 11, headMult: 1.6,
-  reload: 1.4, reloadEmpty: 1.7, magPos: [0, -0.135, 0.07],
-  spread: { base: 0.012, move: 0.012, air: 0.018, bloom: 0.004, bloomMax: 0.035, ads: 0.45 },
-  recoil: { up: 0.006, side: 0.01, vm: 0.8 },
-  sound: { freq: 3600, thump: 200, gain: 0.4 },
-}, (parts) => {
-  each(parts, ['slide', 'slideTop'], (p) => { p.col = WHITE; p.m = 'paint'; });
-  each(parts, ['stripe'], (p) => { p.col = BLUE; });
-  each(parts, ['mag'], (p) => { p.s[1] = 0.135; p.c[1] = -0.135; });
-  each(parts, ['magBase'], (p) => { p.c[1] = -0.207; });
-});
+// BX-56: bullpup. Smooth moulded body, integrated 1.5× scope, folding foregrip, smoke mag behind the grip.
+bespoke('bullpup', 'ar', {
+  name: 'BX-56', type: 'BULLPUP RIFLE', rpm: 780, mag: 30, dmg: 20, headMult: 2,
+  reload: 2.2, reloadEmpty: 2.7, reloadAnim: 'bullpup',
+  spread: { base: 0.004, move: 0.014, air: 0.028, bloom: 0.0045, bloomMax: 0.032, ads: 0.25 },
+  recoil: { up: 0.01, side: 0.008, vm: 1 }, adsSpeed: 15, adsZoom: 0.66,
+  sightY: 0.108, adsZ: -0.2, hip: [0.16, -0.17, -0.5], muzzle: [0, 0.02, -0.55],
+  grip: [0, -0.09, -0.06], foreGrip: [0, -0.1, -0.25], eject: [0.045, 0.02, 0.1], magPos: [0, -0.1, 0.12], bolt: [-0.04, 0.03, -0.08],
+}, [
+  P('body', [0, 0.0, 0.08], [0.07, 0.09, 0.42], GREEN, { m: 'poly', shape: 0.02 }),
+  P('bodyLow', [0, -0.042, 0.11], [0.066, 0.04, 0.3], [0.28, 0.31, 0.26], { m: 'poly', shape: 0.012 }),
+  P('port', [0.0355, 0.02, 0.1], [0.002, 0.022, 0.07], PORT),
+  P('portL', [-0.0355, 0.02, 0.1], [0.002, 0.022, 0.07], [0.22, 0.24, 0.2]),
+  P('grip', [0, -0.09, -0.06], [0.04, 0.1, 0.046], [0.28, 0.31, 0.26], { rx: -0.15, m: 'rubber' }),
+  P('guardBar', [0, -0.142, -0.07], [0.02, 0.012, 0.17], GREEN, { m: 'poly' }),
+  P('guardPost', [0, -0.1, -0.15], [0.02, 0.07, 0.014], GREEN, { m: 'poly' }),
+  P('trigger', [0, -0.055, -0.08], [0.006, 0.026, 0.008], STEEL, { m: 'steel', rx: 0.3 }),
+  P('fgrip', [0, -0.08, -0.25], [0.03, 0.08, 0.03], BLACK, { m: 'rubber' }),
+  P('fgripHinge', [0, -0.035, -0.25], [0.034, 0.014, 0.04], DARK2, { m: 'metal', grp: 'under' }),
+  C('barrel', [0, 0.02, -0.33], 0.024, 0.3, BLACK, { m: 'metal' }),
+  C('collar', [0, 0.02, -0.19], 0.042, 0.04, DARK2, { m: 'metal' }),
+  C('muzzle', [0, 0.02, -0.51], 0.032, 0.05, DARK, { m: 'metal' }),
+  P('scopeBase', [0, 0.07, -0.02], [0.03, 0.04, 0.13], GREEN, { m: 'poly' }),
+  C('scope', [0, 0.108, -0.02], 0.04, 0.16, BLACK, { m: 'metal' }),
+  C('scopeBell', [0, 0.108, -0.11], 0.05, 0.03, BLACK, { m: 'metal' }),
+  P('scopeLens', [0, 0.108, -0.126], [0.042, 0.042, 0.002], [0.45, 0.7, 1], { em: 0.5, shape: 'cyl' }),
+  P('scopeDot', [0, 0.108, -0.03], [0.003, 0.003, 0.001], RED, { em: 1 }),
+  P('buttplate', [0, -0.002, 0.295], [0.072, 0.096, 0.02], BLACK, { m: 'rubber', shape: 0.01 }),
+  P('bolt', [-0.04, 0.03, -0.08], [0.016, 0.012, 0.02], BLACK, { bolt: true, m: 'metal' }),
+  P('mag', [0, -0.1, 0.12], [0.05, 0.13, 0.075], [0.3, 0.3, 0.33], { mag: true, rx: 0.1, m: 'poly' }),
+  P('magWindow', [0.0255, -0.09, 0.12], [0.002, 0.08, 0.04], [0.85, 0.65, 0.3], { mag: true, rx: 0.1, grp: 'mag', em: 0.2 }),
+  P('magBase', [0, -0.168, 0.113], [0.054, 0.012, 0.08], BLACK, { mag: true, rx: 0.1, grp: 'mag' }),
+]);
 
-// R-357: six-shot revolver. Slow, heavy, two body shots and a bit.
-variant('revolver', 'pistol', {
-  name: 'R-357', type: 'REVOLVER', auto: false, rpm: 140, mag: 6, dmg: 58, headMult: 1.8, slide: false,
-  reload: 2.3, reloadEmpty: 2.3, muzzle: [0, 0.035, -0.22], magPos: [0, 0.022, -0.005],
-  spread: { base: 0.003, move: 0.014, air: 0.025, bloom: 0.02, bloomMax: 0.04, ads: 0.3 },
-  recoil: { up: 0.05, side: 0.012, vm: 2.4 },
-  sound: { freq: 1500, thump: 75, gain: 0.85, dur: 0.32 },
-}, (parts) => {
-  for (let i = parts.length - 1; i >= 0; i--) if (['mag', 'magBase', 'serr', 'port', 'magRelease', 'slideStop'].includes(parts[i].name)) parts.splice(i, 1);
-  each(parts, ['slide', 'slideTop', 'frame'], (p) => { p.col = STEEL; p.m = 'steel'; delete p.bolt; });
-  each(parts, ['grip', 'gripPanel', 'gripPanelL'], (p) => { p.col = WOOD; p.m = 'wood'; });
-  each(parts, ['front'], (p) => { p.c[2] = -0.2; });
-  // the slide becomes a short top strap behind the cylinder; a barrel and lug run forward of it
-  each(parts, ['slide'], (p) => { p.s[2] = 0.08; p.c[2] = 0.05; });
-  each(parts, ['slideTop'], (p) => { p.s[2] = 0.27; p.c[2] = -0.045; });
-  each(parts, ['barrelHood'], (p) => { p.c[2] = -0.215; });
-  parts.push(
-    C('barrelLong', [0, 0.034, -0.13], 0.024, 0.17, STEEL, { m: 'steel' }),
-    P('underLug', [0, 0.016, -0.135], [0.016, 0.018, 0.15], STEEL, { m: 'steel' }),
-    C('mag', [0, 0.024, -0.01], 0.06, 0.06, DARK, { m: 'metal', mag: true }),
-    ...[0, 1, 2, 3, 4, 5].map((k) => P('flute', [Math.cos(k * 1.047 + 0.52) * 0.029, 0.024 + Math.sin(k * 1.047 + 0.52) * 0.029, -0.01], [0.007, 0.007, 0.05], DARK2, { mag: true, grp: 'mag' })),
-    P('hammer', [0, 0.05, 0.07], [0.008, 0.02, 0.012], STEEL, { m: 'steel', bolt: true }),
-  );
-});
-
-// AS-20: magazine-fed automatic shotgun.
-variant('autoshotgun', 'shotgun', {
-  name: 'AS-20', type: 'AUTO SHOTGUN', auto: true, rpm: 210, mag: 8, dmg: 8, headMult: 1.4, pellets: 8,
-  action: undefined, reloadStyle: 'mag', reload: 2.4, reloadEmpty: 2.9, magPos: [0, -0.1, -0.02], bolt: [0.04, 0.02, 0.02],
-  spread: { base: 0.06, move: 0.012, air: 0.018, bloom: 0.006, bloomMax: 0.02, ads: 0.8 },
-  recoil: { up: 0.035, side: 0.014, vm: 1.8 },
-  sound: { freq: 1400, thump: 85, gain: 0.8, dur: 0.24 },
-}, (parts) => {
-  for (let i = parts.length - 1; i >= 0; i--) if (['shell', 'loadPort', 'portRim', 'saddle'].includes(parts[i].name)) parts.splice(i, 1);
-  for (const p of parts) if (p.pump) delete p.pump;
-  each(parts, ['pump', 'pumpRidge', 'stock', 'stockComb', 'grip'], (p) => { p.col = DARK; p.m = 'poly'; });
-  each(parts, ['receiver'], (p) => { p.col = DARK2; });
-  parts.push(
-    P('mag', [0, -0.1, -0.02], [0.05, 0.12, 0.09], BLACK, { m: 'poly', mag: true }),
-    P('magBase', [0, -0.165, -0.02], [0.056, 0.012, 0.096], RED, { m: 'poly', mag: true, grp: 'mag' }),
-  );
-});
-
-// KV-45: hyper-fast SMG with almost no kick.
-variant('kv', 'smg', {
-  name: 'KV-45', type: 'SMG', rpm: 1250, mag: 25, dmg: 11, headMult: 1.6,
+// KV-45: the "Vector" — boxy upper over a slanted recoil block, mag ahead of the trigger, skeleton stock.
+bespoke('kv', 'smg', {
+  name: 'KV-45', type: 'SMG', rpm: 1250, mag: 25, dmg: 11, headMult: 1.6, reloadAnim: 'spin',
   spread: { base: 0.009, move: 0.01, air: 0.018, bloom: 0.003, bloomMax: 0.026, ads: 0.4 },
   recoil: { up: 0.0045, side: 0.006, vm: 0.55 },
+  sightY: 0.068, adsZ: -0.26, hip: [0.15, -0.165, -0.48], muzzle: [0, 0.012, -0.36],
+  grip: [0, -0.08, 0.06], foreGrip: [0, -0.085, -0.17], eject: [0.03, 0.02, -0.02], magPos: [0, -0.12, -0.06], bolt: [-0.032, 0.03, -0.1],
   sound: { freq: 3800, thump: 210, gain: 0.38 },
-}, (parts) => {
-  each(parts, ['receiver', 'shroud'], (p) => { p.col = DARK2; p.m = 'poly'; });
-  each(parts, ['stripe'], (p) => { p.col = [1, 0.75, 0.1]; });
-  each(parts, ['mag'], (p) => { p.col = BLACK; p.s[1] = 0.15; p.c[1] = -0.11; });
-  each(parts, ['magBase'], (p) => { p.c[1] = -0.189; });
-  parts.push(P('kvBlock', [0, -0.03, -0.08], [0.058, 0.05, 0.1], DARK, { m: 'poly' }));
-});
+}, [
+  P('upper', [0, 0.02, -0.03], [0.056, 0.052, 0.3], BLACK, { m: 'poly', shape: 0.006 }),
+  P('block', [0, -0.045, -0.13], [0.054, 0.08, 0.14], DARK2, { m: 'poly', rx: 0.22, shape: 0.006 }),
+  P('blockFace', [0, -0.07, -0.205], [0.05, 0.06, 0.012], POLY, { m: 'poly', rx: 0.22 }),
+  P('shroud', [0, 0.014, -0.22], [0.05, 0.046, 0.08], BLACK, { m: 'metal' }),
+  ...[-1, 1].map((sx) => P('shVent', [sx * 0.0255, 0.014, -0.22], [0.002, 0.02, 0.05], PORT)),
+  C('barrel', [0, 0.012, -0.28], 0.022, 0.07, BLACK, { m: 'metal' }),
+  C('muzzle', [0, 0.012, -0.33], 0.03, 0.04, DARK2, { m: 'metal' }),
+  P('grip', [0, -0.08, 0.06], [0.04, 0.1, 0.044], BLACK, { rx: -0.25, m: 'rubber' }),
+  P('guard', [0, -0.055, 0.0], [0.014, 0.006, 0.07], BLACK),
+  P('trigger', [0, -0.042, -0.002], [0.006, 0.022, 0.008], STEEL, { m: 'steel', rx: 0.3 }),
+  ...rail(0.048, 0.1, -0.18),
+  P('flipF', [0, 0.066, -0.17], [0.006, 0.026, 0.006], DARK2, { m: 'metal' }),
+  P('flipR', [0, 0.06, 0.08], [0.026, 0.016, 0.006], DARK2, { m: 'metal' }),
+  P('flipRL', [-0.009, 0.072, 0.08], [0.006, 0.01, 0.006], DARK2, { m: 'metal' }),
+  P('flipRR', [0.009, 0.072, 0.08], [0.006, 0.01, 0.006], DARK2, { m: 'metal' }),
+  P('stock', [0, 0.025, 0.2], [0.012, 0.012, 0.18], DARK2, { m: 'metal' }),
+  P('stockLow', [0, -0.045, 0.2], [0.012, 0.012, 0.18], DARK2, { m: 'metal', grp: 'stock' }),
+  P('stockPad', [0, -0.01, 0.295], [0.04, 0.094, 0.02], BLACK, { m: 'rubber', grp: 'stock' }),
+  P('accent', [0.029, -0.008, -0.04], [0.002, 0.008, 0.2], YEL, { em: 0.9 }),
+  P('accentL', [-0.029, -0.008, -0.04], [0.002, 0.008, 0.2], YEL, { em: 0.9 }),
+  P('bolt', [-0.032, 0.03, -0.1], [0.012, 0.012, 0.016], STEEL, { bolt: true, m: 'steel' }),
+  P('mag', [0, -0.12, -0.06], [0.03, 0.17, 0.05], BLACK, { mag: true, rx: 0.18, m: 'poly' }),
+  P('magBase', [0, -0.205, -0.075], [0.034, 0.012, 0.056], YEL, { mag: true, rx: 0.18, grp: 'mag' }),
+]);
 
-// BX-56: bullpup rifle. The mag sits behind the grip, so it's short and handy.
-variant('bullpup', 'ar', {
-  name: 'BX-56', type: 'BULLPUP RIFLE', rpm: 780, mag: 30, dmg: 20, headMult: 2,
-  reload: 2.2, reloadEmpty: 2.7, magPos: [0, -0.115, 0.18],
-  spread: { base: 0.004, move: 0.014, air: 0.028, bloom: 0.0045, bloomMax: 0.032, ads: 0.25 },
-  recoil: { up: 0.01, side: 0.008, vm: 1 }, adsSpeed: 16,
-}, (parts) => {
-  each(parts, ['mag', 'magRib', 'magBase', 'magWindow'], (p) => { p.c[2] += 0.23; p.col = p.name === 'mag' ? DARK2 : p.col; });
-  each(parts, ['receiver', 'lower', 'stock'], (p) => { p.col = [0.52, 0.55, 0.5]; p.m = 'poly'; });
-  each(parts, ['handguard'], (p) => { p.col = [0.52, 0.55, 0.5]; });
-  parts.push(P('bpShell', [0, -0.03, 0.2], [0.066, 0.07, 0.2], [0.52, 0.55, 0.5], { m: 'poly' }));
-});
+// MP-9: compact machine pistol. Mag through the grip, little vertical foregrip, stock folded down the side.
+bespoke('mp', 'pistol', {
+  name: 'MP-9', type: 'MACHINE PISTOL', auto: true, rpm: 1100, mag: 24, dmg: 11, headMult: 1.6, slide: false, reloadAnim: 'drop',
+  reload: 1.4, reloadEmpty: 1.7,
+  spread: { base: 0.012, move: 0.012, air: 0.018, bloom: 0.004, bloomMax: 0.035, ads: 0.45 },
+  recoil: { up: 0.006, side: 0.01, vm: 0.8 },
+  sightY: 0.062, adsZ: -0.32, hip: [0.15, -0.16, -0.42], muzzle: [0, 0.03, -0.21],
+  grip: [0, -0.06, 0.05], foreGrip: [0, -0.07, -0.1], eject: [0.025, 0.04, -0.02], magPos: [0, -0.15, 0.06], bolt: [0, 0.036, 0.085],
+  sound: { freq: 3600, thump: 200, gain: 0.4 },
+}, [
+  P('frame', [0, 0.024, -0.02], [0.04, 0.052, 0.2], BLACK, { m: 'poly', shape: 0.005 }),
+  P('port', [0.0205, 0.03, -0.03], [0.002, 0.016, 0.04], PORT),
+  ...rail(0.054, 0.07, -0.1, {}, 0.022),
+  C('barrel', [0, 0.03, -0.15], 0.02, 0.07, BLACK, { m: 'metal' }),
+  C('thread', [0, 0.03, -0.195], 0.024, 0.02, DARK2, { m: 'metal' }),
+  P('grip', [0, -0.06, 0.05], [0.034, 0.11, 0.044], BLACK, { rx: -0.12, m: 'rubber' }),
+  P('fgrip', [0, -0.03, -0.1], [0.022, 0.05, 0.022], BLACK, { m: 'rubber' }),
+  P('guard', [0, -0.006, -0.015], [0.012, 0.006, 0.06], BLACK),
+  P('trigger', [0, 0.004, -0.02], [0.006, 0.02, 0.006], STEEL, { m: 'steel', rx: 0.3 }),
+  P('stockFold', [0.028, 0.006, 0.04], [0.008, 0.012, 0.18], DARK2, { m: 'metal' }),
+  P('stockPad', [0.028, -0.01, -0.05], [0.01, 0.05, 0.02], BLACK, { m: 'rubber' }),
+  P('front', [0, 0.064, -0.11], [0.006, 0.012, 0.008], BLACK),
+  P('rearL', [-0.01, 0.064, 0.07], [0.006, 0.012, 0.008], BLACK),
+  P('rearR', [0.01, 0.064, 0.07], [0.006, 0.012, 0.008], BLACK),
+  P('selector', [-0.021, 0.0, 0.03], [0.003, 0.012, 0.012], RED, { em: 0.8 }),
+  P('bolt', [0, 0.036, 0.085], [0.032, 0.014, 0.012], DARK2, { bolt: true, m: 'metal' }),
+  P('mag', [0, -0.15, 0.06], [0.026, 0.12, 0.036], DARK2, { mag: true, rx: -0.12, m: 'metal' }),
+  P('magBase', [0, -0.21, 0.068], [0.03, 0.012, 0.04], RED, { mag: true, rx: -0.12, grp: 'mag' }),
+]);
 
-// LV-44: lever-action rifle. Iron sights, big hits, a lever to work between shots.
-variant('lever', 'sniper', {
-  name: 'LV-44', type: 'LEVER RIFLE', rpm: 100, mag: 8, dmg: 68, headMult: 1.9, scope: false,
-  reload: 2.4, reloadEmpty: 2.4, adsZoom: 0.68, adsSpeed: 12, sightY: 0.058,
-  spread: { base: 0.004, move: 0.025, air: 0.045, bloom: 0, bloomMax: 0, ads: 0.1 },
-  recoil: { up: 0.04, side: 0.008, vm: 2.2 },
-  sound: { freq: 1700, thump: 85, gain: 0.85, dur: 0.34 },
-}, (parts) => {
-  for (const p of parts) if (p.grp === 'sight' || ['scope', 'scopeF', 'ring1', 'ring2', 'lens', 'recRail', 'monopod', 'chSlot'].includes(p.name)) p.hidden = true;
-  each(parts, ['stock', 'chassis', 'cheek'], (p) => { p.col = WOOD; p.m = 'wood'; });
-  each(parts, ['receiver'], (p) => { p.col = [0.42, 0.36, 0.25]; p.m = 'steel'; });
-  each(parts, ['barrel'], (p) => { p.s[2] = 0.5; p.c[2] = -0.45; });
-  each(parts, ['brake', 'brakePort', 'flute'], (p) => { p.hidden = true; });
-  parts.push(
-    P('front', [0, 0.04, -0.68], [0.006, 0.02, 0.01], STEEL, { m: 'steel' }),
-    P('rearSight', [0, 0.056, 0.04], [0.03, 0.014, 0.008], STEEL, { m: 'steel' }),
-    P('rearNotch', [0, 0.062, 0.038], [0.008, 0.008, 0.009], BLACK),
-    C('magTube', [0, -0.012, -0.42], 0.022, 0.44, STEEL, { m: 'steel' }),
-    P('lever', [0, -0.085, 0.07], [0.012, 0.012, 0.14], STEEL, { m: 'steel', bolt: true }),
-    P('leverLoop', [0, -0.11, 0.1], [0.012, 0.04, 0.012], STEEL, { m: 'steel', bolt: true }),
-  );
-  each(parts, ['bolt', 'boltKnob', 'magBase'], (p) => { p.hidden = true; });
-  each(parts, ['mag'], (p) => { p.s = [0.03, 0.03, 0.05]; p.c = [0, -0.012, -0.2]; p.col = STEEL; });   // the tube's follower: what comes out on a reload
-});
+// R-357: a proper wheelgun. Steel frame, fluted cylinder (swings out to reload), full-lug barrel, rubber grip.
+bespoke('revolver', 'pistol', {
+  name: 'R-357', type: 'REVOLVER', auto: false, rpm: 140, mag: 6, dmg: 58, headMult: 1.8, slide: false, reloadAnim: 'revolver', reloadEject: 6, dropAt: 0.2, shellCol: [0.75, 0.6, 0.3],
+  reload: 2.4, reloadEmpty: 2.4,
+  spread: { base: 0.003, move: 0.014, air: 0.025, bloom: 0.02, bloomMax: 0.04, ads: 0.3 },
+  recoil: { up: 0.05, side: 0.012, vm: 2.4 },
+  sightY: 0.062, adsZ: -0.34, hip: [0.15, -0.16, -0.42], muzzle: [0, 0.034, -0.22],
+  grip: [0, -0.055, 0.065], foreGrip: [-0.03, -0.07, 0.05], eject: [0.02, 0.03, 0], magPos: [0, 0.018, -0.01], bolt: [0, 0.05, 0.05],
+  sound: { freq: 1500, thump: 75, gain: 0.85, dur: 0.32 },
+}, [
+  P('frame', [0, 0.004, 0.0], [0.026, 0.05, 0.1], STEEL, { m: 'steel' }),
+  P('topStrap', [0, 0.042, -0.005], [0.022, 0.012, 0.085], STEEL, { m: 'steel' }),
+  C('barrel', [0, 0.034, -0.13], 0.026, 0.17, STEEL, { m: 'steel' }),
+  P('lug', [0, 0.012, -0.125], [0.018, 0.028, 0.16], STEEL, { m: 'steel' }),
+  P('rib', [0, 0.05, -0.13], [0.009, 0.008, 0.17], DARK2, { m: 'metal' }),
+  C('crown', [0, 0.034, -0.216], 0.02, 0.004, DARK2, { m: 'metal' }),
+  P('front', [0, 0.062, -0.2], [0.006, 0.018, 0.018], RED, { em: 0.7 }),
+  P('rearL', [-0.006, 0.054, 0.035], [0.004, 0.01, 0.01], BLACK),
+  P('rearR', [0.006, 0.054, 0.035], [0.004, 0.01, 0.01], BLACK),
+  P('hammer', [0, 0.05, 0.05], [0.008, 0.026, 0.014], DARK2, { bolt: true, m: 'steel', rx: -0.3 }),
+  P('grip', [0, -0.055, 0.065], [0.032, 0.1, 0.044], BLACK, { rx: -0.35, m: 'rubber' }),
+  ...[0, 1, 2].map((k) => P('finger', [0, -0.03 - k * 0.026, 0.04 - k * 0.009], [0.034, 0.008, 0.01], DARK2, { rx: -0.35 })),
+  P('medallion', [0.0165, -0.05, 0.065], [0.002, 0.014, 0.014], GOLD, { em: 0.2 }),
+  P('guard', [0, -0.028, 0.005], [0.01, 0.006, 0.05], STEEL, { m: 'steel' }),
+  P('guardFront', [0, -0.016, -0.02], [0.01, 0.024, 0.006], STEEL, { m: 'steel' }),
+  P('trigger', [0, -0.012, 0.006], [0.006, 0.022, 0.006], DARK2, { m: 'steel', rx: 0.3 }),
+  P('latch', [-0.014, 0.018, 0.04], [0.004, 0.01, 0.016], DARK2),
+  C('mag', [0, 0.018, -0.01], 0.064, 0.058, STEEL, { mag: true, m: 'steel' }),
+  ...[0, 1, 2, 3, 4, 5].map((k) => P('flute', [Math.cos(k * 1.047 + 0.52) * 0.031, 0.018 + Math.sin(k * 1.047 + 0.52) * 0.031, -0.01], [0.008, 0.008, 0.05], DARK, { mag: true, grp: 'mag' })),
+  ...[0, 1, 2, 3, 4, 5].map((k) => P('chamber', [Math.cos(k * 1.047) * 0.019, 0.018 + Math.sin(k * 1.047) * 0.019, 0.02], [0.01, 0.01, 0.002], BRASS, { mag: true, grp: 'mag', em: 0.1 })),
+  C('ejRod', [0, 0.0, -0.07], 0.008, 0.06, STEEL, { mag: true, m: 'steel' }),
+]);
 
-// ROTARY-X: minigun. Spins up for half a second, then shreds.
-variant('minigun', 'lmg', {
-  name: 'ROTARY-X', type: 'MINIGUN', rpm: 1600, mag: 250, dmg: 12, headMult: 1.4, spin: 0.55,
-  reload: 4.4, reloadEmpty: 4.9, muzzle: [0, 0.0, -0.78],
-  spread: { base: 0.016, move: 0.03, air: 0.04, bloom: 0.0012, bloomMax: 0.03, ads: 0.6 },
-  recoil: { up: 0.0035, side: 0.008, vm: 0.6 }, adsSpeed: 7, adsZoom: 0.88,
-  sound: { freq: 2400, thump: 130, gain: 0.5 },
-}, (parts) => {
-  for (const p of parts) if (['barrel', 'shroud', 'shHole', 'shHoleT', 'flash', 'frontPost'].includes(p.name) || p.grp === 'muzzle') p.hidden = true;
-  for (let i = 0; i < 6; i++) {
-    const a = i * Math.PI / 3;
-    parts.push(C('mgBarrel', [Math.cos(a) * 0.026, Math.sin(a) * 0.026, -0.46], 0.018, 0.62, i % 2 ? BLACK : DARK, { m: 'metal', spin: true }));
-  }
-  parts.push(
-    C('mgClampF', [0, 0, -0.7], 0.085, 0.022, DARK2, { m: 'metal', spin: true }),
-    C('mgClampM', [0, 0, -0.45], 0.08, 0.018, DARK2, { m: 'metal', spin: true }),
-    C('mgHub', [0, 0, -0.17], 0.09, 0.08, DARK, { m: 'metal' }),
-    P('mgMotor', [0.06, -0.02, -0.12], [0.05, 0.06, 0.12], [0.85, 0.6, 0.1], { m: 'paint' }),
-    P('mgHandle', [0, 0.09, -0.05], [0.02, 0.02, 0.2], BLACK, { m: 'rubber' }),
-  );
-});
+// AS-20: AA-12-style auto shotgun. Boxy receiver, a big drum, ventilated heat shield, carry handle, muzzle brake.
+bespoke('autoshotgun', 'shotgun', {
+  name: 'AS-20', type: 'AUTO SHOTGUN', auto: true, rpm: 210, mag: 8, dmg: 8, headMult: 1.4, pellets: 8, reloadAnim: 'drum',
+  action: undefined, reloadStyle: 'mag', reload: 2.6, reloadEmpty: 3.0,
+  spread: { base: 0.06, move: 0.012, air: 0.018, bloom: 0.006, bloomMax: 0.02, ads: 0.8 },
+  recoil: { up: 0.035, side: 0.014, vm: 1.8 },
+  sightY: 0.128, adsZ: -0.3, hip: [0.18, -0.2, -0.55], muzzle: [0, 0.02, -0.52],
+  grip: [0, -0.09, 0.1], foreGrip: [0, -0.07, -0.26], eject: [0.045, 0.02, 0], magPos: [0, -0.12, -0.06], bolt: [-0.042, 0.03, -0.12],
+  sound: { freq: 1400, thump: 85, gain: 0.8, dur: 0.24 },
+}, [
+  P('receiver', [0, 0.01, 0], [0.07, 0.11, 0.36], DARK2, { m: 'metal', shape: 0.006 }),
+  P('recSeam', [0.0355, 0.0, 0], [0.002, 0.004, 0.34], BLACK),
+  P('port', [0.0355, 0.03, 0.0], [0.002, 0.03, 0.08], PORT),
+  P('shield', [0, 0.072, -0.2], [0.054, 0.02, 0.26], BLACK, { m: 'metal' }),
+  ...[-0.12, -0.17, -0.22, -0.27].map((z) => P('shieldHole', [0, 0.083, z], [0.03, 0.002, 0.026], PORT)),
+  P('handle', [0, 0.11, -0.02], [0.02, 0.016, 0.17], BLACK, { m: 'poly' }),
+  ...[-1, 1].map((sz) => P('handlePost', [0, 0.085, -0.02 + sz * 0.07], [0.018, 0.04, 0.016], BLACK)),
+  P('rear', [0, 0.124, 0.05], [0.022, 0.01, 0.01], DARK),
+  P('frontPost', [0, 0.1, -0.31], [0.006, 0.03, 0.008], DARK),
+  C('barrel', [0, 0.02, -0.38], 0.034, 0.16, BLACK, { m: 'metal' }),
+  P('brake', [0, 0.02, -0.48], [0.052, 0.046, 0.06], DARK, { m: 'metal' }),
+  ...[-1, 1].flatMap((sx) => [-0.47, -0.49].map((z) => P('brakePort', [sx * 0.026, 0.02, z], [0.004, 0.026, 0.01], PORT, { grp: 'muzzle' }))),
+  P('hgLower', [0, -0.04, -0.25], [0.064, 0.04, 0.17], BLACK, { m: 'poly' }),
+  ...[-0.2, -0.24, -0.28, -0.32].map((z) => P('hgRib', [0, -0.061, z], [0.066, 0.004, 0.01], DARK2)),
+  P('grip', [0, -0.09, 0.1], [0.044, 0.11, 0.05], BLACK, { rx: -0.25, m: 'rubber' }),
+  P('guard', [0, -0.07, 0.05], [0.016, 0.006, 0.08], BLACK),
+  P('trigger', [0, -0.055, 0.045], [0.006, 0.026, 0.008], STEEL, { m: 'steel', rx: 0.3 }),
+  P('stock', [0, -0.012, 0.3], [0.06, 0.11, 0.2], BLACK, { m: 'poly', shape: 0.008 }),
+  P('butt', [0, -0.015, 0.405], [0.066, 0.12, 0.02], DARK2, { m: 'rubber', grp: 'stock' }),
+  P('stripe', [0.036, -0.02, 0.0], [0.002, 0.008, 0.26], RED, { em: 0.9 }),
+  P('bolt', [-0.042, 0.03, -0.12], [0.016, 0.014, 0.02], STEEL, { bolt: true, m: 'steel' }),
+  CX('mag', [0, -0.12, -0.06], 0.16, 0.09, BLACK, { mag: true, m: 'poly' }),
+  CX('drumCap', [0.047, -0.12, -0.06], 0.13, 0.006, DARK2, { mag: true, grp: 'mag' }),
+  CX('drumHub', [0.051, -0.12, -0.06], 0.04, 0.006, RED, { mag: true, grp: 'mag', em: 0.4 }),
+  P('drumNeck', [0, -0.05, -0.06], [0.05, 0.03, 0.06], BLACK, { mag: true, grp: 'mag' }),
+]);
 
-// DB-2: double-barrel shotgun. Two shots, both barrels, then crack it open.
-variant('double', 'shotgun', {
-  name: 'DB-2', type: 'DOUBLE BARREL', auto: false, rpm: 360, mag: 2, dmg: 9, headMult: 1.5, pellets: 12,
-  action: undefined, reloadStyle: 'mag', reload: 2.0, reloadEmpty: 2.0, magPos: [0, 0.02, 0.02], bolt: [0.04, 0.02, 0.02],
+// DB-2: side-by-side break-action. Engraved steel action, walnut fore-end and straight English stock, twin hammers.
+bespoke('double', 'shotgun', {
+  name: 'DB-2', type: 'DOUBLE BARREL', auto: false, rpm: 360, mag: 2, dmg: 9, headMult: 1.5, pellets: 12, reloadAnim: 'break', reloadEject: 2, shellCol: [0.85, 0.15, 0.1],
+  action: undefined, reloadStyle: 'mag', reload: 2.1, reloadEmpty: 2.1, hinge: [0, -0.012, -0.035],
   spread: { base: 0.048, move: 0.01, air: 0.015, bloom: 0, bloomMax: 0, ads: 0.75 },
   recoil: { up: 0.06, side: 0.014, vm: 2.6 },
+  sightY: 0.054, adsZ: -0.32, hip: [0.17, -0.18, -0.6], muzzle: [0, 0.02, -0.68],
+  grip: [0, -0.04, 0.16], foreGrip: [0, -0.04, -0.22], eject: [0, 0.035, -0.02], magPos: [0, 0.02, -0.02], bolt: [0, 0.05, 0.07],
   sound: { freq: 1300, thump: 70, gain: 0.95, dur: 0.32 },
-}, (parts) => {
-  for (let i = parts.length - 1; i >= 0; i--) if (['shell', 'loadPort', 'portRim', 'saddle', 'tube', 'tubeCap', 'pump', 'pumpRidge', 'pumpBar', 'ribPost'].includes(parts[i].name)) parts.splice(i, 1);
-  for (const p of parts) delete p.pump;
-  each(parts, ['barrel'], (p) => { p.c[0] = -0.019; p.s[0] = p.s[1] = 0.036; });
-  each(parts, ['stock', 'stockComb', 'grip'], (p) => { p.col = WOOD; p.m = 'wood'; });
-  each(parts, ['receiver'], (p) => { p.col = STEEL; p.m = 'steel'; });
-  parts.push(
-    C('barrel2', [0.019, 0.025, -0.42], 0.036, 0.56, BLACK, { m: 'metal' }),
-    P('foreend', [0, -0.012, -0.28], [0.06, 0.04, 0.2], WOOD, { m: 'wood' }),
-    P('mag', [0, 0.02, 0.02], [0.05, 0.02, 0.05], [0.8, 0.15, 0.1], { mag: true, hidden: true }),
-    P('hinge', [0, -0.02, -0.12], [0.07, 0.03, 0.03], STEEL, { m: 'steel' }),
-  );
-});
+}, [
+  P('action', [0, 0.002, 0.03], [0.062, 0.062, 0.12], STEEL, { m: 'steel', shape: 0.01 }),
+  ...[-1, 1].flatMap((sx) => [P('engrave', [sx * 0.0315, 0.0, 0.03], [0.002, 0.03, 0.08], GOLD, { em: 0.15 }), P('engrave2', [sx * 0.0315, 0.02, 0.05], [0.002, 0.004, 0.05], GOLD, { em: 0.15 })]),
+  C('barrel', [-0.017, 0.02, -0.34], 0.034, 0.62, BLACK, { m: 'metal', brk: true }),
+  C('barrel2', [0.017, 0.02, -0.34], 0.034, 0.62, BLACK, { m: 'metal', brk: true }),
+  P('rib', [0, 0.04, -0.34], [0.012, 0.006, 0.6], DARK2, { m: 'metal', brk: true }),
+  P('lumps', [0, -0.006, -0.06], [0.05, 0.022, 0.06], DARK2, { m: 'metal', brk: true }),
+  P('foreend', [0, -0.012, -0.2], [0.06, 0.04, 0.2], WOOD, { m: 'wood', brk: true }),
+  P('foreendTip', [0, -0.012, -0.302], [0.05, 0.034, 0.012], [0.3, 0.2, 0.12], { m: 'wood', brk: true }),
+  P('bead', [0, 0.047, -0.635], [0.007, 0.007, 0.007], BRASS, { brk: true, em: 0.2 }),
+  ...[-1, 1].map((sx) => P('hammer', [sx * 0.018, 0.05, 0.075], [0.008, 0.028, 0.012], DARK2, { bolt: true, m: 'steel', rx: -0.35 })),
+  P('topLever', [0, 0.04, 0.1], [0.012, 0.008, 0.045], STEEL, { m: 'steel', rz: 0.3 }),
+  P('wrist', [0, -0.036, 0.16], [0.04, 0.06, 0.12], WOOD, { rx: -0.2, m: 'wood' }),
+  P('grip', [0, -0.04, 0.16], [0.001, 0.001, 0.001], WOOD),
+  P('stock', [0, -0.05, 0.33], [0.05, 0.112, 0.24], WOOD, { rx: -0.08, m: 'wood' }),
+  P('butt', [0, -0.065, 0.455], [0.054, 0.124, 0.014], [0.12, 0.1, 0.09], { m: 'rubber', grp: 'stock' }),
+  P('guard', [0, -0.04, 0.1], [0.014, 0.006, 0.07], STEEL, { m: 'steel' }),
+  ...[0, 1].map((k) => P('trigger', [0, -0.026, 0.09 + k * 0.018], [0.006, 0.022, 0.006], GOLD, { m: 'steel', rx: 0.3 })),
+  P('mag', [0, 0.02, -0.02], [0.07, 0.03, 0.04], [0.8, 0.15, 0.1], { mag: true, hidden: true }),
+]);
+
+// LV-44: lever-action. Brass receiver, octagonal barrel over a tube magazine, walnut furniture, big lever loop.
+bespoke('lever', 'sniper', {
+  name: 'LV-44', type: 'LEVER RIFLE', rpm: 100, mag: 8, dmg: 68, headMult: 1.9, scope: false, lever: true, shellCol: [0.8, 0.62, 0.28],
+  reloadStyle: 'shell', shellTime: 0.42, adsZoom: 0.68, adsSpeed: 12,
+  spread: { base: 0.004, move: 0.025, air: 0.045, bloom: 0, bloomMax: 0, ads: 0.1 },
+  recoil: { up: 0.04, side: 0.008, vm: 2.2 },
+  sightY: 0.058, adsZ: -0.3, hip: [0.17, -0.18, -0.6], muzzle: [0, 0.03, -0.73],
+  grip: [0, -0.03, 0.15], foreGrip: [0, -0.03, -0.2], eject: [0, 0.06, 0.03], magPos: [0.026, 0.0, 0.03], bolt: [0, -0.04, 0.07],
+  sound: { freq: 1700, thump: 85, gain: 0.85, dur: 0.34 },
+}, [
+  P('receiver', [0, 0.012, 0.02], [0.044, 0.072, 0.17], BRASS, { m: 'metal' }),
+  P('sidePlate', [0.0225, 0.012, 0.03], [0.002, 0.04, 0.09], GOLD, { em: 0.12 }),
+  P('gate', [0.0225, -0.002, 0.03], [0.003, 0.018, 0.034], DARK2),
+  C('barrel', [0, 0.03, -0.41], 0.028, 0.62, DARK2, { m: 'metal' }),
+  ...[-1, 1].map((sx) => P('flat', [sx * 0.0125, 0.03, -0.41], [0.004, 0.02, 0.6], BLACK, { m: 'metal' })),
+  C('magTube', [0, -0.004, -0.36], 0.02, 0.5, DARK2, { m: 'metal' }),
+  P('band', [0, 0.013, -0.62], [0.034, 0.052, 0.016], DARK2, { m: 'metal' }),
+  P('forend', [0, 0.004, -0.18], [0.046, 0.044, 0.2], WOOD, { m: 'wood' }),
+  P('front', [0, 0.052, -0.7], [0.004, 0.016, 0.008], BRASS, { em: 0.3 }),
+  P('rearSight', [0, 0.05, -0.12], [0.026, 0.012, 0.006], DARK2),
+  P('rearNotch', [0, 0.056, -0.122], [0.006, 0.006, 0.008], BLACK),
+  P('hammer', [0, 0.056, 0.095], [0.008, 0.026, 0.012], DARK2, { bolt: true, m: 'steel', rx: -0.3 }),
+  P('lever', [0, -0.034, 0.07], [0.01, 0.01, 0.12], DARK2, { bolt: true, m: 'steel' }),
+  P('leverLoop', [0, -0.07, 0.115], [0.01, 0.06, 0.012], DARK2, { bolt: true, m: 'steel' }),
+  P('leverLoopB', [0, -0.098, 0.08], [0.01, 0.01, 0.07], DARK2, { bolt: true, m: 'steel' }),
+  P('trigger', [0, -0.03, 0.06], [0.005, 0.02, 0.006], GOLD, { m: 'steel', rx: 0.3 }),
+  P('wrist', [0, -0.018, 0.15], [0.036, 0.052, 0.08], WOOD, { rx: -0.3, m: 'wood' }),
+  P('stock', [0, -0.04, 0.3], [0.044, 0.1, 0.22], WOOD, { rx: -0.05, m: 'wood' }),
+  P('butt', [0, -0.05, 0.415], [0.046, 0.112, 0.012], DARK2, { m: 'metal', grp: 'stock' }),
+  C('saddleRing', [-0.026, 0.0, 0.06], 0.02, 0.004, BRASS, { ry: Math.PI / 2 }),
+  P('shell', [0, -0.08, 0.02], [0.016, 0.016, 0.05], BRASS, { mag: true, hidden: true }),
+]);
+
+// ROTARY-X: a proper minigun. Six barrels in a clamped cluster on a rotor housing, a motor pod, twin spade grips,
+// a carry handle, and a feed chute running round from the ammo box hung on the left.
+bespoke('minigun', 'lmg', {
+  name: 'ROTARY-X', type: 'MINIGUN', rpm: 1600, mag: 250, dmg: 12, headMult: 1.4, spin: 0.55, reloadAnim: 'minigun',
+  reload: 4.4, reloadEmpty: 4.9,
+  spread: { base: 0.016, move: 0.03, air: 0.04, bloom: 0.0012, bloomMax: 0.03, ads: 0.6 },
+  recoil: { up: 0.0035, side: 0.008, vm: 0.6 }, adsSpeed: 7, adsZoom: 0.88,
+  sightY: 0.145, adsZ: -0.38, hip: [0.2, -0.24, -0.66], muzzle: [0, 0.0, -0.9],
+  grip: [0.05, -0.07, 0.2], foreGrip: [-0.05, -0.07, 0.2], eject: [0.06, -0.08, -0.1], magPos: [-0.13, -0.12, 0.0], bolt: [0.08, -0.02, -0.05],
+  sound: { freq: 2400, thump: 130, gain: 0.5 },
+}, [
+  ...Array.from({ length: 6 }, (_, i) => { const a = i * Math.PI / 3; return C('mgBarrel', [Math.cos(a) * 0.03, Math.sin(a) * 0.03, -0.53], 0.02, 0.66, i % 2 ? BLACK : DARK2, { m: 'metal', spin: true }); }),
+  ...Array.from({ length: 6 }, (_, i) => { const a = i * Math.PI / 3; return C('mgBore', [Math.cos(a) * 0.03, Math.sin(a) * 0.03, -0.863], 0.012, 0.004, PORT, { spin: true }); }),
+  C('rod', [0, 0, -0.52], 0.016, 0.64, STEEL, { m: 'steel', spin: true }),
+  C('clampF', [0, 0, -0.82], 0.1, 0.024, DARK2, { m: 'metal', spin: true }),
+  C('clampM', [0, 0, -0.55], 0.096, 0.02, DARK2, { m: 'metal', spin: true }),
+  C('clampR', [0, 0, -0.3], 0.1, 0.03, DARK, { m: 'metal', spin: true }),
+  C('housing', [0, 0, -0.14], 0.13, 0.2, DARK2, { m: 'metal' }),
+  ...ring('housingBolt', [0, 0, -0.04], 8, 0.062, [0.01, 0.01, 0.01], STEEL, { m: 'steel' }),
+  P('body', [0, 0.0, 0.08], [0.12, 0.11, 0.2], DARK, { m: 'metal', shape: 0.01 }),
+  P('motor', [0.08, -0.02, -0.05], [0.05, 0.07, 0.18], YEL, { m: 'paint', shape: 0.01 }),
+  C('motorCap', [0.08, -0.02, -0.145], 0.05, 0.012, BLACK, { m: 'metal' }),
+  ...[-0.1, -0.06, -0.02, 0.02].map((z) => P('motorFin', [0.107, -0.02, z], [0.004, 0.06, 0.008], DARK2)),
+  P('handle', [0, 0.11, -0.08], [0.022, 0.02, 0.24], BLACK, { m: 'rubber' }),
+  ...[-1, 1].map((sz) => P('handlePost', [0, 0.08, -0.08 + sz * 0.1], [0.02, 0.05, 0.02], DARK2)),
+  ...[-1, 1].map((sx) => P('spade', [sx * 0.05, -0.07, 0.2], [0.026, 0.11, 0.026], BLACK, { m: 'rubber' })),
+  P('spadeBar', [0, -0.005, 0.2], [0.13, 0.024, 0.024], DARK2, { m: 'metal' }),
+  P('spadeBar2', [0, -0.13, 0.2], [0.13, 0.02, 0.02], DARK2, { m: 'metal' }),
+  P('fireBtn', [0, -0.005, 0.214], [0.03, 0.016, 0.006], RED, { em: 0.9 }),
+  P('shield', [0, 0.062, -0.5], [0.075, 0.008, 0.5], BLACK, { m: 'metal' }),
+  ...[-0.35, -0.45, -0.55, -0.65].map((z) => P('shieldHole', [0, 0.067, z], [0.05, 0.002, 0.05], PORT)),
+  ...[0, 1, 2].map((k) => P('chute', [-0.07 - k * 0.022, -0.04 - k * 0.025, 0.02 - k * 0.006], [0.03, 0.03, 0.06], DARK2, { m: 'metal', rz: -0.6 })),
+  P('mag', [-0.13, -0.12, 0.0], [0.1, 0.14, 0.17], GREEN, { mag: true, m: 'paint', shape: 0.008 }),
+  P('boxLid', [-0.13, -0.046, 0.0], [0.104, 0.012, 0.174], [0.25, 0.28, 0.22], { mag: true, grp: 'mag' }),
+  P('boxLatch', [-0.18, -0.08, 0.0], [0.006, 0.03, 0.04], STEEL, { mag: true, grp: 'mag' }),
+  P('boxStencil', [-0.13, -0.12, 0.0865], [0.07, 0.03, 0.002], YEL, { mag: true, grp: 'mag', em: 0.3 }),
+  P('bolt', [0.08, -0.02, -0.05], [0.001, 0.001, 0.001], DARK),
+]);
+
+// a little extra detail on the original six: sling hardware, maker plates, screws, witness marks
+const polish = {
+  ar: [P('slingF', [0, -0.034, -0.385], [0.006, 0.014, 0.02], STEEL, { m: 'steel' }), P('plate', [0.0295, -0.03, 0.06], [0.002, 0.012, 0.045], GREY, { em: 0.1 }),
+    P('witness', [-0.0325, -0.02, 0.085], [0.002, 0.004, 0.004], RED, { em: 0.6 }), P('deflectorBrass', [0.0365, 0.022, 0.03], [0.002, 0.016, 0.01], [0.75, 0.6, 0.3])],
+  smg: [P('slingR', [0.03, -0.028, 0.12], [0.006, 0.018, 0.02], STEEL, { m: 'steel' }), P('plate', [0.0315, 0.0, -0.08], [0.002, 0.012, 0.04], GREY, { em: 0.1 }),
+    ...[-0.06, 0.0, 0.06].map((z) => P('screw', [0.0315, -0.02, z], [0.002, 0.006, 0.006], STEEL, { m: 'steel' }))],
+  shotgun: [P('slingF', [0, -0.042, -0.56], [0.006, 0.014, 0.02], STEEL, { m: 'steel' }), P('padLine', [0, -0.03, 0.418], [0.056, 0.12, 0.004], RED, { em: 0.3 }),
+    P('plate', [0.034, -0.02, 0.05], [0.002, 0.014, 0.05], GREY, { em: 0.1 })],
+  sniper: [P('studF', [0, -0.052, -0.4], [0.008, 0.012, 0.016], STEEL, { m: 'steel' }), P('plate', [0.034, -0.03, 0.08], [0.002, 0.014, 0.06], GREY, { em: 0.1 }),
+    ...[-0.05, 0.05].map((z) => P('screw', [0.034, 0.01, z], [0.002, 0.006, 0.006], STEEL, { m: 'steel' }))],
+  lmg: [P('plate', [0.046, -0.01, -0.04], [0.002, 0.016, 0.06], GREY, { em: 0.1 }), P('slingF', [0, -0.03, -0.46], [0.006, 0.016, 0.02], STEEL, { m: 'steel' }),
+    P('heatTab', [0, 0.05, -0.3], [0.03, 0.004, 0.04], [1, 0.45, 0.1], { em: 0.4 })],
+  pistol: [...[-0.06, -0.075, -0.09].map((z) => P('railSlot', [0, -0.019, z], [0.03, 0.002, 0.004], PORT)), P('plate', [0.0155, -0.002, 0.03], [0.002, 0.008, 0.03], GREY, { em: 0.1 })],
+};
+for (const [id, ps] of Object.entries(polish)) WEAPONS[id].parts.push(...ps);
 
 export const CASE_ORDER = ['ar', 'burst', 'dmr', 'bullpup', 'smg', 'kv', 'mp', 'shotgun', 'autoshotgun', 'double', 'sniper', 'lever', 'lmg', 'minigun', 'pistol', 'revolver'];

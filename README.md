@@ -2,7 +2,7 @@
 
 A browser FPS in the spirit of The Finals, with a white grid sandbox look.
 
-**Build 0.28: 16 guns (new: KV-45 SMG, BX-56 bullpup, LV-44 lever rifle, ROTARY-X minigun, DB-2 double barrel), a Delta Force-style gunsmith with 8 slots and 49 attachments, a Battlefield 2042-style quick-swap menu (hold B), and the guns now sit jammed in two open crates by the workbench.** Online 1v1/2v2 with friends, 4v4 team deathmatch against AI (first to 10) on BLOCKYARD, THE SPLIT and HIGH GROUND, plus the Test Range, Parkour Course and underground bot arena.
+**Build 0.29: every gun has its own model and its own reload.** The ten newer guns were rebuilt from scratch (a proper six-barrel minigun, an AA-12-style drum shotgun, a break-action side-by-side, a brass lever-action, a real swing-out revolver, a Vector-style SMG and more), the original six got extra detail, and all 16 reload differently. Also: 49 attachments with a Delta Force-style gunsmith and a Battlefield 2042-style quick swap (hold B), online 1v1/2v2, and 4v4 team deathmatch against AI.
 
 ## Run it
 
@@ -196,7 +196,28 @@ For testing, add `?net=local` to the URL and two tabs in the same browser can pl
 | AS-20 | Auto shotgun | Heavy | Mag-fed, 8 pellets, 210 RPM |
 | ROTARY-X | Minigun | Heavy | Spins up for 0.55 s (hold fire or aim to keep it spinning), then 1,600 RPM from a 250-round box |
 
-They're built on the original guns' models and animations, and take the attachments of the gun they're based on.
+Every gun has its own model (build 0.29), and every gun reloads differently:
+
+| Gun | Reload |
+| --- | --- |
+| SF-47 | Rolled in, mag flicked out, fresh one twirled in and slapped, charging handle, barrel-roll finisher |
+| BR-3 | Tilted left, mag swap, palm-slaps the bolt release, snapped back up |
+| FC-308 | Pulls the mag and checks it, tosses it, seats a fresh one, works the op-rod |
+| BX-56 | Nose up and rolled toward you to reach the mag behind the grip, forward charging handle |
+| V9-S | One wrist flick throws the mag out, new one in, full barrel roll |
+| KV-45 | Mag swap, then the whole gun flipped end over end and caught |
+| MP-9 | Turned on its side, the empty drops free, new mag slammed up the grip, bolt yanked |
+| P-19 | Mag swap with a full twirl and a gunslinger spin |
+| R-357 | Cylinder swings out, muzzle up to dump six brass, speedloader in, flicked shut with a spin |
+| SG-12 | Shells fed one at a time, spin-cocked when empty |
+| AS-20 | Rocked over, drum rocked out and a fresh one rocked in, side handle slapped |
+| DB-2 | Broken open (the barrels hinge down), two empties pop out, two shells thumbed in, snapped shut, hammers cocked |
+| LH-7 | Mag swap from underneath, then the bolt lifted, run back and slammed home |
+| LV-44 | Rounds pushed in through the loading gate one at a time, then the lever worked |
+| M60-X | Feed cover flips up, box swapped, belt laid in the tray, cover slammed |
+| ROTARY-X | Hefted over, ammo box unhooked and a full one hung on, belt clipped to the chute, spin test |
+
+The newer guns take the attachments of the type they're closest to, with their own mounting points (a bullpup has no stock slot, the double barrel has no magazine/barrel/muzzle, the minigun only takes optics, side rail, box and ammo).
 
 **The armoury:** there are no glass cases any more. Every gun sits muzzle-down in one of two open wooden crates either side of the workbench, with the stocks sticking out. Look at one (it lifts and glows) and press E to take it.
 
