@@ -755,4 +755,44 @@ const polish = {
 };
 for (const [id, ps] of Object.entries(polish)) WEAPONS[id].parts.push(...ps);
 
+// ---------------------------------------------------------------- fit pass: close the gaps between parts
+// (found by checking every part touches the rest of the gun)
+const fit = (id, name, fn) => WEAPONS[id].parts.filter((p) => p.name === name).forEach(fn);
+const addTo = (id, ...ps) => WEAPONS[id].parts.push(...ps);
+fit('ar', 'selector', (p) => { p.c[0] = -0.03; });
+fit('ar', 'witness', (p) => { p.c[0] = -0.0295; });
+for (const n of ['railBase', 'railTooth']) fit('ar', n, (p) => { p.c[1] -= 0.005; });
+for (const n of ['railBase', 'railTooth']) fit('burst', n, (p) => { p.c[1] -= 0.004; });
+fit('dmr', 'barrel', (p) => { p.s[2] = 0.355; p.c[2] = -0.5675; });
+fit('dmr', 'hgTop', (p) => { p.c[1] = 0.026; p.s[1] = 0.02; p.s[2] = 0.26; p.c[2] = -0.265; });
+fit('dmr', 'hgVent', (p) => { p.c[1] = 0.0365; });
+fit('dmr', 'stock', (p) => { p.c[2] = 0.295; p.s[2] = 0.23; });
+fit('dmr', 'lug', (p) => { p.c[1] = 0.003; });
+addTo('dmr', P('frontBase', [0, 0.04, -0.74], [0.02, 0.018, 0.02], BLACK, { m: 'metal' }));
+fit('bullpup', 'scopeBase', (p) => { p.c[1] = 0.065; p.s[1] = 0.05; });
+fit('bullpup', 'fgripHinge', (p) => { p.c[1] = -0.04; });
+fit('bullpup', 'barrel', (p) => { p.s[2] = 0.31; p.c[2] = -0.335; });
+addTo('bullpup', P('hgFront', [0, -0.005, -0.2], [0.06, 0.06, 0.16], GREEN, { m: 'poly', shape: 0.014 }));
+fit('mp', 'stockFold', (p) => { p.c[0] = 0.024; });
+fit('mp', 'stockPad', (p) => { p.c[0] = 0.024; });
+fit('mp', 'fgrip', (p) => { p.c[1] = -0.027; });
+fit('mp', 'front', (p) => { p.c[2] = -0.095; });
+fit('autoshotgun', 'hgLower', (p) => { p.c[1] = -0.03; p.s[1] = 0.05; });
+fit('autoshotgun', 'hgRib', (p) => { p.c[1] = -0.056; });
+fit('autoshotgun', 'stock', (p) => { p.c[2] = 0.29; p.s[2] = 0.22; });
+fit('autoshotgun', 'frontPost', (p) => { p.c[1] = 0.097; });
+addTo('autoshotgun', P('barrelShroud', [0, 0.02, -0.25], [0.05, 0.05, 0.17], DARK2, { m: 'metal' }));
+fit('double', 'hammer', (p) => { p.c[1] = 0.042; });
+fit('sniper', 'bipodBase', (p) => { p.c[2] = -0.29; });
+fit('sniper', 'studF', (p) => { p.c[2] = -0.28; });
+fit('lever', 'barrel', (p) => { p.s[2] = 0.66; p.c[2] = -0.39; });
+fit('lever', 'flat', (p) => { p.s[2] = 0.64; p.c[2] = -0.39; });
+fit('lever', 'saddleRing', (p) => { p.c[0] = -0.024; });
+for (const n of ['spade', 'spadeBar', 'spadeBar2']) fit('minigun', n, (p) => { p.c[2] = 0.19; });
+fit('minigun', 'fireBtn', (p) => { p.c[2] = 0.204; });
+fit('minigun', 'shield', (p) => { p.c[2] = -0.495; p.s[2] = 0.52; });
+fit('shotgun', 'padLine', (p) => { p.grp = 'stock'; });
+addTo('kv', P('gripTop', [0, -0.018, 0.05], [0.05, 0.028, 0.07], BLACK, { m: 'poly' }));
+fit('revolver', 'hammer', (p) => { p.c[1] = 0.042; p.s[1] = 0.03; });
+
 export const CASE_ORDER = ['ar', 'burst', 'dmr', 'bullpup', 'smg', 'kv', 'mp', 'shotgun', 'autoshotgun', 'double', 'sniper', 'lever', 'lmg', 'minigun', 'pistol', 'revolver'];

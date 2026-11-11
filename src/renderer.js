@@ -328,6 +328,18 @@ void main() {
       }
       base = mix(base, box * 0.45, seamY);
       tRough = 0.55; tMetal = 0.35;
+    } else if (k == 16) {
+      // gun finish: fine grain and faint machining streaks, with the paint worn bright along the edges
+      vec3 lp = vLocal * uScale;
+      float grain = noise(lp * 900.0) * 0.6 + noise(lp * 230.0) * 0.4;
+      float streak = noise(vec3(lp.x * 1400.0, lp.y * 1400.0, lp.z * 30.0));
+      base *= 0.9 + 0.12 * grain + 0.05 * streak;
+      vec3 dE = uScale * 0.5 - abs(lp);
+      float a0 = min(dE.x, min(dE.y, dE.z)), c0 = max(dE.x, max(dE.y, dE.z));
+      float b0 = dE.x + dE.y + dE.z - a0 - c0;                       // distance to the nearest edge
+      float wear = (1.0 - smoothstep(0.0005, 0.0026, b0)) * (0.55 + 0.45 * noise(lp * 600.0));
+      float darkPaint = 1.0 - smoothstep(0.12, 0.45, dot(base, vec3(0.3, 0.55, 0.15)));
+      base = mix(base, base * 1.5 + vec3(0.05), wear * (0.25 + 0.5 * darkPaint));
     } else if (k == 15) {
       // the sea: a rolling swell with glints, darker in the troughs
       vec2 q = vWorld.xz;
@@ -713,7 +725,7 @@ export class Renderer {
       make = () => capsuleGeometry(q(L) / 500, q(r1) / 500, q(r2) / 500, lo ? 12 : 32, lo ? 3 : 10);
     } else {
       key = `${q(scl[0])}_${q(scl[1])}_${q(scl[2])}_${q(shape)}${lo ? 'l' : ''}`;
-      make = () => roundedBoxGeometry([q(scl[0]) / 500, q(scl[1]) / 500, q(scl[2]) / 500], q(shape) / 500, lo ? 1 : 4);
+      make = () => roundedBoxGeometry([q(scl[0]) / 500, q(scl[1]) / 500, q(scl[2]) / 500], q(shape) / 500, lo ? 1 : q(shape) < 4 ? 2 : 4);   // small bevels need fewer steps
     }
     let m = this.rounded.get(key);
     if (!m) {
@@ -936,7 +948,7 @@ export class Renderer {
 
   // draw a part object { model, scale, color, emissive, shape, alpha }
   drawPart(p, edges = 1) {
-    this.draw(p.model, p.scale, p.color, 0, edges, p.emissive || 0, p.alpha ?? 1, p.shape, p.mat);
+    this.draw(p.model, p.scale, p.color, p.tex || 0, p.edges ?? edges, p.emissive || 0, p.alpha ?? 1, p.shape, p.mat);
   }
 
   drawBox(b) {

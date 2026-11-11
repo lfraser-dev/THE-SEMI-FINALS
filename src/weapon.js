@@ -28,12 +28,13 @@ const crossed = (prev, now, at) => prev < at && now >= at;
 
 // Which mesh each gun part uses: tubes are cylinders, everything else gets softly rounded edges.
 const ROUND = /^(barrel|muzzle|tube|scope|scopeF|scBody|scBell|scEye|lens|scLens|suppressor|supRing|supCap|choke|compensator|bead|shell|front)$/;
+const GUN_TEX = 16;      // the gun-finish material in the shader (grain, streaks, worn edges)
 export function partShape(p) {
   if (p.shape !== undefined) return p.shape;
   if (ROUND.test(p.name) || (p.name === 'brake' && p.s[0] === p.s[1])) return 'cyl';
   const m = Math.min(...p.s);
-  if (m < 0.006) return undefined;                 // tiny details stay crisp
-  return Math.min(0.014, m * 0.3);                  // rounded edges scaled to the part
+  if (m < 0.0045) return undefined;                // tiny details stay crisp
+  return Math.min(0.012, m * 0.32);                 // rounded edges scaled to the part
 }
 // how long each gun's draw animation takes (s)
 // reload animation per original gun (the newer guns set reloadAnim themselves)
@@ -779,11 +780,11 @@ export class Weapon {
         if (k > 0.02) {
           const col = p.shineCol || (p.shineCol = [0, 0, 0]);
           for (let n = 0; n < 3; n++) col[n] = p.col[n] + (1 - p.col[n]) * k * 0.7;
-          out.push({ model: p.model, scale: p.s, color: col, emissive: Math.max(p.em || 0, k * 0.55), shape: p.shape, mat: p.m });
+          out.push({ model: p.model, scale: p.s, color: col, emissive: Math.max(p.em || 0, k * 0.55), shape: p.shape, mat: p.m, tex: p.em ? 0 : GUN_TEX, edges: 0 });
           continue;
         }
       }
-      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape, mat: p.m });
+      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape, mat: p.m, tex: p.em ? 0 : GUN_TEX, edges: 0 });
     }
     if (shellVisible) {
       const s = [0.024, 0.024, 0.06];
@@ -806,11 +807,19 @@ export class Weapon {
     const pool = this.handPool || (this.handPool = []);
     let pi = 0;
     const pm = () => pool[pi] || (pool[pi] = mat4());
-    const put = (F, c, r, sc, col, shape = 0.006, mat) => {
+    const put = (F, c, r, sc0, col, shape = 0.006, mat) => {
+      // finger and thumb segments: fully rounded, and a bit longer so each joint overlaps the next (no gaps)
+      let sc = sc0;
+      const mn = Math.min(...sc0), mx = Math.max(...sc0);
+      if (typeof shape === 'number' && mn >= 0.012 && mx <= 0.042) {
+        const i = sc0.indexOf(mx);
+        sc = sc0.map((v, k) => (k === i ? v * 1.32 : v * 1.06));
+        shape = Math.min(...sc) * 0.48;
+      } else if (typeof shape === 'number' && mn >= 0.018) shape = Math.max(shape, mn * 0.42);   // palms: soft
       compose(this.tmp, c, r, sc);
       const m = pm(); pi++;
       mul(m, F, this.tmp);
-      out.push({ model: m, scale: sc, color: col, emissive: 0, shape, mat });
+      out.push({ model: m, scale: sc, color: col, emissive: 0, shape, mat, edges: 0 });
     };
     const G = L.glove, Gd = L.gloveDark, bare = L.bare;
     const nail = (F, c, r) => { if (bare) put(F, c, r, [0.012, 0.004, 0.01], L.nail, 0.002); };
@@ -883,8 +892,9 @@ export class Weapon {
     }
 
     // forearms: tapered sleeves from wrist to elbow, glove cuff, rolled sleeve cuff (and a watch on the left wrist)
-    const lv = [LF[12], LF[13], LF[14]];
-    const rv = transformPoint(this.root, right);
+    const xf = (M, v) => [0, 1, 2].map((i) => M[i] * v[0] + M[4 + i] * v[1] + M[8 + i] * v[2] + M[12 + i]);
+    const lv = flat > 0.5 ? xf(LF, [0, 0.0, 0.045]) : xf(LF, [-0.036, 0.012, 0.036]);   // heel of each hand
+    const rv = xf(RF, [0.02, -0.03, 0.036]);
     let lShoulder = lerp3([-0.32, -0.62, 0.0], [-0.24, -0.55, 0.05], a);
     if (plant && plant.t > 0.001) lShoulder = lerp3(lShoulder, [-0.36, -0.68, -0.28], plant.t); // reach the arm out, away from the lens
     const rShoulder = lerp3([0.34, -0.5, 0.12], [0.16, -0.46, 0.18], a);
@@ -893,9 +903,10 @@ export class Weapon {
       const d0 = [sh[0] - hand[0], sh[1] - hand[1], sh[2] - hand[2]];
       const l0 = Math.hypot(...d0);
       const u = d0.map((v) => v / l0);
-      const h = hand.map((v, k) => v + u[k] * 0.05);           // wrist
-      const len = Math.max(0.05, l0 - 0.05);
+      const h = hand.map((v, k) => v + u[k] * 0.034);          // wrist
+      const len = Math.max(0.05, l0 - 0.034);
       const ang = anglesFor(u);
+      put(I, hand.map((v, k) => v + u[k] * 0.012), ang, [0.056, 0.056, 0.06], L.glove, { cap: [0.025, 0.028] }, 'cloth');   // wrist
       const rw = 0.029, re = isLeft && plant ? lerp(0.042, 0.036, plant.t) : 0.042;
       // the sleeve, wrist end narrow (the capsule's back end points at the wrist)
       const capS = [re * 2, re * 2, len];
@@ -982,7 +993,7 @@ export class Weapon {
       compose(local, p.c, [p.rx || 0, p.ry || 0, p.rz || 0], p.s);
       const m = mat4();
       mul(m, matrix, local);
-      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: partShape(p), mat: p.m };
+      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: partShape(p), mat: p.m, tex: p.em ? 0 : GUN_TEX, edges: 0 };
     });
   }
 }

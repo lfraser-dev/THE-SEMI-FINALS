@@ -36,7 +36,7 @@ const MOUNT = {
   // the bespoke guns
   burst: { railY: 0.07, railZ: 0.0, sight: ['sightL', 'sightR', 'sightTop', 'dot'], muzzle: ['muzzle'], stock: ['stock'],
     under: { y: -0.024, z: -0.28 }, laser: [0.042, -0.006, -0.32] },
-  dmr: { railY: 0.064, railZ: 0.0, sight: ['frontPost', 'frontEarL', 'frontEarR', 'rearAp', 'rearHole'], muzzle: ['muzzle', 'lug'], stock: ['stock'],
+  dmr: { railY: 0.064, railZ: 0.0, sight: ['frontPost', 'frontEarL', 'frontEarR', 'rearAp', 'rearHole'], muzzle: ['muzzle', 'lug'], stock: ['stock'], shiftAlso: ['frontPost', 'frontEarL', 'frontEarR', 'frontBase'],
     under: { y: -0.034, z: -0.3 }, laser: [0.036, 0.0, -0.32] },
   bullpup: { railY: 0.07, railZ: -0.02, sight: ['scope', 'scopeBase', 'scopeBell', 'scopeLens', 'scopeDot'], muzzle: ['muzzle'], stock: [],
     under: { y: -0.042, z: -0.25, hide: ['fgrip'] }, laser: [0.04, 0.0, -0.22] },
@@ -49,7 +49,7 @@ const MOUNT = {
   autoshotgun: { railY: 0.12, railZ: -0.02, rail: true, sight: ['rear', 'frontPost'], muzzle: ['brake'], stock: ['stock'],
     laser: [0.046, -0.02, -0.26] },
   double: { railY: 0.05, railZ: 0.03, rail: true, sight: [], muzzle: [], stock: ['stock'], laser: [0.034, -0.012, -0.22] },
-  lever: { railY: 0.06, railZ: -0.05, rail: true, sight: ['rearSight', 'rearNotch'], muzzle: [], stock: ['stock'],
+  lever: { railY: 0.06, railZ: -0.05, rail: true, sight: ['rearSight', 'rearNotch'], muzzle: [], stock: ['stock'], shiftAlso: ['front', 'band'],
     under: { y: -0.016, z: -0.3 }, laser: [0.03, -0.004, -0.26] },
   minigun: { railY: 0.124, railZ: -0.08, rail: true, sight: [], muzzle: [], stock: [], laser: [0.07, 0.03, -0.24] },
 };
@@ -217,6 +217,37 @@ export function anchorsFor(def) {
   return out;
 }
 
+// ---------------------------------------------------------------- surfaces
+// Attachments sit on the gun's real surfaces (not fixed heights), so nothing floats.
+function bounds(p) {
+  const h = [p.s[0] / 2, p.s[1] / 2, p.s[2] / 2], rx = p.rx || 0, ry = p.ry || 0, rz = p.rz || 0;
+  const lo = [1e9, 1e9, 1e9], hi = [-1e9, -1e9, -1e9];
+  for (const a of [-1, 1]) for (const b of [-1, 1]) for (const c of [-1, 1]) {
+    let x = a * h[0], y = b * h[1], z = c * h[2], t;
+    t = y * Math.cos(rx) - z * Math.sin(rx); z = y * Math.sin(rx) + z * Math.cos(rx); y = t;
+    t = x * Math.cos(ry) + z * Math.sin(ry); z = -x * Math.sin(ry) + z * Math.cos(ry); x = t;
+    t = x * Math.cos(rz) - y * Math.sin(rz); y = x * Math.sin(rz) + y * Math.cos(rz); x = t;
+    const q = [x + p.c[0], y + p.c[1], z + p.c[2]];
+    for (let i = 0; i < 3; i++) { lo[i] = Math.min(lo[i], q[i]); hi[i] = Math.max(hi[i], q[i]); }
+  }
+  return { lo, hi };
+}
+const RETICLE = /^(dot|hoDot|rdDot|rxChev|rxGlass|kbDot|kbDotV|prChev|prStadia|scopeDot|hoRing|sightGlassL|sightBtn)$/;
+function surfaces(def) {
+  const solid = () => def.parts.filter((p) => !p.hidden && !p.mag && !p.em && !RETICLE.test(p.name)).map((p) => ({ p, b: bounds(p) }));
+  const over = (b, i, a0, a1) => b.lo[i] <= a1 && b.hi[i] >= a0;
+  return {
+    // highest point of the gun over a z window, near the centreline
+    top(z0, z1, xr = 0.02) { let y = -1; for (const { b } of solid()) if (over(b, 2, z0, z1) && over(b, 0, -xr, xr)) y = Math.max(y, b.hi[1]); return y < -0.5 ? null : y; },
+    // lowest point under a z window, near the centreline (but not below the y limit, e.g. the mag)
+    bottom(z0, z1, xr = 0.02, yMin = -0.07) { let y = 1; for (const { b } of solid()) if (over(b, 2, z0, z1) && over(b, 0, -xr, xr) && b.lo[1] > yMin) y = Math.min(y, b.lo[1]); return y > 0.5 ? null : y; },
+    // outermost point on the right-hand side at a height / z window
+    side(y0, y1, z0, z1) { let x = -1; for (const { b } of solid()) if (over(b, 2, z0, z1) && over(b, 1, y0, y1) && b.hi[0] > 0) x = Math.max(x, b.hi[0]); return x < 0 ? null : x; },
+    // the back of the receiver (ignoring the stock), at a height window
+    rear(y0, y1, skip) { let z = -1; for (const { p, b } of solid()) if (!skip(p) && over(b, 1, y0, y1) && over(b, 0, -0.014, 0.014)) z = Math.max(z, b.hi[2]); return z < -0.5 ? null : z; },
+  };
+}
+
 // ---------------------------------------------------------------- build
 export function buildDef(base, loadout = {}) {
   const id = base.id, style = styleOf(id), m = MOUNT[id] || MOUNT[style];
@@ -300,13 +331,17 @@ export function buildDef(base, loadout = {}) {
   if (optA) {
     hide(m.sight);
     hideGrp('sight');
-    const o = optA.optic, ry = m.railY, rz = m.railZ;
+    const o = optA.optic, rz = m.railZ;
+    // sit on whatever's really on top of the gun at the mount point (a rail, a carry handle, the receiver)
+    const sf = surfaces(def);
+    const top = sf.top(rz - 0.04, rz + 0.04) ?? m.railY;
+    let ry = top;
     const h = ry + o.h;
     def.sightY = h;
     def.adsZoom = o.zoom;
     def.scope = !!o.scope;
     if (o.eye) def.adsZ = -o.eye;
-    if (m.rail) add(P('rail', [0, ry - 0.005, rz], [0.03, 0.01, 0.14], BLACK));
+    if (m.rail) { add(P('rail', [0, top + 0.005, rz], [0.03, 0.01, 0.14], BLACK, { m: 'metal' })); ry = top + 0.01; }
     if (o.kind === 'mini') {
       add(P('rdBase', [0, ry + 0.004, rz], [0.03, 0.008, 0.045], BLACK),
         P('rdL', [-0.014, h, rz + 0.01], [0.004, 0.024, 0.006], BLACK),
@@ -315,8 +350,8 @@ export function buildDef(base, loadout = {}) {
         P('rdDot', [0, h, rz + 0.012], [0.003, 0.003, 0.001], RED, { em: 1 }));
     } else if (o.kind === 'holo') {
       add(P('hoBase', [0, ry + 0.006, rz], [0.044, 0.012, 0.08], BLACK),
-        P('hoL', [-0.023, h + 0.004, rz - 0.01], [0.005, 0.042, 0.055], DARK),
-        P('hoR', [0.023, h + 0.004, rz - 0.01], [0.005, 0.042, 0.055], DARK),
+        P('hoL', [-0.023, (ry + 0.01 + h + 0.028) / 2, rz - 0.01], [0.005, h + 0.018 - ry, 0.055], DARK),
+        P('hoR', [0.023, (ry + 0.01 + h + 0.028) / 2, rz - 0.01], [0.005, h + 0.018 - ry, 0.055], DARK),
         P('hoTop', [0, h + 0.025, rz - 0.01], [0.051, 0.006, 0.055], DARK),
         P('hoDot', [0, h, rz - 0.02], [0.0025, 0.0025, 0.001], RED, { em: 1 }));
       for (const [dx, dy, sx, sy] of [[0, 0.009, 0.007, 0.0016], [0, -0.009, 0.007, 0.0016], [0.009, 0, 0.0016, 0.007], [-0.009, 0, 0.0016, 0.007]]) {
@@ -333,8 +368,7 @@ export function buildDef(base, loadout = {}) {
         P('rxGlass', [0.0, h, rz - 0.016], [0.002, 0.04, 0.001], [0.4, 0.8, 0.6], { em: 0.15 }));
     } else if (o.kind === 'kobra') {
       // side-rail dovetail mount with a tall rectangular window
-      add(P('kbMount', [0.03, ry - 0.01, rz + 0.01], [0.012, 0.03, 0.08], BLACK, { m: 'metal' }),
-        P('kbArm', [0.018, ry + 0.014, rz + 0.01], [0.03, 0.012, 0.06], BLACK, { m: 'metal' }),
+      add(P('kbArm', [0, ry + 0.006, rz], [0.05, 0.012, 0.07], BLACK, { m: 'metal' }),
         P('kbL', [-0.022, h, rz - 0.01], [0.006, 0.05, 0.03], DARK, { m: 'metal' }),
         P('kbR', [0.022, h, rz - 0.01], [0.006, 0.05, 0.03], DARK, { m: 'metal' }),
         P('kbTop', [0, h + 0.026, rz - 0.01], [0.05, 0.006, 0.03], DARK, { m: 'metal' }),
@@ -348,7 +382,7 @@ export function buildDef(base, loadout = {}) {
         P('prR', [hw + 0.003, h, rz], [0.006, hh * 2 + 0.006, L], DARK, { m: 'metal' }),
         P('prTop', [0, h + hh + 0.003, rz], [hw * 2 + 0.012, 0.006, L], DARK, { m: 'metal' }),
         P('prBot', [0, h - hh - 0.003, rz], [hw * 2 + 0.012, 0.006, L * 0.6], DARK, { m: 'metal' }),
-        P('prBlock', [0, (ry + h - hh) / 2 + 0.003, rz + 0.01], [0.03, Math.max(0.004, h - hh - ry - 0.004), 0.04], BLACK, { m: 'metal' }),
+        P('prBlock', [0, (ry + h - hh) / 2, rz + 0.01], [0.03, Math.max(0.004, h - hh - ry), 0.04], BLACK, { m: 'metal' }),
         P('prKnob', [hw + 0.01, h, rz + 0.01], [0.014, 0.014, 0.01], BLACK, { m: 'steel', shape: 'cyl', ry: H }),
         P('prRimF', [0, h + hh + 0.004, rz - L / 2], [hw * 2 + 0.016, 0.008, 0.008], BLACK, { m: 'rubber' }),
         P('prChev', [0, h - 0.002, rz - 0.02], [0.004, 0.004, 0.001], RED, { em: 1 }));
@@ -359,8 +393,8 @@ export function buildDef(base, loadout = {}) {
         P('scEye', [0, h, rz + L / 2], [d + 0.008, d + 0.008, 0.04], BLACK, { shape: 'cyl', m: 'rubber' }),
         P('scTurret', [0, h + d / 2 + 0.006, rz], [0.022, 0.016, 0.022], DARK, { shape: 'cyl', rx: H }),
         P('scTurretS', [d / 2 + 0.006, h, rz], [0.016, 0.022, 0.022], DARK, { shape: 'cyl', ry: H }),
-        P('scRing1', [0, (ry + h) / 2, rz - L * 0.25], [0.03, h - ry, 0.02], DARK),
-        P('scRing2', [0, (ry + h) / 2, rz + L * 0.25], [0.03, h - ry, 0.02], DARK),
+        P('scRing1', [0, (ry + h) / 2, rz - Math.min(L * 0.25, 0.045)], [0.03, h - ry, 0.02], DARK),
+        P('scRing2', [0, (ry + h) / 2, rz + Math.min(L * 0.25, 0.045)], [0.03, h - ry, 0.02], DARK),
         P('scLens', [0, h, rz - L / 2 - 0.046], [bell - 0.006, bell - 0.006, 0.002], LENS, { em: 0.6, shape: 'cyl' }));
       if (loadout.optic === 'acog3x') add(P('fibre', [0, h + d / 2 + 0.004, rz - 0.01], [0.006, 0.006, 0.07], [0.3, 1, 0.3], { em: 0.8 }));
       if (L > 0.3) add(P('scParallax', [-d / 2 - 0.006, h, rz - 0.02], [0.014, 0.02, 0.02], DARK, { shape: 'cyl', ry: H }));
@@ -370,9 +404,11 @@ export function buildDef(base, loadout = {}) {
   // ---- underbarrel ----
   const ubA = A('underbarrel');
   if (ubA && m.under) {
-    const u = m.under;
-    if (u.hide) hide(u.hide);
+    const u0 = m.under;
+    if (u0.hide) hide(u0.hide);
     hideGrp('under');
+    const under = surfaces(def).bottom(u0.z - 0.012, u0.z + 0.012, 0.012, -0.09);
+    const u = { ...u0, y: under ?? u0.y };
     const g = ubA.grip;
     if (g === 'v' || g === 'e') {
       add(P('vgrip', [0, u.y - 0.043, u.z], [0.03, 0.086, 0.032], BLACK, { m: 'rubber' }));
@@ -385,11 +421,11 @@ export function buildDef(base, loadout = {}) {
       add(P('agrip', [0, u.y - 0.016, u.z + 0.02], [0.034, 0.026, 0.09], BLACK, { rx: 0.45 }));
       def.foreGrip = [0, u.y - 0.03, u.z + 0.03];
     } else if (g === 'h') {
-      add(P('handstop', [0, u.y - 0.012, u.z - 0.04], [0.026, 0.024, 0.02], BLACK, { rx: -0.3 }));
+      add(P('handstop', [0, u.y - 0.011, u.z], [0.026, 0.024, 0.02], BLACK, { rx: -0.3 }));
       def.foreGrip = [0, u.y - 0.02, u.z + 0.02];
     } else if (g === 'b') {
-      add(P('bipodBase', [0, u.y - 0.01, u.z - 0.08], [0.036, 0.02, 0.03], BLACK, { m: 'metal' }));
-      for (const sx of [-1, 1]) add(P('bipodLeg', [sx * 0.012, u.y - 0.016, u.z + 0.02], [0.01, 0.01, 0.2], DARK, { m: 'metal', ry: sx * 0.05 }));
+      add(P('bipodBase', [0, u.y - 0.009, u.z], [0.036, 0.02, 0.03], BLACK, { m: 'metal' }));
+      for (const sx of [-1, 1]) add(P('bipodLeg', [sx * 0.012, u.y - 0.02, u.z + 0.09], [0.01, 0.01, 0.2], DARK, { m: 'metal', ry: sx * 0.05 }));
       def.foreGrip = [0, u.y - 0.03, u.z];
     }
   }
@@ -397,7 +433,10 @@ export function buildDef(base, loadout = {}) {
   // ---- side rail ----
   const sideA = A('side');
   if (sideA) {
-    const lp = m.laser, sd = sideA.side;
+    const sd = sideA.side, l0 = m.laser;
+    const sx = surfaces(def).side(l0[1] - 0.012, l0[1] + 0.012, l0[2] - 0.035, l0[2] + 0.035);
+    const half = sd.light && !sd.laser ? 0.015 : sd.light ? 0.015 : 0.013;
+    const lp = [sx != null ? sx + half - 0.001 : l0[0], l0[1], l0[2]];
     if (sd.laser && sd.light) {
       add(P('comboBox', lp, [0.03, 0.03, 0.08], DARK, { m: 'metal' }),
         P('comboLens', [lp[0], lp[1] + 0.006, lp[2] - 0.041], [0.016, 0.016, 0.002], [1, 1, 0.9], { em: 1, shape: 'cyl' }),
@@ -406,9 +445,9 @@ export function buildDef(base, loadout = {}) {
       add(P('laserBox', lp, [0.026, 0.026, 0.07], DARK),
         P('laserLens', [lp[0], lp[1], lp[2] - 0.036], [0.01, 0.01, 0.002], sd.laser, { em: 1 }));
     } else if (sd.light) {
-      add(P('torch', [lp[0] + 0.004, lp[1], lp[2]], [0.03, 0.03, 0.09], BLACK, { shape: 'cyl', m: 'metal' }),
-        P('torchHead', [lp[0] + 0.004, lp[1], lp[2] - 0.05], [0.038, 0.038, 0.02], BLACK, { shape: 'cyl', m: 'metal' }),
-        P('torchLens', [lp[0] + 0.004, lp[1], lp[2] - 0.061], [0.032, 0.032, 0.002], [1, 1, 0.92], { em: 1, shape: 'cyl' }));
+      add(P('torch', [lp[0], lp[1], lp[2]], [0.03, 0.03, 0.09], BLACK, { shape: 'cyl', m: 'metal' }),
+        P('torchHead', [lp[0], lp[1], lp[2] - 0.05], [0.038, 0.038, 0.02], BLACK, { shape: 'cyl', m: 'metal' }),
+        P('torchLens', [lp[0], lp[1], lp[2] - 0.061], [0.032, 0.032, 0.002], [1, 1, 0.92], { em: 1, shape: 'cyl' }));
     }
     if (sd.laser) { def.laser = [lp[0], lp[1] - (sd.light ? 0.009 : 0), lp[2] - 0.04]; def.laserCol = sd.laser; }
   }
@@ -430,8 +469,10 @@ export function buildDef(base, loadout = {}) {
     }
   } else if (mg === 'drum' && mag) {
     def.mag = Math.round(base.mag * 2.2);
+    const top = mag.c[1] + mag.s[1] / 2;
     mag.s = [0.1, 0.13, 0.12];
-    mag.c[1] -= 0.035; def.magPos[1] -= 0.035;
+    const ny = top - 0.065 + 0.012;
+    def.magPos[1] += ny - mag.c[1]; mag.c[1] = ny;
     mag.rx = 0;
     mag.col = DARK;
   } else if (mg === 'lightmag') {
@@ -458,25 +499,36 @@ export function buildDef(base, loadout = {}) {
   const st = sid('stock');
   if (st) hideGrp('stock');
   const s0 = part(m.stock[0]);
-  if (st === 'nostock') {
-    hide(m.stock);
-    if (s0) add(P('endcap', [0, s0.c[1] + 0.01, s0.c[2] - s0.s[2] / 2 + 0.01], [0.035, 0.05, 0.02], BLACK));
-  } else if (st && s0) {
-    if (st === 'lightstock') {
+  if (st && s0) {
+    const front = s0.c[2] - s0.s[2] / 2, top0 = s0.c[1] + s0.s[1] / 2;
+    if (st === 'nostock') {
+      hide(m.stock);
+    } else if (st === 'lightstock') {
+      // skeleton stock: a thin top bar + butt plate
       s0.s = [s0.s[0] * 0.5, s0.s[1] * 0.28, s0.s[2]];
-      s0.c[1] += 0.02;
-      add(P('stockPlate', [0, s0.c[1] - 0.03, s0.c[2] + s0.s[2] / 2 - 0.01], [0.04, 0.08, 0.02], BLACK));
+      s0.c[1] = top0 - s0.s[1] / 2;
+      add(P('stockPlate', [0, top0 - 0.04, s0.c[2] + s0.s[2] / 2 - 0.01], [0.04, 0.08, 0.02], BLACK, { m: 'rubber' }));
     } else if (st === 'heavystock') {
       s0.s = [s0.s[0] * 1.15, s0.s[1] * 1.18, s0.s[2] * 1.12];
-      s0.c[2] += s0.s[2] * 0.05;
-      add(P('stockPad', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.01], [s0.s[0] + 0.004, s0.s[1] + 0.004, 0.02], TAN));
+      s0.c[2] = front + s0.s[2] / 2;
+      add(P('stockPad', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.009], [s0.s[0] + 0.004, s0.s[1] + 0.004, 0.02], TAN, { m: 'rubber' }));
     } else if (st === 'paddedstock') {
-      add(P('recoilPad', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.02], [s0.s[0] + 0.01, s0.s[1] + 0.012, 0.04], [0.15, 0.15, 0.16], { m: 'rubber' }));
+      add(P('recoilPad', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.019], [s0.s[0] + 0.01, s0.s[1] + 0.012, 0.04], [0.15, 0.15, 0.16], { m: 'rubber' }));
     } else if (st === 'foldstock') {
       hide(m.stock);
-      const y = s0.c[1], z0 = s0.c[2] - s0.s[2] / 2;
-      for (const yy of [y + 0.025, y - 0.025]) add(P('foldBar', [0, yy, z0 + s0.s[2] / 2], [0.01, 0.01, s0.s[2]], DARK, { m: 'metal' }));
-      add(P('foldPlate', [0, y, z0 + s0.s[2]], [0.03, 0.08, 0.012], BLACK, { m: 'rubber' }));
+      const y = s0.c[1];
+      for (const yy of [y + 0.025, y - 0.025]) add(P('foldBar', [0, yy, front + s0.s[2] / 2], [0.01, 0.01, s0.s[2]], DARK, { m: 'metal' }));
+      add(P('foldPlate', [0, y, front + s0.s[2]], [0.03, 0.08, 0.012], BLACK, { m: 'rubber' }));
+    }
+    // bridge from the back of the receiver to the new stock (the old buffer tube may have gone with the factory stock)
+    const skip = (p) => m.stock.includes(p.name) || p.grp === 'stock' || /^(stock|fold|recoilPad|stockPad|stockPlate)/.test(p.name);
+    const yy = s0.c[1] + 0.005;
+    const rear = surfaces(def).rear(yy - 0.016, yy + 0.016, skip);
+    if (st === 'nostock') {
+      const z = rear ?? front;
+      add(P('endcap', [0, yy, z + 0.009], [0.035, 0.04, 0.02], BLACK, { m: 'metal' }));
+    } else if (rear != null && front > rear + 0.001) {
+      add(P('stockLink', [0, yy, (rear + front) / 2], [0.03, 0.034, front - rear + 0.006], DARK, { m: 'metal', shape: 'cyl' }));
     }
   }
 
