@@ -224,12 +224,21 @@ function buildArena(world, A) {
 
   // ---- obstacles (layout units are scaled by S across the floor; heights stay the same)
   const plats = [], chains = [];
+  A.dwalls = [];
   const surf = (color) => (A.round ? { grid: false, tex: 3 } : { grid: color !== CHAR });
   const place = (list, mirror) => {
     const flip = (x, z) => (mirror ? [-x * S, -z * S] : [x * S, z * S]);
     for (const [x0, z0, sx0, sy, sz0, color, round, y = 0] of list.b || []) {
       const [x, z] = flip(x0, z0);
       const k = round === 'cylY' ? 1 : S;          // columns stay round
+      // walls (thin, long, standing on the floor) are destructible: built later out of chunks
+      const sx = sx0 * k, sz = sz0 * k, thin = Math.min(sx0, sz0), long = Math.max(sx, sz);
+      if (!round && y === 0 && thin <= 0.8 && long >= 2.4 && sy >= 1) {
+        const axis = sx >= sz ? 0 : 2, cols = Math.max(2, Math.round(long / 0.5)), rows = Math.max(2, Math.round(sy / 0.5));
+        const origin = [O[0] + x - sx / 2, O[1], O[2] + z - sz / 2];
+        A.dwalls.push({ origin, cols, rows, chunk: long / cols, ch: sy / rows, thick: axis === 0 ? sz : sx, axis, color: color || (A.round ? STONE2 : WALL), hp: 45, tex: A.round ? 3 : 0 });
+        continue;
+      }
       at(x, y, z, sx0 * k, sy, sz0 * k, { color: color || WALL, shape: round || undefined, ...surf(color), edges: !round });
     }
     for (const [x0, z0, sx0, sz0, h] of list.p || []) {

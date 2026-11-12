@@ -89,6 +89,8 @@ const heavy = new Heavy(world, effects, sounds, gadgets, {
     banner('TETHERED', 'YOU ARE TIED DOWN', 'bad', 1.2);
   },
   flash: (pos) => flashAt(pos),
+  blast: (pos, r, dmg) => blastWalls(pos, r, dmg),
+  worldHit: (hit, dir, dmg) => { if (hit.box.tag === 'chunk' && hit.box.ref.hp) chunkHit(hit.box, dir, dmg, false); },
   shake: (pos, r) => {
     const d = Math.hypot(player.pos[0] - pos[0], player.pos[1] - pos[1], player.pos[2] - pos[2]);
     if (d < r * 5) { player.shake = Math.max(player.shake || 0, 0.6 * (1 - d / (r * 5))); player.camPitchV += 0.6 * (1 - d / (r * 5)); }
@@ -128,6 +130,28 @@ for (const a of ARENAS) a.build(world);    // the semi-finals arenas, far away (
 let stadium = ARENAS[0];                   // the arena the current match is in
 const dummies = [...map.dummies].map((d) => new Dummy(world, effects, d.pos, d.move));
 const walls = [...map.walls].map((w) => new DestructibleWall(world, effects, w.origin, w));
+// the arenas' walls are destructible too (chunks with health); their index in `walls` is the same on every machine,
+// so online we can say "wall 23, chunk 4,7 took 22"
+for (const a of ARENAS) for (const w of a.dwalls || []) walls.push(new DestructibleWall(world, effects, w.origin, w));
+walls.forEach((w, i) => { w.idx = i; });
+let chunkOut = [], chunkSendT = 0;          // my chunk hits waiting to go out to everyone else
+function chunkHit(box, dir, dmg, send = true) {
+  const w = box.ref, [r, k] = box.cell;
+  const n = w.hp ? w.hitCell(r, k, dmg, dir) : w.hit(box, dir);
+  if (send && w.hp && online.active) chunkOut.push([w.idx, r, k, Math.round(dmg)]);
+  return n;
+}
+function blastWalls(pos, r, dmg) {
+  let n = 0;
+  for (const w of walls) {
+    if (!w.hp) continue;
+    const o = w.origin, ex = w.axis === 0 ? [w.cols * w.chunk, w.thick] : [w.thick, w.cols * w.chunk];
+    if (pos[0] < o[0] - r || pos[0] > o[0] + ex[0] + r || pos[2] < o[2] - r || pos[2] > o[2] + ex[1] + r) continue;
+    n += w.blast(pos, r, dmg);
+  }
+  if (n) sounds.crumble();
+  return n;
+}
 // attachments: one saved loadout per weapon
 const classLo = loadLoadout();
 let loadouts = {};
@@ -337,8 +361,11 @@ function fire(w) {
       effects.impact(hit.point, hit.normal, [1, 0.8, 0.45]);
       if (i === 0) sounds.barricadeHit();
     } else if (b.tag === 'chunk') {
-      stats.chunks += b.ref.hit(b, dir);
-      if (i === 0) sounds.crumble();
+      const fall = 1 - 0.45 * clamp((hit.t - d.range) / (d.range * 1.2), 0, 1);
+      const n = chunkHit(b, dir, d.dmg * fall);
+      stats.chunks += n;
+      effects.impact(hit.point, hit.normal, b.color);
+      if (i === 0 && n) sounds.crumble();
     } else {
       effects.impact(hit.point, hit.normal, b.color);
       effects.decal(hit.point, hit.normal);
@@ -483,7 +510,7 @@ function slamShockwave(h) {
       if (!b) continue;
       const dx = b.center[0] - p[0], dy = b.center[1] - p[1], dz = b.center[2] - p[2];
       const dist = Math.hypot(dx, dy * 1.4, dz);
-      if (dist < R * 0.75) stats.chunks += w.hit(b, norm([dx, 0.4, dz]));
+      if (dist < R * 0.75) stats.chunks += w.hp ? chunkHit(b, norm([dx, 0.4, dz]), 90 * h.power) : w.hit(b, norm([dx, 0.4, dz]));
     }
   }
   // the shockwave blows out nearby windows
@@ -573,6 +600,7 @@ const botHooks = {
   impact: (hit, u) => {
     if (hit.box.tag === 'glass') { breakGlass(hit.box, u || [0, 0, 0]); return; }
     if (hit.box.tag === 'barricade') { gadgets.damage(hit.box.ref, 16); effects.impact(hit.point, hit.normal, [1, 0.8, 0.45]); return; }
+    if (hit.box.tag === 'chunk' && hit.box.ref.hp) { chunkHit(hit.box, u || [0, 0, 0], 14, false); effects.impact(hit.point, hit.normal, hit.box.color); return; }
     effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal);
   },
   onBotKill: (killer, victim) => { killFeed(killer.name, 'RIFLE', victim.name, false); },
@@ -1451,6 +1479,7 @@ const netHooks = {
   grapplePoint: () => (player.grapple && player.grapple.phase !== 'miss' ? player.grapple.point.map((v) => +v.toFixed(2)) : null),
   remoteGadget: (spec) => gadgets.place(spec),
   remoteHeavy: (m) => heavy.remote(m),
+  remoteChunks: (h) => { for (const [w, r, k, d] of h) { const wall = walls[w]; if (wall?.hp) wall.hitCell(r, k, d); } },
   remoteGadgetHit: (gid, dmg) => gadgets.damage(gadgets.byId(gid), dmg),
   get stadium() { return stadium; },
   // hooks for the bots I run when I'm hosting: the usual bot hooks, but their shots are seen by everyone, kills are
@@ -1478,6 +1507,8 @@ function startOnline(info) {
   batches.world = null;
   gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
+  walls.forEach((w) => w.reset());
+  chunkOut = [];
   const sp = stadium.spawns[info.team];
   player.spawn(sp.pos, sp.yaw);
   Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5, lastHitBy: null });
@@ -2298,6 +2329,7 @@ function frameBody(now) {
     document.body.classList.toggle('cloaked', cloakT > 0);
     if (tdm.you) tdm.you.cloaked = cloakT > 0;
     heavyCd = Math.max(0, heavyCd - dt);
+    if (chunkOut.length && (chunkSendT -= dt) <= 0) { chunkSendT = 0.1; if (online.active) online.send({ t: 'chk', id: online.myId, h: chunkOut }); chunkOut = []; }
     if (throwCharges < 2 && (throwT += dt) >= THROW_RECHARGE) { throwCharges++; throwT = 0; }
     flashT = Math.max(0, flashT - dt);
     $('flashfx').style.opacity = Math.min(1, flashT * 0.9).toFixed(3);

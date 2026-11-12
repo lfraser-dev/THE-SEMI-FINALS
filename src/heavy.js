@@ -127,9 +127,10 @@ export class Heavy {
     for (let k = 0; k < 8; k++) fx.spawnPiece(pos, [0.05, 0.05, 0.05], [(Math.random() - 0.5) * 14, Math.random() * 9, (Math.random() - 0.5) * 14], [0.15, 0.15, 0.16], 1.2);
     this.sounds.boom?.(big);
     this.hooks.shake?.(pos, r);
+    this.hooks.blast?.(pos, r * 0.9, dmg * 1.5);          // every machine blows the same holes in the walls
     if (kind === 'fire') this.fires.push({ pos: [...pos], r: HEAVY_STATS.gl_fire.r, t: HEAVY_STATS.gl_fire.fire, tick: 0, mine, name });
     if (!mine) return;
-    if (mine === true) this.hooks.send?.({ t: 'boom', p: pos.map((v) => +v.toFixed(2)), r, k: kind });
+    if (mine === true) this.hooks.send?.({ t: 'boom', p: pos.map((v) => +v.toFixed(2)), r, k: kind, dm: dmg });
     const from = [pos[0], pos[1] + 0.3, pos[2]];
     for (const tg of this.hooks.targets(mine)) {
       const d = dist(pos, tg.chest);
@@ -446,7 +447,7 @@ export class Heavy {
       } else if (tgt && tgt.ref.isPlayer && (!hit || hit.t > dist(muzzle, tgt.chest) - 0.3) && segDist(muzzle, dir.map((v) => v * dist(muzzle, tgt.chest)), tgt.chest) < 0.5) {
         // the player isn't a world box: a shot that passes through them hits them
         this.hooks.hit(tgt.ref, s.dmg, tgt.chest, dir, s.name, side);
-      } else if (hit && hit.box.tag !== 'bot') this.effects.impact(hit.point, hit.normal, hit.box.color || [0.8, 0.8, 0.8]);
+      } else if (hit && hit.box.tag !== 'bot') { this.effects.impact(hit.point, hit.normal, hit.box.color || [0.8, 0.8, 0.8]); this.hooks.worldHit?.(hit, dir, s.dmg); }
       this.shotFx(g, muzzle, end, s);
       if (side === true) this.hooks.send?.({ t: 'tsh', gid: g.gid, to: end.map((v) => +v.toFixed(2)) });
     }
@@ -473,7 +474,7 @@ export class Heavy {
   // ---------------------------------------------------------------- online: someone else's stuff
   remote(m) {
     if (m.t === 'gl') this.launch(m.k, m.p, m.v, false);
-    else if (m.t === 'boom') this.boom(m.p, m.r, 0, '', false, m.k);
+    else if (m.t === 'boom') this.boom(m.p, m.r, m.dm || 0, '', false, m.k);
     else if (m.t === 'trap') this.setTrap(m.p, m.n, false, m.tid);
     else if (m.t === 'gdel') { const g = this.gadgets.byId(m.gid); if (g) this.gadgets.remove(g, false); }
     else if (m.t === 'trapgone') this.traps = this.traps.filter((t) => t.id !== m.tid);

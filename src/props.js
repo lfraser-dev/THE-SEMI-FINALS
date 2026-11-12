@@ -122,11 +122,13 @@ export class Dummy {
 }
 
 // A wall made of small chunks. Shoot chunks out; anything no longer connected
-// to the ground collapses.
+// to the ground collapses. With `hp` (the arenas), each chunk soaks up that much damage before it breaks, so
+// bullets chip a wall away and explosions blow holes in it; without it (the test range) every hit breaks chunks.
 export class DestructibleWall {
-  // origin = min corner. Runs along +X (axis 0) or +Z (axis 2).
-  constructor(world, effects, origin, { cols = 12, rows = 6, chunk = 0.5, thick = 0.35, axis = 0, color = null } = {}) {
-    Object.assign(this, { world, effects, origin, cols, rows, chunk, thick, axis });
+  // origin = min corner. Runs along +X (axis 0) or +Z (axis 2). ch = chunk height (defaults to chunk).
+  constructor(world, effects, origin, { cols = 12, rows = 6, chunk = 0.5, ch = null, thick = 0.35, axis = 0, color = null, hp = 0, tex = 0 } = {}) {
+    Object.assign(this, { world, effects, origin, cols, rows, chunk, thick, axis, hp, tex });
+    this.ch = ch || chunk;
     this.color = color || [0.9, 0.9, 0.92];
     this.cells = [];
     this.build();
@@ -142,17 +144,19 @@ export class DestructibleWall {
         const min = [...o], max = [...o];
         const along = this.axis, across = this.axis === 0 ? 2 : 0;
         min[along] += k * c; max[along] += (k + 1) * c;
-        min[1] += r * c; max[1] += (r + 1) * c;
+        min[1] += r * this.ch; max[1] += (r + 1) * this.ch;
         max[across] += t;
-        const b = makeBox(min, max, { color: this.color, grid: false, tag: 'chunk', ref: this });
+        const b = makeBox(min, max, { color: this.color, grid: !this.tex, tex: this.tex, tag: 'chunk', ref: this });
         b.cell = [r, k];
+        b.hp = this.hp;
         row.push(this.world.add(b));
       }
       this.cells.push(row);
     }
   }
 
-  hit(box, dir) {
+  hit(box, dir, dmg) {
+    if (this.hp && dmg != null) return this.hitCell(box.cell[0], box.cell[1], dmg, dir);
     const [r, k] = box.cell;
     const remove = [[r, k]];
     for (const [dr, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (Math.random() < 0.3) remove.push([r + dr, k + dk]);
@@ -167,6 +171,38 @@ export class DestructibleWall {
     }
     count += this.collapse(dir);
     return count;
+  }
+
+  // a chunk with health takes a hit; returns how many chunks came down
+  hitCell(r, k, dmg, dir = [0, 0, 0]) {
+    const b = this.cells[r]?.[k];
+    if (!b) return 0;
+    b.hp -= dmg;
+    if (b.hp > 0) { if (Math.random() < 0.5) this.effects.dust(b.center, 1); return 0; }
+    this.cells[r][k] = null;
+    this.world.remove(b);
+    this.effects.shatter(b, dir, 2, 3);
+    return 1 + this.collapse(dir);
+  }
+
+  // an explosion: chunks close in are blown out, ones further away take damage
+  blast(pos, r, dmg) {
+    let n = 0;
+    for (let rr = 0; rr < this.rows; rr++) for (let k = 0; k < this.cols; k++) {
+      const b = this.cells[rr][k];
+      if (!b) continue;
+      const d = Math.hypot(b.center[0] - pos[0], b.center[1] - pos[1], b.center[2] - pos[2]);
+      if (d > r) continue;
+      const dir = [(b.center[0] - pos[0]) / (d || 1), 0.4, (b.center[2] - pos[2]) / (d || 1)];
+      b.hp -= d < r * 0.55 ? Infinity : dmg * (1 - d / r);
+      if (b.hp > 0) continue;
+      this.cells[rr][k] = null;
+      this.world.remove(b);
+      this.effects.shatter(b, dir, 2, 5);
+      n++;
+    }
+    if (n) n += this.collapse([0, 0, 0]);
+    return n;
   }
 
   // Flood-fill from the bottom row; drop everything not reached.

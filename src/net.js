@@ -531,6 +531,7 @@ export class Online {
       case 'gad': if (m.id !== this.myId && this.active) this.g?.remoteGadget?.(m.g); break;
       case 'gl': case 'boom': case 'drn': case 'tsh': case 'trap': case 'trapgone': case 'teth': case 'gdel': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
       case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
+      case 'chk': if (m.id !== this.myId && this.active) this.g?.remoteChunks?.(m.h); break;
       case 'hit':
         if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head);
         else if (this.isHost && this.active) {
