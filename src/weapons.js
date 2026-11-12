@@ -998,7 +998,7 @@ bespoke('gl', 'ar', {
   ...[-0.15, -0.25].map((z) => C('tubeRing', [0, 0.03, z], 0.074, 0.008, BLACK, { m: 'metal' })),
   P('ladder', [0, 0.075, -0.05], [0.03, 0.02, 0.02], BLACK, { m: 'metal' }),
   P('ladderPost', [0, 0.095, -0.05], [0.026, 0.02, 0.004], BLACK, { m: 'metal' }),
-  P('frontPost', [0, 0.085, -0.33], [0.006, 0.03, 0.006], RED, { em: 0.6 }),
+  P('frontPost', [0, 0.078, -0.33], [0.006, 0.026, 0.006], RED, { em: 0.6 }),
   P('grip', [0, -0.07, 0.08], [0.042, 0.1, 0.048], BLACK, { rx: -0.25, m: 'rubber' }),
   P('guard', [0, -0.04, 0.03], [0.016, 0.006, 0.07], BLACK),
   P('trigger', [0, -0.03, 0.03], [0.006, 0.024, 0.008], STEEL, { m: 'steel', rx: 0.3 }),
@@ -1006,6 +1006,37 @@ bespoke('gl', 'ar', {
   P('stock', [0, -0.01, 0.22], [0.04, 0.08, 0.18], DARK2, { m: 'poly', shape: 0.006 }),
   P('butt', [0, -0.012, 0.315], [0.046, 0.09, 0.016], BLACK, { m: 'rubber' }),
   P('bolt', [0.035, 0.02, 0.02], [0.012, 0.012, 0.02], STEEL, { bolt: true, m: 'steel' }),
+  P('mag', [0, -0.02, 0.0], [0.03, 0.02, 0.03], DARK2, { mag: true, hidden: true }),
+]);
+
+// TL-4: the Light's tether launcher (the G ability). A compact launcher with a wide muzzle, a harpoon bolt sitting
+// in it and a drum of orange tether line under the barrel.
+bespoke('tg', 'ar', {
+  name: 'TL-4', type: 'TETHER LAUNCHER', launcher: true, auto: false, rpm: 60, mag: 1, dmg: 0, headMult: 1, pellets: 1,
+  reload: 1, reloadEmpty: 1, reloadAnim: 'rifle',
+  spread: { base: 0, move: 0, air: 0, bloom: 0, bloomMax: 0, ads: 1 },
+  recoil: { up: 0.03, side: 0.004, vm: 1.6 }, adsZoom: 0.85, adsSpeed: 14,
+  sightY: 0.075, adsZ: -0.26, hip: [0.15, -0.17, -0.46], muzzle: [0, 0.03, -0.34],
+  grip: [0, -0.07, 0.06], foreGrip: [0, -0.07, -0.16], eject: [0.04, 0.03, 0], magPos: [0, -0.02, 0], bolt: [0.03, 0.02, 0.0],
+  sound: { freq: 900, thump: 120, gain: 0.4, dur: 0.15 },
+}, [
+  P('receiver', [0, 0.01, 0.0], [0.05, 0.07, 0.2], BLACK, { m: 'poly', shape: 0.008 }),
+  P('receiverTop', [0, 0.049, -0.02], [0.04, 0.012, 0.18], ORANGE, { m: 'paint' }),
+  C('barrel', [0, 0.03, -0.2], 0.05, 0.22, DARK2, { m: 'metal' }),
+  C('muzzle', [0, 0.03, -0.315], 0.064, 0.03, BLACK, { m: 'metal' }),
+  P('bore', [0, 0.03, -0.331], [0.04, 0.04, 0.002], PORT, { shape: 'cyl' }),
+  C('boltTip', [0, 0.03, -0.34], 0.016, 0.03, STEEL, { m: 'steel' }),
+  ...[0, 1, 2].map((k) => P('boltFin', [Math.cos(k * 2.09) * 0.012, 0.03 + Math.sin(k * 2.09) * 0.012, -0.326], [0.003, 0.012, 0.016], ORANGE, { rz: k * 2.09, em: 0.4 })),
+  CX('spool', [0, -0.025, -0.15], 0.07, 0.044, DARK2, { m: 'metal' }),
+  CX('spoolLine', [0, -0.025, -0.15], 0.062, 0.046, ORANGE, { em: 0.2 }),
+  P('rear', [0, 0.062, 0.04], [0.022, 0.016, 0.01], BLACK, { m: 'metal' }),
+  P('front', [0, 0.062, -0.28], [0.006, 0.014, 0.006], ORANGE, { em: 0.8 }),
+  P('grip', [0, -0.07, 0.06], [0.04, 0.1, 0.046], BLACK, { rx: -0.25, m: 'rubber' }),
+  P('guard', [0, -0.03, 0.01], [0.014, 0.006, 0.06], BLACK),
+  P('trigger', [0, -0.03, 0.01], [0.006, 0.022, 0.007], STEEL, { m: 'steel', rx: 0.3 }),
+  P('fgrip', [0, -0.08, -0.15], [0.028, 0.06, 0.03], BLACK, { m: 'rubber' }),
+  P('brace', [0, 0.005, 0.15], [0.03, 0.05, 0.1], BLACK, { m: 'poly' }),
+  P('bolt', [0.03, 0.02, 0.0], [0.012, 0.012, 0.02], STEEL, { bolt: true, m: 'steel' }),
   P('mag', [0, -0.02, 0.0], [0.03, 0.02, 0.03], DARK2, { mag: true, hidden: true }),
 ]);
 

@@ -105,7 +105,8 @@ export class Dummy {
       for (let k = 0; k < 3; k++) b.color[k] = col[k] + (1 - col[k]) * f * 0.85;
       b.emissive = f ? 0.9 : 0;
     });
-    if (this.move) {
+    this.held = Math.max(0, (this.held || 0) - dt);      // tethered: it can't keep walking its line
+    if (this.move && !this.held) {
       const m = this.move;
       this.pos[m.axis] = this.base[m.axis] + Math.sin((time + this.phase) * m.speed / m.range) * m.range;
       this.place();

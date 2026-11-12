@@ -122,7 +122,7 @@ class Agent {
       for (const e of co.entities()) {
         if (e.team === this.team || !e.alive) continue;
         const d = Math.hypot(e.pos[0] - b.pos[0], e.pos[1] - b.pos[1], e.pos[2] - b.pos[2]);
-        if (d > 48) continue;
+        if (d > 48 || (e.cloaked && d > 4)) continue;          // a cloaked player is invisible unless right up close
         let score = d;
         if (e === prev) score -= 6;                                  // stick with a target
         if (!e.isPlayer && e.hpFrac < 0.4) score -= 5;                // finish off the wounded

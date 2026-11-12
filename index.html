@@ -383,6 +383,8 @@
   .mm-sidearms { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .pips.hidden { display: none; }
   .ab.ab-heavy.active { outline: 2px solid var(--cls, #fff); }
+  body.cloaked #game { filter: saturate(.55) hue-rotate(-12deg) brightness(.92); }
+  body.cloaked::after { content: ''; position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px rgba(80,160,255,.45); }
   .mm-wpn.on, .mm-abl.on { background: rgba(255,255,255,.18); border-color: var(--c); }
   .mm-wpn b, .mm-abl b { font: 800 italic 20px var(--font); }
   .mm-wpn small, .mm-abl small { font: 700 11px var(--font); letter-spacing: .18em; opacity: .6; text-align: right; }
@@ -649,7 +651,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.41</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.42</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -755,39 +757,39 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.41-1794480113",
-  "./src/audio.js": "./src/audio.js?v=0.41-1794480113",
-  "./src/batch.js": "./src/batch.js?v=0.41-1794480113",
-  "./src/bench.js": "./src/bench.js?v=0.41-1794480113",
-  "./src/bots.js": "./src/bots.js?v=0.41-1794480113",
-  "./src/classes.js": "./src/classes.js?v=0.41-1794480113",
-  "./src/contestant.js": "./src/contestant.js?v=0.41-1794480113",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.41-1794480113",
-  "./src/course.js": "./src/course.js?v=0.41-1794480113",
-  "./src/effects.js": "./src/effects.js?v=0.41-1794480113",
-  "./src/elevator.js": "./src/elevator.js?v=0.41-1794480113",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.41-1794480113",
-  "./src/heavy.js": "./src/heavy.js?v=0.41-1794480113",
-  "./src/input.js": "./src/input.js?v=0.41-1794480113",
-  "./src/main.js": "./src/main.js?v=0.41-1794480113",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.41-1794480113",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.41-1794480113",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.41-1794480113",
-  "./src/math.js": "./src/math.js?v=0.41-1794480113",
-  "./src/nav.js": "./src/nav.js?v=0.41-1794480113",
-  "./src/net.js": "./src/net.js?v=0.41-1794480113",
-  "./src/player.js": "./src/player.js?v=0.41-1794480113",
-  "./src/props.js": "./src/props.js?v=0.41-1794480113",
-  "./src/renderer.js": "./src/renderer.js?v=0.41-1794480113",
-  "./src/rig.js": "./src/rig.js?v=0.41-1794480113",
-  "./src/tdm.js": "./src/tdm.js?v=0.41-1794480113",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.41-1794480113",
-  "./src/weapon.js": "./src/weapon.js?v=0.41-1794480113",
-  "./src/weapons.js": "./src/weapons.js?v=0.41-1794480113",
-  "./src/world.js": "./src/world.js?v=0.41-1794480113"
+  "./src/attachments.js": "./src/attachments.js?v=0.42-1794482120",
+  "./src/audio.js": "./src/audio.js?v=0.42-1794482120",
+  "./src/batch.js": "./src/batch.js?v=0.42-1794482120",
+  "./src/bench.js": "./src/bench.js?v=0.42-1794482120",
+  "./src/bots.js": "./src/bots.js?v=0.42-1794482120",
+  "./src/classes.js": "./src/classes.js?v=0.42-1794482120",
+  "./src/contestant.js": "./src/contestant.js?v=0.42-1794482120",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.42-1794482120",
+  "./src/course.js": "./src/course.js?v=0.42-1794482120",
+  "./src/effects.js": "./src/effects.js?v=0.42-1794482120",
+  "./src/elevator.js": "./src/elevator.js?v=0.42-1794482120",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.42-1794482120",
+  "./src/heavy.js": "./src/heavy.js?v=0.42-1794482120",
+  "./src/input.js": "./src/input.js?v=0.42-1794482120",
+  "./src/main.js": "./src/main.js?v=0.42-1794482120",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.42-1794482120",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.42-1794482120",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.42-1794482120",
+  "./src/math.js": "./src/math.js?v=0.42-1794482120",
+  "./src/nav.js": "./src/nav.js?v=0.42-1794482120",
+  "./src/net.js": "./src/net.js?v=0.42-1794482120",
+  "./src/player.js": "./src/player.js?v=0.42-1794482120",
+  "./src/props.js": "./src/props.js?v=0.42-1794482120",
+  "./src/renderer.js": "./src/renderer.js?v=0.42-1794482120",
+  "./src/rig.js": "./src/rig.js?v=0.42-1794482120",
+  "./src/tdm.js": "./src/tdm.js?v=0.42-1794482120",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.42-1794482120",
+  "./src/weapon.js": "./src/weapon.js?v=0.42-1794482120",
+  "./src/weapons.js": "./src/weapons.js?v=0.42-1794482120",
+  "./src/world.js": "./src/world.js?v=0.42-1794482120"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.41-1794480113"></script>
+<script type="module" src="src/main.js?v=0.42-1794482120"></script>
 </body>
 </html>

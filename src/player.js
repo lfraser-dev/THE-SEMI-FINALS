@@ -78,6 +78,8 @@ export class Player {
       slam: { cd: 0, max: SLAM_CD },
       barricade: { cd: 0, max: 10 },
       pad: { cd: 0, max: 14 },
+      cloak: { cd: 0, max: 16 },
+      heal: { cd: 0, max: 20 },
     };
   }
 
@@ -85,7 +87,7 @@ export class Player {
   resetAbilities() {
     this.cancelAbilities();
     this.abil.dash.charges = DASH_CHARGES; this.abil.dash.t = 0;
-    this.abil.grapple.cd = 0; this.abil.slam.cd = 0; this.abil.barricade.cd = 0; this.abil.pad.cd = 0;
+    this.abil.grapple.cd = 0; this.abil.slam.cd = 0; this.abil.barricade.cd = 0; this.abil.pad.cd = 0; this.abil.cloak.cd = 0; this.abil.heal.cd = 0;
   }
 
   get mantle() { return this.trav?.kind === 'mantle'; }
@@ -520,6 +522,7 @@ export class Player {
     if (!this.slam) a.slam.cd = Math.max(0, a.slam.cd - dt);
     a.barricade.cd = Math.max(0, a.barricade.cd - dt);
     a.pad.cd = Math.max(0, a.pad.cd - dt);
+    for (const k of ['cloak', 'heal']) a[k].cd = Math.max(0, a[k].cd - dt);
     this.shake *= Math.exp(-7 * dt);
   }
 

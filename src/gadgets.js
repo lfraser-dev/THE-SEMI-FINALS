@@ -3,7 +3,9 @@
 //   bar  BARRICADE (Heavy ability): a steel wall that rises out of the floor. Variant 'low' = BLOCKADE, wide and waist-high.
 //   pad  BOUNCE PAD (Medium ability): throws anyone who steps on it straight up. Variant 'launch' = LAUNCH PAD, fires you forward.
 //   pod  DRONE POD (Light heavy weapon): a little launcher that opens after 1.5 s (the drones live in heavy.js).
-//   tur  TURRET (Heavy heavy weapon): a tripod and column; the rotating head and its shooting live in heavy.js.
+//   tur  TURRET (Heavy heavy weapon): a column and turntable; the legs, rotating head and shooting live in heavy.js.
+//   heal HEALING STATION (Medium ability): heals your side nearby (main.js does the healing).
+//   mine PROXIMITY MINE (Light heavy weapon): heavy.js sets them off.
 // Placements carry an id so they can be mirrored online: everyone builds the same thing in the same spot.
 import { boxAt, refreshBox } from './world.js';
 import { compose, mat4, anglesFor } from './math.js';
@@ -14,6 +16,8 @@ export const PAD = { life: 30, max: 1, cd: 14, r: 0.9, vy: 15.5 };
 export const LAUNCH = { vy: 9, push: 17 };
 export const POD = { hp: 80, delay: 1.5, max: 2 };
 export const TURRET = { life: 25, max: 1 };
+export const HEAL = { hp: 150, life: 12, r: 4.5, rate: 20, max: 1 };
+export const MINE = { hp: 30, life: 40, arm: 1, max: 3 };
 
 const STEEL = [0.25, 0.26, 0.29], STEEL2 = [0.34, 0.35, 0.38], CHAR = [0.13, 0.13, 0.15];
 const HEAVY = [1, 0.68, 0.08], MED = [0.92, 0.1, 0.08], LIGHT = [0.25, 0.65, 1];
@@ -83,13 +87,15 @@ export class Gadgets {
   place(spec) {
     if (this.byId(spec.gid)) return null;
     const mine = this.list.filter((g) => g.owner === spec.owner && g.k === spec.k);
-    const max = spec.k === 'bar' ? dimsOf(spec).max : spec.k === 'pad' ? PAD.max : spec.k === 'pod' ? POD.max : TURRET.max;
+    const max = { bar: dimsOf(spec).max, pad: PAD.max, pod: POD.max, tur: TURRET.max, heal: HEAL.max, mine: MINE.max }[spec.k];
     while (mine.length >= max) this.remove(mine.shift(), true);
     const g = { ...spec, t: 0, parts: [], flash: 0, squash: 0, yaw: spec.yaw ?? 0, pitch: 0 };
     if (spec.k === 'bar') { g.hp = g.maxHp = dimsOf(g).hp; g.life = dimsOf(g).life; this.buildBarricade(g); }
     else if (spec.k === 'pad') { g.life = PAD.life; this.buildPad(g); }
     else if (spec.k === 'pod') { g.hp = g.maxHp = POD.hp; g.life = POD.delay + 1.2; this.buildPod(g); }
-    else { g.hp = g.maxHp = g.v === 'heavy' ? 400 : 300; g.life = TURRET.life; this.buildTurret(g); }
+    else if (spec.k === 'heal') { g.hp = g.maxHp = HEAL.hp; g.life = HEAL.life; this.buildHeal(g); }
+    else if (spec.k === 'mine') { g.hp = g.maxHp = MINE.hp; g.life = MINE.life; this.buildMine(g); }
+    else { g.hp = g.maxHp = g.v === 'heavy' ? 400 : g.v === 'flame' ? 350 : 300; g.life = TURRET.life; this.buildTurret(g); }
     for (const q of g.parts) { q.b.dynamic = true; q.b.ref = g; this.world.add(q.b); }
     this.list.push(g);
     this.grow(g, 0.02);
@@ -166,15 +172,34 @@ export class Gadgets {
 
   buildTurret(g) {
     const team = g.teamCol || HEAVY;
-    // splayed tripod-ish feet, a column, a turntable (the head is drawn by heavy.js)
-    for (const [u, w] of [[-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32], [0.32, 0.32]]) {
-      this.part(g, u * 0.55, 0, w * 0.55, 0.1, 0.5, 0.1, { color: CHAR, tex: 5, solid: false, noBullet: true });
-      this.part(g, u, 0, w, 0.16, 0.05, 0.16, { color: CHAR, tex: 5, solid: false, noBullet: true });
-      this.part(g, u * 0.78, 0.04, w * 0.78, 0.28, 0.06, 0.06, { color: STEEL2, solid: false, noBullet: true });
+    // a column on a base plate with a turntable on top (heavy.js draws the splayed legs and the head)
+    this.part(g, 0, 0, 0, 0.4, 0.06, 0.4, { color: CHAR, tex: 5, shape: 'cylY', solid: false, noBullet: true });
+    g.core = this.part(g, 0, 0.05, 0, 0.26, 0.9, 0.26, { color: STEEL, tex: 5, shape: 0.03, tag: 'turret', mat: [0.6, 0.45] });
+    this.part(g, 0, 0.3, 0, 0.3, 0.08, 0.3, { color: CHAR, tex: 5, shape: 0.02, solid: false, noBullet: true });
+    this.part(g, 0, 0.92, 0, 0.44, 0.07, 0.44, { color: CHAR, tex: 5, shape: 'cylY', solid: false, noBullet: true });
+    g.light = this.part(g, 0, 0.7, 0, 0.28, 0.04, 0.28, { color: team, emissive: 1, solid: false, noBullet: true, noShadow: true });
+  }
+
+  buildHeal(g) {
+    const GREEN = [0.2, 1, 0.45];
+    this.part(g, 0, 0, 0, 0.6, 0.06, 0.6, { color: CHAR, shape: 'cylY', solid: false, noBullet: true });
+    g.core = this.part(g, 0, 0.05, 0, 0.44, 0.6, 0.44, { color: [0.9, 0.9, 0.92], tex: 5, shape: 0.04, tag: 'heal', mat: [0.6, 0.45] });
+    // green crosses on all four faces
+    for (const [u, w, along] of [[0, 0.223, 1], [0, -0.223, 1], [0.223, 0, 0], [-0.223, 0, 0]]) {
+      this.part(g, u, 0.32, w, along ? 0.2 : 0.012, 0.06, along ? 0.012 : 0.2, { color: GREEN, emissive: 0.9, solid: false, noBullet: true, noShadow: true });
+      this.part(g, u, 0.25, w, along ? 0.06 : 0.012, 0.2, along ? 0.012 : 0.06, { color: GREEN, emissive: 0.9, solid: false, noBullet: true, noShadow: true });
     }
-    g.core = this.part(g, 0, 0.05, 0, 0.3, 0.92, 0.3, { color: STEEL, tex: 5, shape: 0.03, tag: 'turret', mat: [0.6, 0.45] });
-    this.part(g, 0, 0.94, 0, 0.46, 0.06, 0.46, { color: CHAR, shape: 'cylY', solid: false, noBullet: true });
-    g.light = this.part(g, 0, 0.6, 0, 0.32, 0.04, 0.32, { color: team, emissive: 1, solid: false, noBullet: true, noShadow: true });
+    this.part(g, 0, 0.65, 0, 0.36, 0.05, 0.36, { color: CHAR, shape: 'cylY', solid: false, noBullet: true });
+    g.light = this.part(g, 0, 0.7, 0, 0.24, 0.1, 0.24, { color: GREEN, emissive: 1, shape: 'cylY', solid: false, noBullet: true, noShadow: true });
+  }
+
+  buildMine(g) {
+    const team = g.teamCol || LIGHT;
+    this.part(g, 0, 0, 0, 0.34, 0.03, 0.34, { color: CHAR, shape: 'cylY', solid: false, noBullet: true });
+    g.core = this.part(g, 0, 0.02, 0, 0.26, 0.07, 0.26, { color: [0.33, 0.35, 0.24], shape: 'cylY', tag: 'mine', mat: [0.6, 0.45] });
+    this.part(g, 0, 0.09, 0, 0.1, 0.03, 0.1, { color: CHAR, shape: 'cylY', solid: false, noBullet: true });
+    g.light = this.part(g, 0, 0.12, 0, 0.04, 0.015, 0.04, { color: [1, 0.15, 0.1], emissive: 1, shape: 'cylY', solid: false, noBullet: true, noShadow: true });
+    this.part(g, 0, 0.088, 0, 0.27, 0.006, 0.27, { color: team, emissive: 0.6, shape: 'cylY', solid: false, noBullet: true, noShadow: true });
   }
 
   // rise out of the floor (k: 0..1)
@@ -194,7 +219,7 @@ export class Gadgets {
     for (const q of g.parts) this.world.remove(q.b);
     g.dead = true;
     if (effect) {
-      if (g.k === 'bar' || g.k === 'tur') { this.effects.shatter(g.core, [0, 0, 0], 3, 3); this.effects.dust(g.p, 8); this.sounds.barricadeBreak?.(); }
+      if (g.k === 'bar' || g.k === 'tur' || g.k === 'heal') { this.effects.shatter(g.core, [0, 0, 0], 3, 3); this.effects.dust(g.p, 8); this.sounds.barricadeBreak?.(); }
       else this.effects.dust(g.p, 4);
     }
   }
@@ -224,6 +249,11 @@ export class Gadgets {
         const dmgK = 1 - Math.max(0, g.hp) / g.maxHp;
         g.core.color = g.flash > 0 ? [0.7, 0.7, 0.72] : [STEEL[0] - dmgK * 0.08, STEEL[1] - dmgK * 0.09, STEEL[2] - dmgK * 0.1];
         g.light.emissive = g.life < 5 ? (Math.sin(g.t * 18) > 0 ? 1 : 0.1) : 1;
+      } else if (g.k === 'heal' || g.k === 'mine') {
+        if (g.t < 0.25) this.grow(g, g.t / 0.25); else if (!g.settled) { this.grow(g, 1); g.settled = true; }
+        g.core.color = g.flash > 0 ? [1, 0.6, 0.6] : g.k === 'heal' ? [0.9, 0.9, 0.92] : [0.33, 0.35, 0.24];
+        if (g.k === 'heal') g.light.emissive = 0.6 + 0.4 * Math.sin(g.t * 4);
+        else g.light.emissive = g.t < MINE.arm ? 0.2 : Math.sin(g.t * 6) > 0.6 ? 1 : 0.15;   // armed: a slow blink
       } else if (g.k === 'pod') {
         if (g.t < 0.2) this.grow(g, g.t / 0.2); else if (!g.settled) { this.grow(g, 1); g.settled = true; }
         g.core.color = g.flash > 0 ? [0.7, 0.7, 0.72] : STEEL;

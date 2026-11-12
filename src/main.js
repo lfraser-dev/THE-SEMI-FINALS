@@ -26,7 +26,7 @@ import { Deathmatch } from './tdm.js';
 import { Lobby } from './net.js';
 import { StaticBatches } from './batch.js';
 import { Gadgets, ropeParts, hookParts, BARRICADE, BLOCKADE, TETHER_COL } from './gadgets.js';
-import { Heavy, HEAVY_STATS } from './heavy.js';
+import { Heavy, HEAVY_STATS, TETHER } from './heavy.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('game');
@@ -72,6 +72,16 @@ const heavy = new Heavy(world, effects, sounds, gadgets, {
   me: () => myGadgetOwner(),
   myTeam: () => (tdm.active ? tdm.myTeam?.idx ?? -1 : -1),
   send: (m) => { if (online.active) online.send({ ...m, id: online.myId }); },
+  playerPos: () => player.pos,
+  remotePos: (id) => online.byId?.(id)?.bot?.pos,
+  // I tethered another player: their game holds them in place
+  onTether: (ref, a, len, dur) => { if (ref.remote && online.active) online.send({ t: 'teth', id: online.myId, who: ref.remote.id, a: a.map((v) => +v.toFixed(2)), len, dur }); },
+  // someone tethered me
+  tetherMe: (a, len, dur) => {
+    playerTether = { anchor: a, len, t: dur };
+    if (player.grapple) player.releaseGrapple(false);
+    banner('TETHERED', 'YOU ARE TIED DOWN', 'bad', 1.2);
+  },
   shake: (pos, r) => {
     const d = Math.hypot(player.pos[0] - pos[0], player.pos[1] - pos[1], player.pos[2] - pos[2]);
     if (d < r * 5) { player.shake = Math.max(player.shake || 0, 0.6 * (1 - d / (r * 5))); player.camPitchV += 0.6 * (1 - d / (r * 5)); }
@@ -122,7 +132,8 @@ Object.assign(player, { hp: 150, maxHp: 150, dead: false, hurtT: 9, invuln: 0, p
 const slots = [new Weapon(defFor('ar')), new Weapon(defFor('pistol'))];
 let current = 0;
 let lastSlot = 1;
-let launcherW = null, launcherKind = null, launcherT = 0;     // the Medium's grenade launcher while it's out
+let launcherW = null, launcherKind = null, launcherT = 0;     // the grenade / tether launcher while it's out
+let playerTether = null;          // an enemy's tether holding you: { anchor, len, t }
 const weapon = () => launcherW || slots[current];
 
 function switchTo(i) {
@@ -250,12 +261,14 @@ function fire(w) {
   const hipT = 1 - w.adsT;
   const muzzle = vmToWorld(w.gunPoint(d.muzzle));
   if (d.launcher) {
-    const v = camFwd.map((c, i) => c * 30 + (i === 1 ? 2.5 : 0) + player.vel[i] * 0.3);
+    const bolt = launcherKind === 'tether';
+    const v = camFwd.map((c, i) => c * (bolt ? 42 : 30) + (i === 1 ? (bolt ? 1 : 2.5) : 0) + player.vel[i] * 0.3);
     heavy.launch(launcherKind, muzzle, v, true, HEAVY_STATS[launcherKind].name);
     launcherT = 0.55;
     return;
   }
   stats.shots++;
+  if (cloakT > 0) { cloakT = 0; sounds.cloak?.(); }
 
   const perDummy = new Map();
   let anyHit = false;
@@ -428,20 +441,15 @@ function slamShockwave(h) {
         [dir[0] * (4 + Math.random() * 4), 3 + Math.random() * 4, dir[2] * (4 + Math.random() * 4)], [0.55, 0.55, 0.58], 1.2);
     }
   }
-  let hitAny = false, killed = false;
-  for (const d of [...dummies, ...botMgr.bots.filter((b) => b.visible)]) {
+  const victims = tdm.active ? enemyTargets().map((t) => t.ref) : [...dummies, ...botMgr.bots.filter((b) => b.visible)];
+  for (const d of victims) {
     if (!d.alive) continue;
     const dx = d.pos[0] - p[0], dy = d.pos[1] - p[1], dz = d.pos[2] - p[2];
     const dist = Math.hypot(dx, dz);
     if (dist > R || Math.abs(dy) > 2.5) continue;
     const dmg = Math.round((25 + 65 * (1 - dist / R)) * h.power);
-    const dir = norm([dx || 0.01, 0.6, dz || 0.01]);
-    const dead = d.damage(dmg, dir);
-    hitAny = true;
-    if (dead) { stats.kills++; killed = true; if (d.name) killFeed('YOU', 'SLAM', d.name, false); }
-    damageNumbers.push({ pos: [d.pos[0], d.pos[1] + 1.6, d.pos[2]], amount: dmg, head: false, t: 0, el: null, drift: Math.random() - 0.5 });
+    hitTarget(d, dmg, false, [d.pos[0], d.pos[1] + 1.6, d.pos[2]], norm([dx || 0.01, 0.6, dz || 0.01]), 'SLAM');
   }
-  if (hitAny) { showHitmarker(killed, false); killed ? sounds.kill() : sounds.hit(); }
   for (const w of walls) {
     for (const row of w.cells) for (const b of row) {
       if (!b) continue;
@@ -685,7 +693,11 @@ function updateCombat(dt) {
 
 // ---------- class gadgets: Medium's bounce pad, Heavy's barricade ----------
 const myGadgetOwner = () => (online.active ? online.myId : 'me');
-const ABIL_CD = { barricade: 10, lowwall: 12, pad: 14, launchpad: 14 };
+const ABIL_CD = { barricade: 10, lowwall: 12, pad: 14, launchpad: 14, heal: 20 };
+// which cooldown each ability runs on
+const ABIL_SLOT = { grapple: 'grapple', tether: 'grapple', dash: 'dash', cloak: 'cloak', pad: 'pad', launchpad: 'pad', heal: 'heal', barricade: 'barricade', lowwall: 'barricade', slam: 'slam' };
+let cloakT = 0;          // CLOAK: seconds of invisibility left
+const CLOAK_TIME = 6;
 function placeGadget(spec) {
   const owner = myGadgetOwner();
   const full = { gid: gadgets.newId(owner), ...spec, owner, team: tdm.active ? tdm.myTeam?.idx : -1, teamCol: tdm.active ? tdm.myTeam?.rgb : null };
@@ -695,15 +707,49 @@ function placeGadget(spec) {
 const noRoom = () => { sounds.denied(); banner('NO ROOM', 'NEEDS FLAT, OPEN FLOOR', 'bad', 0.9); };
 function useGadget(kind) {
   const wall = kind === 'barricade' || kind === 'lowwall';
-  const a = player.abil[wall ? 'barricade' : 'pad'];
+  const a = player.abil[ABIL_SLOT[kind]];
   if (!a || a.cd > 0 || player.dead) { if (a?.cd > 0) sounds.denied(); return; }
-  const spot = wall ? gadgets.barricadeSpot(player.pos, player.yaw, kind === 'lowwall' ? BLOCKADE : BARRICADE) : gadgets.padSpot(player.eye(), player.forward(), player.pos);
+  const spot = wall ? gadgets.barricadeSpot(player.pos, player.yaw, kind === 'lowwall' ? BLOCKADE : BARRICADE)
+    : gadgets.padSpot(player.eye(), player.forward(), player.pos, kind === 'heal' ? 0.35 : undefined);
   if (!spot) { noRoom(); return; }
-  placeGadget({ k: wall ? 'bar' : 'pad', v: kind === 'lowwall' ? 'low' : kind === 'launchpad' ? 'launch' : undefined, yaw: +player.yaw.toFixed(3), ...spot });
+  placeGadget({ k: wall ? 'bar' : kind === 'heal' ? 'heal' : 'pad', v: kind === 'lowwall' ? 'low' : kind === 'launchpad' ? 'launch' : undefined, yaw: +player.yaw.toFixed(3), ...spot });
   a.max = ABIL_CD[kind];
   a.cd = a.max;
   if (wall) { player.camPitchV -= 0.5; player.shake = Math.max(player.shake || 0, 0.2); }
 }
+// CLOAK: invisible for a few seconds; enemies can't pick you out unless they're right on top of you
+function useCloak() {
+  const a = player.abil.cloak;
+  if (player.dead) return;
+  if (cloakT > 0) { cloakT = 0; return; }
+  if (a.cd > 0) { sounds.denied(); return; }
+  cloakT = CLOAK_TIME;
+  a.cd = a.max;
+  sounds.cloak?.();
+}
+// healing stations heal whoever's on the owner's side nearby
+function updateHealing(dt) {
+  const myTeam = tdm.active ? tdm.myTeam?.idx ?? -1 : -1;
+  for (const g of gadgets.list) {
+    if (g.k !== 'heal' || g.t < 0.3) continue;
+    const friendly = g.owner === myGadgetOwner() || (myTeam >= 0 && g.team === myTeam);
+    if (!friendly) continue;
+    const near = (p) => Math.hypot(p[0] - g.p[0], p[2] - g.p[2]) < 4.5 && Math.abs(p[1] - g.p[1]) < 2.5;
+    if (!player.dead && player.hp < player.maxHp && near(player.pos)) {
+      player.hp = Math.min(player.maxHp, player.hp + 20 * dt);
+      if (Math.random() < dt * 8) effects.spawnPiece([player.pos[0] + (Math.random() - 0.5) * 0.8, player.pos[1] + 0.4 + Math.random(), player.pos[2] + (Math.random() - 0.5) * 0.8], [0.05, 0.05, 0.05], [0, 1.4, 0], [0.3, 1, 0.5], 0.6, 1);
+    }
+    if (tdm.active && tdm !== online) for (const a of tdm.agents) {
+      const b = a.bot;
+      if (b && b.alive && b.team === myTeam && b.hp < b.maxHp && near(b.pos)) b.hp = Math.min(b.maxHp, b.hp + 20 * dt);
+    }
+    if (Math.random() < dt * 6) {
+      effects.spawnPiece([g.p[0] + (Math.random() - 0.5) * 0.4, g.p[1] + 0.8, g.p[2] + (Math.random() - 0.5) * 0.4], [0.05, 0.05, 0.05], [(Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2], [0.3, 1, 0.5], 0.8, 1);
+      effects.debris[effects.debris.length - 1].noGravity = true;
+    }
+  }
+}
+
 // ---------- heavy weapons (Q) ----------
 function useHeavy() {
   if (player.dead) return;
@@ -723,22 +769,51 @@ function useHeavy() {
     updateSlotHud();
     return;
   }
-  if (id === 'dronepod' || id === 'swarmpod') {
+  if (id === 'mines') {
+    // three mines in a spread across where you're aiming
+    const c = gadgets.padSpot(player.eye(), player.forward(), player.pos, 0.2);
+    if (!c) { noRoom(); return; }
+    const f = player.forward(), hl = Math.hypot(f[0], f[2]) || 1, side = [-f[2] / hl, f[0] / hl];
+    let n = 0;
+    for (const k of [-1, 0, 1]) {
+      const x = c.p[0] + side[0] * k * 1.5, z = c.p[2] + side[1] * k * 1.5;
+      const hit = world.raycast([x, c.p[1] + 1, z], [0, -1, 0], 2.5, false);
+      if (!hit || hit.normal[1] < 0.7) continue;
+      placeGadget({ k: 'mine', ax: 0, p: [+x.toFixed(3), +hit.point[1].toFixed(3), +z.toFixed(3)] });
+      n++;
+    }
+    if (!n) { noRoom(); return; }
+  } else if (id === 'dronepod' || id === 'swarmpod') {
     const spot = gadgets.padSpot(player.eye(), player.forward(), player.pos, 0.35);
     if (!spot) { noRoom(); return; }
     placeGadget({ k: 'pod', v: id === 'swarmpod' ? 'swarm' : undefined, ax: 0, ...spot });
   } else {
     const spot = gadgets.turretSpot(player.pos, player.yaw);
     if (!spot) { noRoom(); return; }
-    placeGadget({ k: 'tur', v: id === 'turret_heavy' ? 'heavy' : undefined, ...spot });
+    placeGadget({ k: 'tur', v: id === 'turret_heavy' ? 'heavy' : id === 'turret_flame' ? 'flame' : undefined, ...spot });
     player.camPitchV -= 0.4;
   }
   heavyCd = st.cd;
 }
+// the Light's TETHER LAUNCHER (ability): same idea as the grenade launcher, it fires a tether bolt
+function useTether() {
+  if (player.dead) return;
+  if (launcherW) { const was = launcherKind; putAwayLauncher(false); if (was === 'tether') return; }
+  const a = player.abil.grapple;
+  if (a.cd > 0) { sounds.denied(); return; }
+  const def = defFor('tg');
+  launcherW = new Weapon(def);
+  launcherW.ammo = 1;
+  launcherW.equip();
+  launcherKind = 'tether'; launcherT = 0;
+  sounds.swap();
+  updateSlotHud();
+}
 function putAwayLauncher(fired) {
   if (!launcherW) return;
   launcherW = null;
-  if (fired) heavyCd = HEAVY_STATS[launcherKind].cd;
+  if (fired && launcherKind === 'tether') { player.abil.grapple.max = TETHER.cd; player.abil.grapple.cd = TETHER.cd; }
+  else if (fired) heavyCd = HEAVY_STATS[launcherKind].cd;
   weapon().equip();
   updateSlotHud();
 }
@@ -803,31 +878,35 @@ function updateAbilityHud() {
     el.querySelector('.cd').textContent = extra;
   };
   const ab = hud.ab.main, isG = equippedAbility === 'grapple' || equippedAbility === 'tether';
+  const tetherOut = !!launcherW && launcherKind === 'tether';
   const name = ABILITIES[equippedAbility]?.short || '';
   if (ab.dataset.name !== name) { ab.dataset.name = name; ab.querySelector('b').textContent = name; }
   if (isG) {
-    const gActive = player.grapple && player.grapple.phase !== 'miss';
+    const gActive = (player.grapple && player.grapple.phase !== 'miss') || tetherOut;
     set(ab, gActive ? 0 : a.grapple.cd / a.grapple.max, a.grapple.cd <= 0 || gActive, a.grapple.cd > 0 && !gActive ? a.grapple.cd.toFixed(1) : '');
     ab.classList.toggle('active', !!gActive);
-  } else {
-    const k = equippedAbility === 'barricade' || equippedAbility === 'lowwall' ? 'barricade' : 'pad';
-    set(ab, a[k].cd / a[k].max, a[k].cd <= 0, a[k].cd > 0 ? a[k].cd.toFixed(1) : '');
+  } else if (equippedAbility === 'dash') {
+    const d = a.dash, rem = d.charges < d.max ? 1 - d.t / d.recharge : 0;
+    set(ab, d.charges > 0 ? 0 : rem, d.charges > 0);
     ab.classList.remove('active');
+  } else {
+    const k = ABIL_SLOT[equippedAbility], on = equippedAbility === 'cloak' && cloakT > 0;
+    set(ab, on ? 0 : a[k].cd / a[k].max, a[k].cd <= 0 || on, on ? cloakT.toFixed(1) : a[k].cd > 0 ? a[k].cd.toFixed(1) : '');
+    ab.classList.toggle('active', on);
   }
-  const walls = equippedAbility === 'barricade';
-  ab.querySelector('.pips').classList.toggle('hidden', !walls);
-  if (walls) {
+  const pips = equippedAbility === 'barricade' || equippedAbility === 'dash';
+  ab.querySelector('.pips').classList.toggle('hidden', !pips);
+  if (equippedAbility === 'barricade') {
     const mine = gadgets.list.filter((g) => g.owner === myGadgetOwner() && g.k === 'bar' && g.v !== 'low').length;
     ab.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < 2 - mine));
-  }
+  } else if (equippedAbility === 'dash') ab.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < a.dash.charges));
   // heavy weapon
   const hv = hud.ab.heavy, hn = HEAVIES[equippedHeavy]?.short || '', hmax = HEAVY_STATS[equippedHeavy]?.cd || 1;
   if (hv.dataset.name !== hn) { hv.dataset.name = hn; hv.querySelector('b').textContent = hn; }
   set(hv, heavyCd / hmax, heavyCd <= 0, heavyCd > 0 ? heavyCd.toFixed(1) : '');
-  hv.classList.toggle('active', !!launcherW);
+  hv.classList.toggle('active', !!launcherW && !tetherOut);
   // grapple range hint on the crosshair
-  player.grappleMode = equippedAbility === 'tether' ? 'tether' : 'grapple';
-  grappleOk = isG && a.grapple.cd <= 0 && !player.grapple && !!player.grappleTarget();
+  grappleOk = equippedAbility === 'grapple' && a.grapple.cd <= 0 && !player.grapple && !!player.grappleTarget();
   hud.cross.classList.toggle('grapple', grappleOk);
 }
 function refreshAbilityKeys() {
@@ -1041,7 +1120,7 @@ function enterRange() {
   if (where !== 'range') {
     if (tdm.active) endMatch(false);
     where = 'range';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false);
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
     document.body.classList.remove('stadium');
@@ -1062,7 +1141,7 @@ function enterStadium() {
   if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
   if (arriving) {
     where = 'stadium';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false);
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
     botMgr.stop();
     course.reset();
     cutscene = null; pressSeq = null;
@@ -1248,6 +1327,7 @@ const netHooks = {
   feed: (a, b, wid) => killFeed(a, WEAPONS[wid]?.name || 'GUN', b, false),
   banner: (...a) => banner(...a),
   weaponId: () => weapon().def.id,
+  cloaked: () => cloakT > 0,
   grapplePoint: () => (player.grapple && player.grapple.phase !== 'miss' ? player.grapple.point.map((v) => +v.toFixed(2)) : null),
   remoteGadget: (spec) => gadgets.place(spec),
   remoteHeavy: (m) => heavy.remote(m),
@@ -1265,7 +1345,7 @@ function startOnline(info) {
   menu.classList.add('hidden');
   enterStadium();
   batches.world = null;
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false);
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
   resetGlass();
   const sp = stadium.spawns[info.team];
   player.spawn(sp.pos, sp.yaw);
@@ -1293,7 +1373,7 @@ function setTeamsHud(m) {
 function startMatch(m) {
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false);
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
   resetGlass();
   walls.forEach((w) => w.reset());
   tdm.start(m, stadium, player, classLo.cls);
@@ -1305,7 +1385,7 @@ function startMatch(m) {
 }
 function endMatch(toMenu) {
   if (tdm === online) { online.leave(); tdm = ai; } else tdm.stop();
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false);
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
   match = null;
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
@@ -1978,10 +2058,13 @@ function frameBody(now) {
       }
     }
     const abilityHit = !hooked && input.hit(settings.abilityKey);
-    const isG = equippedAbility === 'grapple' || equippedAbility === 'tether';
-    player.grappleMode = equippedAbility === 'tether' ? 'tether' : 'grapple';
-    const act = { grapple: isG && abilityHit };
-    if (abilityHit && !isG) useGadget(equippedAbility);
+    const eq = equippedAbility;
+    const act = { grapple: eq === 'grapple' && abilityHit, dash: eq === 'dash' && abilityHit, slam: eq === 'slam' && abilityHit };
+    if (abilityHit) {
+      if (eq === 'tether') useTether();
+      else if (eq === 'cloak') useCloak();
+      else if (ABIL_CD[eq]) useGadget(eq);
+    }
     if (input.hit(settings.heavyKey)) useHeavy();
     if (launcherW && launcherT > 0 && (launcherT -= dt) <= 0) putAwayLauncher(true);
     elevator.update(dt, player, sounds);
@@ -1990,6 +2073,20 @@ function frameBody(now) {
     // heavier guns slow you down; a spinning minigun slows you a lot more
     player.speedMul = CLASSES[classLo.cls].speed * (w.def.moveMul ?? 1) * (w.def.spin && (w.spinT || 0) > 0.05 ? 0.72 : 1);
     player.update(dt, input, { ads: w.ads, firing: input.fireDown && w.ammo > 0 && !w.reloading && !player.trav, act });
+    if (playerTether) {
+      // tied down: you can't get further than the line's length from the spike
+      const T = playerTether, a = T.anchor, p = player.pos;
+      T.t -= dt;
+      const dx = p[0] - a[0], dz = p[2] - a[2], d = Math.hypot(dx, dz);
+      if (d > T.len) {
+        p[0] = a[0] + (dx / d) * T.len; p[2] = a[2] + (dz / d) * T.len;
+        const out = (player.vel[0] * dx + player.vel[2] * dz) / d;
+        if (out > 0) { player.vel[0] -= (dx / d) * out; player.vel[2] -= (dz / d) * out; }
+      }
+      if (p[1] > a[1] + T.len + 1.2) { p[1] = a[1] + T.len + 1.2; player.vel[1] = Math.min(0, player.vel[1]); }
+      if (player.grapple) player.releaseGrapple(false);
+      if (T.t <= 0 || player.dead) playerTether = null;
+    }
     if (inStadium()) updateStadium(dt);
     updateCombat(dt);
     course.update(dt, player, input);
@@ -2003,6 +2100,10 @@ function frameBody(now) {
     gadgets.update(dt, [padRider]);
     heavy.update(dt);
     updateBurns(dt);
+    updateHealing(dt);
+    if (cloakT > 0 && ((cloakT -= dt) <= 0 || player.dead)) { cloakT = 0; sounds.cloak?.(); }
+    document.body.classList.toggle('cloaked', cloakT > 0);
+    if (tdm.you) tdm.you.cloaked = cloakT > 0;
     heavyCd = Math.max(0, heavyCd - dt);
     if (player.dead && launcherW) putAwayLauncher(false);
   }
@@ -2138,7 +2239,8 @@ function frameBody(now) {
     }
     bench.layout(pts);
   } else {
-    for (const p of vmParts) renderer.drawPart(p);
+    if (cloakT > 0) for (const p of vmParts) renderer.drawPart({ ...p, color: p.color.map((c, i) => c * 0.35 + [0.35, 0.6, 1][i] * 0.4), emissive: Math.max(p.emissive || 0, 0.35) });
+    else for (const p of vmParts) renderer.drawPart(p);
   }
 
   updateHud(dt, vfov);
@@ -2148,4 +2250,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { heavy, useHeavy, applyClass, useGadget, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

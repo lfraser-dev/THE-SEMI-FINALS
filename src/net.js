@@ -332,7 +332,7 @@ class Remote {
 
   // a state packet: { p, y, pi, hp, mh, d, c, w }
   state(s) {
-    this.hp = s.hp; this.maxHp = s.mh; this.wep = s.w; this.gr = s.gr || null;
+    this.hp = s.hp; this.maxHp = s.mh; this.wep = s.w; this.gr = s.gr || null; this.cl = !!s.cl;
     if (s.d) return;
     if (!this.bot || this.dead || this.bot.removed) { this.spawn(s.p, s.y); }
     this.target = s;
@@ -510,7 +510,7 @@ export class Online {
       case 'st': { const r = this.byId(m.id); if (r) r.state(m); break; }
       case 'shot': { if (m.id === this.myId) break; const r = this.byId(m.id); if (r?.bot?.alive) { r.bot.muzzleT = 0.05; r.bot.recoil = 1; } this.g?.remoteShot(m.f, m.e, r); break; }
       case 'gad': if (m.id !== this.myId && this.active) this.g?.remoteGadget?.(m.g); break;
-      case 'gl': case 'boom': case 'drn': case 'tsh': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
+      case 'gl': case 'boom': case 'drn': case 'tsh': case 'trap': case 'trapgone': case 'teth': case 'gdel': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
       case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
       case 'hit': if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head); break;
       case 'died': this.onDied(m); break;
@@ -596,7 +596,7 @@ export class Online {
     if (this.sendT <= 0) {
       this.sendT = 1 / SEND_HZ;
       const p = g.player;
-      this.send({ t: 'st', id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined });
+      this.send({ t: 'st', id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined, cl: g.cloaked?.() ? 1 : undefined });
     }
   }
 
@@ -605,6 +605,7 @@ export class Online {
     for (const a of this.agents) {
       const b = a.bot;
       if (!b || b.removed) continue;
+      if (a.cl && b.alive) { if (Math.random() < 0.15) out.push(...b.parts().filter(() => Math.random() < 0.08)); continue; }   // cloaked: only a shimmer
       out.push(...b.parts());
       // their grappling line, from the hand to where it bit
       if (b.alive && a.gr) {

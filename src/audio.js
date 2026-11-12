@@ -133,6 +133,8 @@ export class Sounds {
   lock() { this.tone(1800, 1800, 0.08, 0.08, 'square'); setTimeout(() => this.tone(2400, 2400, 0.08, 0.08, 'square'), 90); }
   turret() { this.burst(0.06, 2600, 0.16); this.click(3000, 0.15, 4); }
   turretHeavy() { this.burst(0.3, 500, 0.5); this.tone(140, 60, 0.25, 0.2); }
+  tether() { this.tone(900, 300, 0.25, 0.12, 'sawtooth'); this.click(2400, 0.3, 3); }
+  cloak() { this.tone(1400, 300, 0.35, 0.08, 'sine'); this.burst(0.2, 3000, 0.08, 'bandpass', 2); }
   denied() { this.tone(320, 220, 0.12, 0.08, 'square'); }
   crumble() { this.burst(0.3, 700, 0.35); }
   dry() { this.tone(2200, 1800, 0.03, 0.12, 'square'); }
