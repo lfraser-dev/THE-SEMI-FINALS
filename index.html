@@ -379,6 +379,10 @@
   .mm-weapons, .mm-abilities { display: grid; gap: 6px; }
   .mm-wpn, .mm-abl { all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; padding: 10px 14px; background: rgba(255,255,255,.07); border-left: 3px solid transparent; }
   .mm-wpn:hover, .mm-abl:hover { background: rgba(255,255,255,.13); }
+  .mm-key { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid currentColor; border-radius: 3px; font-size: .8em; opacity: .7; }
+  .mm-sidearms { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .pips.hidden { display: none; }
+  .ab.ab-heavy.active { outline: 2px solid var(--cls, #fff); }
   .mm-wpn.on, .mm-abl.on { background: rgba(255,255,255,.18); border-color: var(--c); }
   .mm-wpn b, .mm-abl b { font: 800 italic 20px var(--font); }
   .mm-wpn small, .mm-abl small { font: 700 11px var(--font); letter-spacing: .18em; opacity: .6; text-align: right; }
@@ -609,9 +613,8 @@
   <div class="panel hidden" id="wavepanel"><div id="wavetitle">WAVE 1</div><div id="waveinfo"></div></div>
   <div id="banner"><b></b><span></span></div>
   <div id="abilities">
-    <div class="ab" id="ab-grapple"><kbd>Q</kbd><b>GRAPPLE</b><span class="cd"></span></div>
-    <div class="ab" id="ab-pad"><kbd>Q</kbd><b>BOUNCE PAD</b><span class="cd"></span></div>
-    <div class="ab" id="ab-barricade"><kbd>Q</kbd><b>BARRICADE</b><span class="cd"></span><div class="pips"><i class="pip"></i><i class="pip"></i></div></div>
+    <div class="ab" id="ab-main"><kbd>G</kbd><b>ABILITY</b><span class="cd"></span><div class="pips"><i class="pip"></i><i class="pip"></i></div></div>
+    <div class="ab ab-heavy" id="ab-heavy"><kbd>Q</kbd><b>HEAVY</b><span class="cd"></span></div>
   </div>
   <div id="teams"></div>
   <div id="objective" class="hidden"><b></b><span></span><i></i></div>
@@ -646,7 +649,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.40</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.41</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -669,8 +672,12 @@
       <div class="mm-classinfo" id="mm-classinfo"></div>
       <h4>PRIMARY WEAPON</h4>
       <div class="mm-weapons" id="mm-weapons"></div>
-      <h4>SPECIALISATION</h4>
+      <h4>SIDEARM</h4>
+      <div class="mm-weapons mm-sidearms" id="mm-sidearms"></div>
+      <h4>ABILITY <span class="mm-key">G</span></h4>
       <div class="mm-abilities" id="mm-abilities"></div>
+      <h4>HEAVY WEAPON <span class="mm-key">Q</span></h4>
+      <div class="mm-abilities" id="mm-heavies"></div>
     </div>
   </section>
 
@@ -712,7 +719,7 @@
           sprint-jump along a wall to wall run · <kbd>SPACE</kbd> wall jump<br>
           <kbd>LMB</kbd>/<kbd class="keyhint-fire">F</kbd>shoot · <kbd>RMB</kbd>/<kbd class="keyhint-aim">V</kbd>aim<br>
           <kbd>R</kbd>reload · <kbd>E</kbd>take gun from case<br>
-          <kbd class="keyhint-ability">Q</kbd>class ability: Light grapple · Medium bounce pad · Heavy barricade<br>
+          <kbd class="keyhint-ability">G</kbd>ability (grapple / tether, bounce / launch pad, barricade / blockade) · <kbd class="keyhint-heavy">Q</kbd>heavy weapon (drone pod, grenade launcher, turret)<br>
           <kbd>E</kbd>at the workbench for attachments<br>
           take the elevator (west wall) down to the <b>underground arena</b> · <kbd>E</kbd> at the console to fight bots<br>
           <kbd>1</kbd><kbd>2</kbd>/scroll swap · <kbd>T</kbd>reset range · <kbd>ESC</kbd> main menu<br>
@@ -729,7 +736,8 @@
           <span>SHOOT KEY</span><button id="bind-fire" type="button">F</button>
           <span>AIM MODE</span><button id="aim-mode" type="button">HOLD</button>
           <span title="Any click shoots, including a right click or a click with a second finger on the pad. Aim with the aim key.">TRACKPAD MODE</span><button id="trackpad-mode" type="button">OFF</button>
-          <span>CLASS ABILITY</span><button id="bind-ability" type="button">Q</button>
+          <span>ABILITY</span><button id="bind-ability" type="button">G</button>
+          <span>HEAVY WEAPON</span><button id="bind-heavy" type="button">Q</button>
         </div>
         <div id="bindnote"></div>
       </div>
@@ -747,38 +755,39 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.40-1794476821",
-  "./src/audio.js": "./src/audio.js?v=0.40-1794476821",
-  "./src/batch.js": "./src/batch.js?v=0.40-1794476821",
-  "./src/bench.js": "./src/bench.js?v=0.40-1794476821",
-  "./src/bots.js": "./src/bots.js?v=0.40-1794476821",
-  "./src/classes.js": "./src/classes.js?v=0.40-1794476821",
-  "./src/contestant.js": "./src/contestant.js?v=0.40-1794476821",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.40-1794476821",
-  "./src/course.js": "./src/course.js?v=0.40-1794476821",
-  "./src/effects.js": "./src/effects.js?v=0.40-1794476821",
-  "./src/elevator.js": "./src/elevator.js?v=0.40-1794476821",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.40-1794476821",
-  "./src/input.js": "./src/input.js?v=0.40-1794476821",
-  "./src/main.js": "./src/main.js?v=0.40-1794476821",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.40-1794476821",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.40-1794476821",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.40-1794476821",
-  "./src/math.js": "./src/math.js?v=0.40-1794476821",
-  "./src/nav.js": "./src/nav.js?v=0.40-1794476821",
-  "./src/net.js": "./src/net.js?v=0.40-1794476821",
-  "./src/player.js": "./src/player.js?v=0.40-1794476821",
-  "./src/props.js": "./src/props.js?v=0.40-1794476821",
-  "./src/renderer.js": "./src/renderer.js?v=0.40-1794476821",
-  "./src/rig.js": "./src/rig.js?v=0.40-1794476821",
-  "./src/tdm.js": "./src/tdm.js?v=0.40-1794476821",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.40-1794476821",
-  "./src/weapon.js": "./src/weapon.js?v=0.40-1794476821",
-  "./src/weapons.js": "./src/weapons.js?v=0.40-1794476821",
-  "./src/world.js": "./src/world.js?v=0.40-1794476821"
+  "./src/attachments.js": "./src/attachments.js?v=0.41-1794480113",
+  "./src/audio.js": "./src/audio.js?v=0.41-1794480113",
+  "./src/batch.js": "./src/batch.js?v=0.41-1794480113",
+  "./src/bench.js": "./src/bench.js?v=0.41-1794480113",
+  "./src/bots.js": "./src/bots.js?v=0.41-1794480113",
+  "./src/classes.js": "./src/classes.js?v=0.41-1794480113",
+  "./src/contestant.js": "./src/contestant.js?v=0.41-1794480113",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.41-1794480113",
+  "./src/course.js": "./src/course.js?v=0.41-1794480113",
+  "./src/effects.js": "./src/effects.js?v=0.41-1794480113",
+  "./src/elevator.js": "./src/elevator.js?v=0.41-1794480113",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.41-1794480113",
+  "./src/heavy.js": "./src/heavy.js?v=0.41-1794480113",
+  "./src/input.js": "./src/input.js?v=0.41-1794480113",
+  "./src/main.js": "./src/main.js?v=0.41-1794480113",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.41-1794480113",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.41-1794480113",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.41-1794480113",
+  "./src/math.js": "./src/math.js?v=0.41-1794480113",
+  "./src/nav.js": "./src/nav.js?v=0.41-1794480113",
+  "./src/net.js": "./src/net.js?v=0.41-1794480113",
+  "./src/player.js": "./src/player.js?v=0.41-1794480113",
+  "./src/props.js": "./src/props.js?v=0.41-1794480113",
+  "./src/renderer.js": "./src/renderer.js?v=0.41-1794480113",
+  "./src/rig.js": "./src/rig.js?v=0.41-1794480113",
+  "./src/tdm.js": "./src/tdm.js?v=0.41-1794480113",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.41-1794480113",
+  "./src/weapon.js": "./src/weapon.js?v=0.41-1794480113",
+  "./src/weapons.js": "./src/weapons.js?v=0.41-1794480113",
+  "./src/world.js": "./src/world.js?v=0.41-1794480113"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.40-1794476821"></script>
+<script type="module" src="src/main.js?v=0.41-1794480113"></script>
 </body>
 </html>

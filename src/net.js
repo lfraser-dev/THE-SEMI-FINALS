@@ -510,6 +510,7 @@ export class Online {
       case 'st': { const r = this.byId(m.id); if (r) r.state(m); break; }
       case 'shot': { if (m.id === this.myId) break; const r = this.byId(m.id); if (r?.bot?.alive) { r.bot.muzzleT = 0.05; r.bot.recoil = 1; } this.g?.remoteShot(m.f, m.e, r); break; }
       case 'gad': if (m.id !== this.myId && this.active) this.g?.remoteGadget?.(m.g); break;
+      case 'gl': case 'boom': case 'drn': case 'tsh': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
       case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
       case 'hit': if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head); break;
       case 'died': this.onDied(m); break;

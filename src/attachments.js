@@ -52,6 +52,7 @@ const MOUNT = {
   lever: { railY: 0.06, railZ: -0.05, rail: true, sight: ['rearSight', 'rearNotch'], muzzle: [], stock: ['stock'], shiftAlso: ['front', 'band'],
     under: { y: -0.016, z: -0.3 }, laser: [0.03, -0.004, -0.26] },
   minigun: { railY: 0.124, railZ: -0.08, rail: true, sight: [], muzzle: [], stock: [], laser: [0.07, 0.03, -0.24] },
+  gl: { railY: 0.1, railZ: 0.0, sight: [], muzzle: [], stock: ['stock'], laser: [0.04, 0.0, -0.2] },
   // build 0.39
   hx17: { railY: 0.071, railZ: 0.0, sight: ['flipF', 'flipR'], muzzle: ['muzzle'], stock: ['stock'],
     under: { y: 0.007, z: -0.24 }, laser: [0.044, 0.025, -0.24] },
@@ -65,7 +66,7 @@ const MOUNT = {
     under: { y: -0.025, z: -0.25, hide: ['bipodBase'] }, laser: [0.036, 0.0, -0.27] },
 };
 // slots a gun simply doesn't have
-const NO_SLOT = { bullpup: ['stock'], double: ['magazine', 'barrel', 'muzzle'], lever: ['magazine'], minigun: ['barrel', 'muzzle', 'underbarrel', 'stock'] };
+const NO_SLOT = { gl: ['optic', 'muzzle', 'barrel', 'underbarrel', 'side', 'magazine', 'stock', 'ammo'], bullpup: ['stock'], double: ['magazine', 'barrel', 'muzzle'], lever: ['magazine'], minigun: ['barrel', 'muzzle', 'underbarrel', 'stock'] };
 
 // Base effective range (m) before damage falls off
 export const RANGE = { ar: 35, smg: 16, shotgun: 9, sniper: 120, lmg: 40, pistol: 20, burst: 45, dmr: 65, mp: 13, revolver: 30, autoshotgun: 8,
@@ -74,7 +75,7 @@ export const RANGE = { ar: 35, smg: 16, shotgun: 9, sniper: 120, lmg: 40, pistol
 // variants take the attachments (and mounting points) of the gun they're built on
 export const STYLE = { burst: 'ar', dmr: 'ar', mp: 'pistol', revolver: 'pistol', autoshotgun: 'shotgun',
   kv: 'smg', bullpup: 'ar', lever: 'sniper', minigun: 'lmg', double: 'shotgun',
-  hx17: 'ar', zu9: 'smg', amr: 'sniper', rt7: 'shotgun', hc50: 'pistol', rk74: 'lmg' };
+  gl: 'ar', hx17: 'ar', zu9: 'smg', amr: 'sniper', rt7: 'shotgun', hc50: 'pistol', rk74: 'lmg' };
 const styleOf = (id) => STYLE[id] || id;
 
 const P = (name, c, s, col, extra = {}) => ({ name, c, s, col, ...extra });

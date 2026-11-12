@@ -24,6 +24,7 @@ const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 // abilities
 const DASH_TIME = 0.16, DASH_CHARGES = 2, DASH_RECHARGE = 2.2;
 const GRAPPLE_RANGE = 45, GRAPPLE_SPEED = 130, GRAPPLE_CD = 4.5, GRAPPLE_MAX = 2.6;
+const TETHER_RANGE = 30, TETHER_CD = 2.6, TETHER_YANK = 24;   // the tether: shorter, one hard slingshot yank, quick recharge
 const SLAM_CD = 7;
 
 export const SPEED = { walk: 5.4, sprint: 8.4, crouch: 2.9, ads: 3.6 };
@@ -67,6 +68,7 @@ export class Player {
     this.wallStepT = 0;
     this.dash = null;
     this.grapple = null;     // { phase: 'fire' | 'pull' | 'miss', point, t, ... }
+    this.grappleMode = 'grapple';   // or 'tether'
     this.slam = null;        // { phase: 'rise' | 'fall', t, fromY }
     this.slamHit = null;     // set on slam impact for the game to apply damage
     this.shake = 0;
@@ -552,7 +554,7 @@ export class Player {
 
   // GRAPPLE: fire a hook where you're looking; it reels you in. Press again or jump to let go.
   grappleTarget() {
-    const hit = this.world.raycast(this.eye(), this.forward(), GRAPPLE_RANGE, false);
+    const hit = this.world.raycast(this.eye(), this.forward(), this.grappleMode === 'tether' ? TETHER_RANGE : GRAPPLE_RANGE, false);
     return hit && hit.t > 2 ? hit : null;
   }
 
@@ -562,7 +564,7 @@ export class Player {
     if (a.cd > 0) return;
     const hit = this.grappleTarget();
     if (hit) {
-      this.grapple = { phase: 'fire', t: 0, point: hit.point, normal: hit.normal, travel: hit.t / GRAPPLE_SPEED, dist: hit.t };
+      this.grapple = { phase: 'fire', t: 0, point: hit.point, normal: hit.normal, travel: hit.t / GRAPPLE_SPEED, dist: hit.t, tether: this.grappleMode === 'tether' };
       this.events.push('grapplefire');
     } else {
       // miss: the hook flies out to max range and comes back
@@ -583,8 +585,10 @@ export class Player {
 
   releaseGrapple(boost) {
     if (boost) this.vel[1] = Math.max(this.vel[1], 0) + 6;
+    const cd = this.grapple?.tether ? TETHER_CD : GRAPPLE_CD;
     this.grapple = null;
-    this.abil.grapple.cd = GRAPPLE_CD;
+    this.abil.grapple.cd = cd;
+    this.abil.grapple.max = cd;
     this.events.push('grapplerelease');
   }
 
@@ -614,6 +618,17 @@ export class Player {
     }
     if (d < 1.7 || g.t > GRAPPLE_MAX * (g.anchor ? 2 : 1)) { this.releaseGrapple(to[1] > -0.5); return; }
     const dir = to.map((v) => v / d);
+    if (g.tether) {
+      // one hard yank straight at the point, a little lift, then the line lets go and you fly
+      if (!g.yanked) {
+        g.yanked = true;
+        for (let k = 0; k < 3; k++) this.vel[k] = dir[k] * TETHER_YANK;
+        this.vel[1] += 3;
+      }
+      this.grounded = false; this.wallRun = null; this.sliding = false;
+      if (g.t > 0.3 || d < 2.2) this.releaseGrapple(false);
+      return;
+    }
     const acc = 46;
     for (let k = 0; k < 3; k++) this.vel[k] += dir[k] * acc * dt;
     if (wl > 0) { this.vel[0] += wx * 9 * dt; this.vel[2] += wz * 9 * dt; }

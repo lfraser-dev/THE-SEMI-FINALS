@@ -979,6 +979,36 @@ bespoke('rk74', 'lmg', {
   CX('drumHub', [0.04, -0.1, -0.06], 0.035, 0.006, RED, { mag: true, grp: 'mag', em: 0.4 }),
 ]);
 
+// GL-1: the Medium's single-shot grenade launcher (the heavy weapon on Q, not a gun you pick from the crates).
+// A fat tube over a short receiver, ladder sight, foregrip; the band colour shows the grenade type.
+bespoke('gl', 'ar', {
+  name: 'GL-1', type: 'GRENADE LAUNCHER', launcher: true, auto: false, rpm: 60, mag: 1, dmg: 0, headMult: 1, pellets: 1,
+  reload: 1, reloadEmpty: 1, reloadAnim: 'rifle',
+  spread: { base: 0, move: 0, air: 0, bloom: 0, bloomMax: 0, ads: 1 },
+  recoil: { up: 0.05, side: 0.006, vm: 2.2 }, adsZoom: 0.85, adsSpeed: 12,
+  sightY: 0.105, adsZ: -0.28, hip: [0.16, -0.18, -0.5], muzzle: [0, 0.03, -0.39],
+  grip: [0, -0.07, 0.08], foreGrip: [0, -0.06, -0.2], eject: [0.04, 0.03, 0], magPos: [0, -0.02, -0.0], bolt: [0.035, 0.02, 0.02],
+  sound: { freq: 400, thump: 70, gain: 0.5, dur: 0.2 },
+}, [
+  P('receiver', [0, 0.0, 0.02], [0.06, 0.07, 0.22], DARK2, { m: 'metal', shape: 0.006 }),
+  C('barrel', [0, 0.03, -0.2], 0.07, 0.32, [0.36, 0.42, 0.22], { m: 'paint' }),
+  C('muzzle', [0, 0.03, -0.37], 0.078, 0.03, BLACK, { m: 'metal' }),
+  P('bore', [0, 0.03, -0.386], [0.05, 0.05, 0.002], PORT, { shape: 'cyl' }),
+  C('band', [0, 0.03, -0.1], 0.074, 0.02, YEL, { em: 0.4 }),
+  ...[-0.15, -0.25].map((z) => C('tubeRing', [0, 0.03, z], 0.074, 0.008, BLACK, { m: 'metal' })),
+  P('ladder', [0, 0.075, -0.05], [0.03, 0.02, 0.02], BLACK, { m: 'metal' }),
+  P('ladderPost', [0, 0.095, -0.05], [0.026, 0.02, 0.004], BLACK, { m: 'metal' }),
+  P('frontPost', [0, 0.085, -0.33], [0.006, 0.03, 0.006], RED, { em: 0.6 }),
+  P('grip', [0, -0.07, 0.08], [0.042, 0.1, 0.048], BLACK, { rx: -0.25, m: 'rubber' }),
+  P('guard', [0, -0.04, 0.03], [0.016, 0.006, 0.07], BLACK),
+  P('trigger', [0, -0.03, 0.03], [0.006, 0.024, 0.008], STEEL, { m: 'steel', rx: 0.3 }),
+  P('fgrip', [0, -0.04, -0.2], [0.03, 0.08, 0.034], BLACK, { m: 'rubber' }),
+  P('stock', [0, -0.01, 0.22], [0.04, 0.08, 0.18], DARK2, { m: 'poly', shape: 0.006 }),
+  P('butt', [0, -0.012, 0.315], [0.046, 0.09, 0.016], BLACK, { m: 'rubber' }),
+  P('bolt', [0.035, 0.02, 0.02], [0.012, 0.012, 0.02], STEEL, { bolt: true, m: 'steel' }),
+  P('mag', [0, -0.02, 0.0], [0.03, 0.02, 0.03], DARK2, { mag: true, hidden: true }),
+]);
+
 // a little extra detail on the original six: sling hardware, maker plates, screws, witness marks
 const polish = {
   ar: [P('slingF', [0, -0.034, -0.385], [0.006, 0.014, 0.02], STEEL, { m: 'steel' }), P('plate', [0.0295, -0.03, 0.06], [0.002, 0.012, 0.045], GREY, { em: 0.1 }),

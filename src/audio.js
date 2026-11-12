@@ -127,6 +127,12 @@ export class Sounds {
   padDrop() { this.click(1500, 0.3, 3); this.tone(500, 900, 0.12, 0.06, 'triangle'); }
   bounce() { this.tone(180, 720, 0.22, 0.16, 'triangle'); this.burst(0.25, 900, 0.28, 'bandpass', 0.9); this.click(2600, 0.2, 4); }
   ignite() { this.burst(0.35, 700, 0.18, 'bandpass', 0.7); this.tone(120, 60, 0.3, 0.05); }
+  boom(big = 1) { this.burst(0.9 * big, 180, 0.9 * big); this.tone(90, 30, 0.6, 0.35 * big); this.burst(0.25, 2400, 0.25 * big, 'bandpass', 1.2); }
+  launcher() { this.tone(260, 90, 0.18, 0.3); this.burst(0.12, 700, 0.35); }
+  drone() { this.tone(500, 1400, 0.4, 0.06, 'sawtooth'); }
+  lock() { this.tone(1800, 1800, 0.08, 0.08, 'square'); setTimeout(() => this.tone(2400, 2400, 0.08, 0.08, 'square'), 90); }
+  turret() { this.burst(0.06, 2600, 0.16); this.click(3000, 0.15, 4); }
+  turretHeavy() { this.burst(0.3, 500, 0.5); this.tone(140, 60, 0.25, 0.2); }
   denied() { this.tone(320, 220, 0.12, 0.08, 'square'); }
   crumble() { this.burst(0.3, 700, 0.35); }
   dry() { this.tone(2200, 1800, 0.03, 0.12, 'square'); }
