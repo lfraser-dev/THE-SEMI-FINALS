@@ -3,6 +3,7 @@
 import { makeBox, moveBoxTo } from './world.js';
 import { compose, mat4, norm, clamp, anglesFor } from './math.js';
 import { Builder, at, pitchBasis, basisFrom } from './rig.js';
+import { takedownPose } from './takedown.js';
 
 const DARK = [0.16, 0.17, 0.19];
 const BLACK = [0.08, 0.08, 0.09];
@@ -312,7 +313,16 @@ export class Bot {
     const em = fl ? 0.9 : 0.1, emD = fl ? 0.9 : 0;
     // whole-body fall when dying
     const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.45 : 0, fs = this.fallSign;
-    const fall = (v) => fa ? [v[0], v[1] * Math.cos(fa) - v[2] * fs * Math.sin(fa), v[2] * Math.cos(fa) + v[1] * fs * Math.sin(fa)] : v;
+    // a takedown (or cutscene) pose: whole-body offset and pitch, crouch, hand and foot targets
+    const P = this.pose || (this.tdAnim && this.alive ? takedownPose(this.tdAnim.kind, this.tdAnim.t) : null);
+    const pr = P ? P.rot : 0, pc = Math.cos(pr), ps = Math.sin(pr);
+    const posed = (v) => {
+      if (!P) return v;
+      const y = v[1] - 0.95, z = v[2];
+      return [v[0] + P.off[0], 0.95 + y * pc + z * ps + P.off[1], z * pc - y * ps + P.off[2]];
+    };
+    const fall0 = (v) => fa ? [v[0], v[1] * Math.cos(fa) - v[2] * fs * Math.sin(fa), v[2] * Math.cos(fa) + v[1] * fs * Math.sin(fa)] : v;
+    const fall = (v) => fall0(posed(v));
     const lift = this.dropY || 0;
     const W = (v) => { const p = this.toWorld(fall(v)); p[1] += lift; return p; };
     const O = W([0, 0, 0]);
@@ -324,7 +334,7 @@ export class Bot {
     const box = (c, B, size, r, color, e = em) => bd.rbox(W(c), B, size.map((v) => v * s), r * s, col(color), e);
 
     // --- pose parameters
-    const crouch = this.landK * 0.28 + (dyingT >= 0 ? Math.min(1, dyingT / 0.5) * 0.35 : 0);
+    const crouch = this.landK * 0.28 + (dyingT >= 0 ? Math.min(1, dyingT / 0.5) * 0.35 : 0) + (P ? P.crouch : 0);
     const bob = -Math.abs(Math.sin(w)) * 0.06 * g;
     const breathe = Math.sin(this.breath * 2.1) * 0.012 * (1 - g);
     const pelvis = [0, 0.95 + bob - crouch, 0];
@@ -343,7 +353,7 @@ export class Bot {
       const swing = Math.sin(ph) * 0.42 * g;
       const hip = add3(pelvis, [side * 0.12 * b, -0.04, 0]);
       const footLift = Math.max(0, Math.cos(ph)) * 0.14 * g;
-      const foot = [hip[0] + md[0] * Math.sin(swing) * 0.8 + side * 0.03, footLift + 0.06, hip[2] + md[1] * Math.sin(swing) * 0.8];
+      const foot = side > 0 && P?.footR ? P.footR : [hip[0] + md[0] * Math.sin(swing) * 0.8 + side * 0.03, footLift + 0.06, hip[2] + md[1] * Math.sin(swing) * 0.8];
       const knee = ik(hip, foot, legL, legL, [0, 0.2, -1]);
       const ankle = add3(foot, [0, 0.07, 0.03]);
       ell(hip, BB, [0.15 * b, 0.15, 0.15], FRAME, emD);                                      // hip joint
@@ -389,23 +399,29 @@ export class Bot {
     const cp = Math.cos(this.aimPitch), sp = Math.sin(this.aimPitch);
     const gd = [0, sp, -cp];                                           // gun direction (bot space)
     const gunC = add3(up([0.12 * b, 0.42, -0.3]), [0, this.recoil * 0.025, this.recoil * 0.07]);
+    const noGun = !!P?.hands;
     const GB = pitchBasis(BB, this.aimPitch + this.recoil * 0.12);
     const gat = (v) => add3(gunC, [v[0], v[1] * cp - v[2] * sp, v[1] * sp + v[2] * cp]);   // gun-space offset (z back)
-    box(gunC, GB, [0.075, 0.11, 0.4], 0.02, GUN, emD);                                          // receiver
-    box(gat([0, 0.07, 0.02]), GB, [0.06, 0.04, 0.14], 0.015, GUN2, emD);                        // top rail / optic
-    ell(gat([0, 0.09, 0.0]), GB, [0.03, 0.03, 0.02], GLOW, fl ? 1 : 0.9);                      // optic lens
-    bd.rbox(W(add3(gunC, gd.map((v) => v * 0.28))), GB, [0.038 * s, 0.038 * s, 0.2 * s], 0.017 * s, col(GUN2), emD);   // barrel
-    bd.rbox(W(add3(gunC, gd.map((v) => v * 0.36))), GB, [0.05 * s, 0.05 * s, 0.05 * s], 0.018 * s, col(GUN), emD);     // muzzle
-    box(gat([0, -0.1, 0.06]), pitchBasis(GB, 0.2), [0.05, 0.13, 0.08], 0.015, GUN2, emD);    // mag
-    box(gat([0.04, 0.0, 0.0]), GB, [0.006, 0.022, 0.3], 0.003, GLOW, fl ? 1 : 0.8);          // light strip
+    if (!noGun) {
+      box(gunC, GB, [0.075, 0.11, 0.4], 0.02, GUN, emD);                                          // receiver
+      box(gat([0, 0.07, 0.02]), GB, [0.06, 0.04, 0.14], 0.015, GUN2, emD);                        // top rail / optic
+      ell(gat([0, 0.09, 0.0]), GB, [0.03, 0.03, 0.02], GLOW, fl ? 1 : 0.9);                      // optic lens
+      bd.rbox(W(add3(gunC, gd.map((v) => v * 0.28))), GB, [0.038 * s, 0.038 * s, 0.2 * s], 0.017 * s, col(GUN2), emD);   // barrel
+      bd.rbox(W(add3(gunC, gd.map((v) => v * 0.36))), GB, [0.05 * s, 0.05 * s, 0.05 * s], 0.018 * s, col(GUN), emD);     // muzzle
+      box(gat([0, -0.1, 0.06]), pitchBasis(GB, 0.2), [0.05, 0.13, 0.08], 0.015, GUN2, emD);    // mag
+      box(gat([0.04, 0.0, 0.0]), GB, [0.006, 0.022, 0.3], 0.003, GLOW, fl ? 1 : 0.8);          // light strip
+    }
     const muz = add3(gunC, gd.map((v) => v * 0.39));
     this.muzzlePt = W(muz);
-    const gripR = add3(gunC, [0, -0.05, 0.16]), gripL = add3(gunC, gd.map((v) => v * 0.18)).map((v, i) => v + (i === 1 ? -0.05 : 0));
+    let gripR = add3(gunC, [0, -0.05, 0.16]), gripL = add3(gunC, gd.map((v) => v * 0.18)).map((v, i) => v + (i === 1 ? -0.05 : 0));
+    if (noGun) { gripL = P.hands[0]; gripR = P.hands[1]; }
+    this.armW = { hL: W(gripL), hR: W(gripR) };
 
     // --- arms solved to the gun
     for (const [side, hand] of [[-1, gripL], [1, gripR]]) {
       const sh = up([side * 0.27 * b, 0.55, 0]);
       const elbow = ik(sh, hand, 0.31, 0.3, [side * 0.8, -0.6, 0.2]);
+      if (side > 0) this.armW.eR = W(elbow); else this.armW.eL = W(elbow);
       ell(sh, TB, [0.14 * b, 0.14, 0.14], JOINT, emD);
       cap(sh, elbow, 0.05 * b, 0.042 * b, FRAME, emD);
       cap(lerp3(sh, elbow, 0.25), lerp3(sh, elbow, 0.85), 0.07 * b, 0.06 * b, RED);          // upper arm shell

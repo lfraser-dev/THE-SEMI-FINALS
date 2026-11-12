@@ -352,6 +352,7 @@ class Remote {
       }
       return;
     }
+    if (b.tdAnim) { b.tdAnim.t += dt; if (b.tdAnim.t >= b.tdAnim.def.dur) b.tdAnim = null; }
     const t = this.target;
     if (t) {
       const d = Math.hypot(t.p[0] - b.pos[0], t.p[1] - b.pos[1], t.p[2] - b.pos[2]);
@@ -378,7 +379,8 @@ class Remote {
     b.place();
   }
   kill(dir) {
-    if (!this.bot || !this.bot.alive) { this.dead = true; return; }
+    if (this.bot) this.bot.tdAnim = null;
+    if (!this.bot || !this.bot.alive) { this.dead = true; if (this.bot && !this.bot.shattered) this.bot.downed = true; return; }
     this.bot.damage(1e6, dir || [0, 0, 1]);
     this.bot.downed = true;          // lies there until their respawn (or a takedown)
     this.dead = true;
@@ -535,6 +537,7 @@ export class Online {
       case 'gl': case 'boom': case 'drn': case 'tsh': case 'trap': case 'trapgone': case 'teth': case 'gdel': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
       case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
       case 'td': if (m.id !== this.myId && this.active) this.onTakedown(m); break;
+      case 'tdb': if (m.id !== this.myId && this.active) this.g?.remoteTakedownStart?.(this.byId(m.id), m.v === this.myId ? 'me' : this.byId(m.v), m.k); break;
       case 'chk': if (m.id !== this.myId && this.active) this.g?.remoteChunks?.(m.h); break;
       case 'hit':
         if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head);

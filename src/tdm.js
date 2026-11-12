@@ -75,6 +75,7 @@ export class Agent {
         this.dead = true;
         this.respawnT = BOT_RESPAWN;
         b.downed = true;                 // on the floor until a takedown or the respawn
+        b.tdAnim = null;
         co.onDeath(this);
       }
       if (this.respawnT < 0.5) b.downed = false;
@@ -87,6 +88,16 @@ export class Agent {
       return;
     }
     this.animate(dt);
+    // ---- in the middle of a takedown: play it out, nothing else
+    if (b.tdAnim) {
+      const A = b.tdAnim;
+      A.t += dt;
+      if (!A.hit && A.t >= A.def.hitAt) { A.hit = true; g.botTakedownLand?.(this, A.victim, A.kind); }
+      if (A.t >= A.def.dur) b.tdAnim = null;
+      b.moving *= 0.8;
+      b.place();
+      return;
+    }
 
     // ---- health: hurt recently? heal up after 5 s out of the fight
     if (this.lastHp == null) this.lastHp = b.hp;
@@ -171,7 +182,7 @@ export class Agent {
     let finishing = null;
     if (!tgt && g.botTakedown) {
       this.tdCd = (this.tdCd ?? 0) - dt;
-      if (this.tdCd <= 0) for (const e of co.entities()) if (e.team !== this.team && e.downed && dist2(e.pos, b.pos) < 10 && Math.abs(e.pos[1] - b.pos[1]) < 1.5) { finishing = e; break; }
+      if (this.tdCd <= 0) for (const e of co.entities()) if (e.team !== this.team && e.downed && !((e.tdUntil || 0) > performance.now()) && dist2(e.pos, b.pos) < 10 && Math.abs(e.pos[1] - b.pos[1]) < 1.5) { finishing = e; break; }
     }
     if (finishing) {
       if (dist2(finishing.pos, b.pos) < 1.4) { g.botTakedown(this, finishing); this.tdCd = 8; }

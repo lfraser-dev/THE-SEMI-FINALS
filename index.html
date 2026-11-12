@@ -597,6 +597,9 @@
   .bd-row.me { background: rgba(255,255,255,.18); box-shadow: inset 3px 0 0 var(--t); } .bd-row.dead { opacity: .45; }
   .nt-fill { all: unset; cursor: pointer; display: inline-block; margin: 18px 10px 0 0; padding: 8px 16px; font: 800 13px var(--font); letter-spacing: .14em; background: rgba(255,255,255,.1); }
   .nt-fill.on { background: rgba(77,255,122,.22); box-shadow: inset 0 0 0 1px rgba(77,255,122,.6); }
+.downmark{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;pointer-events:none;color:#7fd0ff;font-weight:800;letter-spacing:.12em;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+.downmark b{font-size:20px;line-height:1}.downmark span{font-size:10px;margin-top:2px}.downmark small{font-size:9px;opacity:.75}
+.downmark.foe{color:#ff5a3a}
 </style>
 </head>
 <body>
@@ -669,7 +672,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.47</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.48</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -759,7 +762,7 @@
           <span>AIM KEY</span><button id="bind-aim" type="button">V</button>
           <span>SHOOT KEY</span><button id="bind-fire" type="button">F</button>
           <span>AIM MODE</span><button id="aim-mode" type="button">HOLD</button>
-          <span title="Any click shoots, including a right click or a click with a second finger on the pad. Aim with the aim key.">TRACKPAD MODE</span><button id="trackpad-mode" type="button">OFF</button>
+          <span title="Every right click (two-finger tap) toggles aim on and off instead of holding it. Taps on the pad always shoot.">TRACKPAD MODE</span><button id="trackpad-mode" type="button">OFF</button>
           <span>ABILITY</span><button id="bind-ability" type="button">G</button>
           <span>HEAVY WEAPON</span><button id="bind-heavy" type="button">Q</button>
           <span>THROWABLE</span><button id="bind-throw" type="button">Z</button>
@@ -780,39 +783,40 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.47-1794485705",
-  "./src/audio.js": "./src/audio.js?v=0.47-1794485705",
-  "./src/batch.js": "./src/batch.js?v=0.47-1794485705",
-  "./src/bench.js": "./src/bench.js?v=0.47-1794485705",
-  "./src/bots.js": "./src/bots.js?v=0.47-1794485705",
-  "./src/classes.js": "./src/classes.js?v=0.47-1794485705",
-  "./src/contestant.js": "./src/contestant.js?v=0.47-1794485705",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.47-1794485705",
-  "./src/course.js": "./src/course.js?v=0.47-1794485705",
-  "./src/effects.js": "./src/effects.js?v=0.47-1794485705",
-  "./src/elevator.js": "./src/elevator.js?v=0.47-1794485705",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.47-1794485705",
-  "./src/heavy.js": "./src/heavy.js?v=0.47-1794485705",
-  "./src/input.js": "./src/input.js?v=0.47-1794485705",
-  "./src/main.js": "./src/main.js?v=0.47-1794485705",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.47-1794485705",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.47-1794485705",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.47-1794485705",
-  "./src/math.js": "./src/math.js?v=0.47-1794485705",
-  "./src/nav.js": "./src/nav.js?v=0.47-1794485705",
-  "./src/net.js": "./src/net.js?v=0.47-1794485705",
-  "./src/player.js": "./src/player.js?v=0.47-1794485705",
-  "./src/props.js": "./src/props.js?v=0.47-1794485705",
-  "./src/renderer.js": "./src/renderer.js?v=0.47-1794485705",
-  "./src/rig.js": "./src/rig.js?v=0.47-1794485705",
-  "./src/tdm.js": "./src/tdm.js?v=0.47-1794485705",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.47-1794485705",
-  "./src/weapon.js": "./src/weapon.js?v=0.47-1794485705",
-  "./src/weapons.js": "./src/weapons.js?v=0.47-1794485705",
-  "./src/world.js": "./src/world.js?v=0.47-1794485705"
+  "./src/attachments.js": "./src/attachments.js?v=0.48-1794490052",
+  "./src/audio.js": "./src/audio.js?v=0.48-1794490052",
+  "./src/batch.js": "./src/batch.js?v=0.48-1794490052",
+  "./src/bench.js": "./src/bench.js?v=0.48-1794490052",
+  "./src/bots.js": "./src/bots.js?v=0.48-1794490052",
+  "./src/classes.js": "./src/classes.js?v=0.48-1794490052",
+  "./src/contestant.js": "./src/contestant.js?v=0.48-1794490052",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.48-1794490052",
+  "./src/course.js": "./src/course.js?v=0.48-1794490052",
+  "./src/effects.js": "./src/effects.js?v=0.48-1794490052",
+  "./src/elevator.js": "./src/elevator.js?v=0.48-1794490052",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.48-1794490052",
+  "./src/heavy.js": "./src/heavy.js?v=0.48-1794490052",
+  "./src/input.js": "./src/input.js?v=0.48-1794490052",
+  "./src/main.js": "./src/main.js?v=0.48-1794490052",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.48-1794490052",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.48-1794490052",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.48-1794490052",
+  "./src/math.js": "./src/math.js?v=0.48-1794490052",
+  "./src/nav.js": "./src/nav.js?v=0.48-1794490052",
+  "./src/net.js": "./src/net.js?v=0.48-1794490052",
+  "./src/player.js": "./src/player.js?v=0.48-1794490052",
+  "./src/props.js": "./src/props.js?v=0.48-1794490052",
+  "./src/renderer.js": "./src/renderer.js?v=0.48-1794490052",
+  "./src/rig.js": "./src/rig.js?v=0.48-1794490052",
+  "./src/takedown.js": "./src/takedown.js?v=0.48-1794490052",
+  "./src/tdm.js": "./src/tdm.js?v=0.48-1794490052",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.48-1794490052",
+  "./src/weapon.js": "./src/weapon.js?v=0.48-1794490052",
+  "./src/weapons.js": "./src/weapons.js?v=0.48-1794490052",
+  "./src/world.js": "./src/world.js?v=0.48-1794490052"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.47-1794485705"></script>
+<script type="module" src="src/main.js?v=0.48-1794490052"></script>
 </body>
 </html>
