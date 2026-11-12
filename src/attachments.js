@@ -60,7 +60,7 @@ const MOUNT = {
   amr: { railY: 0.068, railZ: -0.02, sight: ['scope', 'scopeF', 'scopeEye', 'lens', 'turret', 'turretS', 'ring1', 'ring2'], muzzle: ['brake'], stock: ['stock', 'cheek'],
     under: { y: -0.013, z: -0.33, hide: ['bipodBase'] }, laser: [0.044, 0.02, -0.3] },
   rt7: { railY: 0.058, railZ: 0.0, sight: ['rear', 'frontPost'], muzzle: ['brake'], stock: ['stock'], laser: [0.046, 0.01, -0.27] },
-  hc50: { railY: 0.061, railZ: 0.0, sight: ['front', 'rearL', 'rearR'], muzzle: [], stock: [], barrelFront: -0.146, laser: [0, -0.031, -0.07] },
+  hc50: { railY: 0.068, railZ: -0.01, sight: ['front', 'frontDot', 'rearL', 'rearR'], muzzle: [], stock: [], barrelFront: -0.157, laser: [0, -0.035, -0.085] },
   rk74: { railY: 0.063, railZ: 0.04, rail: true, sight: ['rearSight', 'frontPost'], muzzle: ['muzzle'], stock: ['stock'], shiftAlso: ['frontBase', 'frontPost', 'bipodBase', 'bipodLegL', 'bipodLegR'],
     under: { y: -0.025, z: -0.25, hide: ['bipodBase'] }, laser: [0.036, 0.0, -0.27] },
 };
@@ -229,16 +229,16 @@ export const ATTACHMENTS = {
     ammo: [1, 0.85, 0.1], mods: { range: 1.4, recoilUp: 1.12 } },
   matchammo: { slot: 'ammo', name: 'MATCH GRADE', desc: 'Consistent rounds: tighter spread, better headshots.', for: NOSG,
     ammo: [0.2, 0.9, 0.5], mods: { spreadBase: 0.8, headMult: 1.12, rpm: 0.95 } },
-  incendiary: { slot: 'ammo', name: 'INCENDIARY', desc: 'Burning rounds: a little more damage, a big flash, less range.', for: NOSG,
-    ammo: [1, 0.35, 0.05], mods: { dmg: 1.07, flash: 1.5, range: 0.9 } },
+  incendiary: { slot: 'ammo', name: 'INCENDIARY', desc: 'Sets whoever you hit on fire: 12 damage a second for 3 s. Less range.', for: NOSG,
+    ammo: [1, 0.35, 0.05], burn: { dps: 12, dur: 3 }, mods: { flash: 1.5, range: 0.9 } },
   tracer: { slot: 'ammo', name: 'TRACER', desc: 'See every shot land. A bit tighter from the hip.', for: NOSG,
     ammo: [0.4, 1, 0.3], mods: { hipSpread: 0.9, spreadBase: 0.95 } },
   flechette: { slot: 'ammo', name: 'FLECHETTE', desc: 'Steel darts: tighter, much further, a little less punch.', for: SG,
     ammo: [0.7, 0.8, 0.9], mods: { range: 1.5, dmg: 0.9, spreadBase: 0.85 } },
   slugs: { slot: 'ammo', name: 'SLUG ROUNDS', desc: 'One heavy slug instead of pellets. Accurate and far.', for: SG,
     ammo: [0.9, 0.9, 0.9], slug: true, mods: { range: 3.2 } },
-  dragon: { slot: 'ammo', name: "DRAGON'S BREATH", desc: 'Fiery pellets: a bit more damage, a huge flash.', for: SG,
-    ammo: [1, 0.3, 0.05], mods: { dmg: 1.1, flash: 2.2, range: 0.85 } },
+  dragon: { slot: 'ammo', name: "DRAGON'S BREATH", desc: 'Spits a jet of flame: sets targets alight (18 a second for 2.5 s). Short range.', for: SG,
+    ammo: [1, 0.3, 0.05], burn: { dps: 18, dur: 2.5 }, flame: true, mods: { flash: 2.2, range: 0.8 } },
 };
 
 export function optionsFor(weaponId, slot) {
@@ -576,12 +576,20 @@ export function buildDef(base, loadout = {}) {
       { mag: true, rx: mag.rx || 0, em: 0.3 }));
   }
 
-  // ---- ammo: a coloured band on the mag ----
+  // ---- ammo: a painted stripe, flush on the right side of a box mag (or of the receiver if there isn't one) ----
   const amA = A('ammo');
   if (amA) {
-    const mp = mag && !mag.hidden ? mag : null;
-    if (mp) add(P('ammoBand', [mp.c[0], mp.c[1] + mp.s[1] * 0.2, mp.c[2]], [mp.s[0] + 0.004, 0.012, mp.s[2] + 0.004], amA.ammo, { mag: true, rx: mp.rx || 0, em: 0.5 }));
-    else add(P('ammoBand', [0.035, def.magPos[1] + 0.03, def.magPos[2]], [0.004, 0.012, 0.04], amA.ammo, { em: 0.5 }));
+    const mp = mag && !mag.hidden && !mag.ry && mag.shape !== 'cyl' ? mag : null;
+    if (mp) {
+      const rx = mp.rx || 0, dy = -mp.s[1] * 0.28;
+      add(P('ammoBand', [mp.c[0] + mp.s[0] / 2 + 0.0006, mp.c[1] + dy * Math.cos(rx), mp.c[2] + dy * Math.sin(rx)],
+        [0.0012, Math.min(0.012, mp.s[1] * 0.12), mp.s[2] * 0.7], amA.ammo, { mag: true, rx, em: 0.35 }));
+    } else {
+      const r = ['receiver', 'frame', 'body', 'action', 'upper'].map(part).find((q) => q && !q.hidden);
+      if (r) add(P('ammoBand', [r.c[0] + r.s[0] / 2 + 0.0006, r.c[1] - r.s[1] * 0.25, r.c[2] + r.s[2] * 0.15], [0.0012, 0.008, Math.min(0.05, r.s[2] * 0.3)], amA.ammo, { em: 0.35 }));
+    }
+    if (amA.burn) def.burn = amA.burn;
+    if (amA.flame) def.flame = true;
     if (amA.slug) { def.pellets = 1; def.dmg = Math.round(base.dmg * base.pellets * 0.85); def.spread.base = 0.006; def.headMult = 1.8; }
   }
 
@@ -662,6 +670,9 @@ export function prosCons(base, lo, slot, aid) {
     const d = s.v - a[i].v;
     if (Math.abs(d) > 0.006) out.push({ name: s.name, good: d > 0, d });
   });
+  const at = aid && ATTACHMENTS[aid];
+  if (at?.burn) out.push({ name: `BURN ${at.burn.dps}/S FOR ${at.burn.dur} S`, good: true, d: 1 });
+  if (at?.flame) out.push({ name: 'FLAME JET', good: true, d: 0.9 });
   return out.sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
 }
 

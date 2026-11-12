@@ -262,25 +262,65 @@ function fire(w) {
     } else {
       effects.impact(hit.point, hit.normal, b.color);
       effects.decal(hit.point, hit.normal);
+      if (d.burn && i < 3) for (let k = 0; k < 3; k++) effects.flame(hit.point.map((c, j) => c + hit.normal[j] * 0.05));
     }
   }
   if (anyHit) stats.hits++;
+  // dragon's breath: a jet of fire out of the muzzle
+  if (d.flame) {
+    for (let k = 0; k < 34; k++) {
+      const sp = 8 + Math.random() * 14, j = () => (Math.random() - 0.5) * 2.6;
+      effects.flame(muzzle.map((c, i) => c + camFwd[i] * Math.random() * 0.3), [camFwd[0] * sp + j(), camFwd[1] * sp + j() - 1.2, camFwd[2] * sp + j()], 1.6 + Math.random() * 1.4);
+    }
+  }
   for (const [dummy, e] of perDummy) {
     if (!dummy.alive) continue;
-    if (dummy.remote) {
-      // another player online: tell them; they take the damage on their side
-      online.myHit(dummy.remote, e.dmg, e.head, camEye);
-      showHitmarker(false, e.head);
-      damageNumbers.push({ pos: [...e.point], amount: e.dmg, head: e.head, t: 0, el: null, drift: Math.random() - 0.5 });
-      continue;
+    hitTarget(dummy, e.dmg, e.head, e.point, e.dir, d.name);
+    if (d.burn && dummy.alive) ignite(dummy, d.burn, d.name);
+  }
+}
+
+// apply your damage to a target (a range dummy, a bot, or another player online)
+function hitTarget(dummy, dmg, head, point, dir, wname, burn = false) {
+  const num = { pos: [...point], amount: dmg, head, burn, t: 0, el: null, drift: Math.random() - 0.5 };
+  if (dummy.remote) {
+    // another player online: tell them; they take the damage on their side
+    online.myHit(dummy.remote, dmg, head, camEye);
+    if (!burn) showHitmarker(false, head);
+    damageNumbers.push(num);
+    return;
+  }
+  if (dummy.agent) dummy.agent.lastHitBy = tdm.you;      // deathmatch kill credit
+  const dead = dummy.damage(dmg, dir);
+  if (dead) { stats.kills++; burning.delete(dummy); }
+  if (dead && dummy.name) killFeed('YOU', burn ? `${wname} 🔥` : wname, dummy.name, head);
+  if (!burn || dead) showHitmarker(dead, head);
+  damageNumbers.push(num);
+  if (dead) sounds.kill(); else if (!burn) sounds.hit();
+}
+
+// ---------- fire: incendiary rounds and dragon's breath set what they hit alight ----------
+const burning = new Map();   // target -> { t, dps, acc, tick, name }
+function ignite(target, burn, name) {
+  const b = burning.get(target);
+  if (b) { b.t = Math.max(b.t, burn.dur); b.dps = Math.max(b.dps, burn.dps); return; }
+  burning.set(target, { t: burn.dur, dps: burn.dps, acc: 0, tick: 0, name });
+  sounds.ignite?.();
+}
+function updateBurns(dt) {
+  for (const [tg, b] of burning) {
+    if (!tg.alive || b.t <= 0) { burning.delete(tg); continue; }
+    const step = Math.min(dt, b.t);
+    b.t -= dt; b.acc += b.dps * step; b.tick += dt;
+    // flames licking up the body
+    const n = Math.min(4, Math.floor(dt * 45 + Math.random()));
+    for (let k = 0; k < n; k++) effects.flame([tg.pos[0] + (Math.random() - 0.5) * 0.45, tg.pos[1] + 0.15 + Math.random() * 1.5, tg.pos[2] + (Math.random() - 0.5) * 0.45], [0, 0.4, 0], 1.6 + Math.random());
+    if (b.tick >= 0.4 || b.t <= 0) {
+      b.tick = 0;
+      const dmg = Math.round(b.acc);
+      b.acc -= dmg;
+      if (dmg > 0) hitTarget(tg, dmg, false, [tg.pos[0], tg.pos[1] + 1.3, tg.pos[2]], [0, 0, 0], b.name, true);
     }
-    if (dummy.agent) dummy.agent.lastHitBy = tdm.you;      // deathmatch kill credit
-    const dead = dummy.damage(e.dmg, e.dir);
-    if (dead) stats.kills++;
-    if (dead && dummy.name) killFeed('YOU', d.name, dummy.name, e.head);
-    showHitmarker(dead, e.head);
-    damageNumbers.push({ pos: [...e.point], amount: e.dmg, head: e.head, t: 0, el: null, drift: Math.random() - 0.5 });
-    dead ? sounds.kill() : sounds.hit();
   }
 }
 
@@ -852,7 +892,7 @@ function updateHud(dt, fovRad) {
     d.t += dt;
     if (!d.el) {
       d.el = document.createElement('div');
-      d.el.className = `dmg${d.head ? ' head' : ''}`;
+      d.el.className = `dmg${d.head ? ' head' : ''}${d.burn ? ' burn' : ''}`;
       d.el.textContent = d.amount;
       hud.dmgLayer.appendChild(d.el);
     }
@@ -898,7 +938,7 @@ function enterRange() {
   if (where !== 'range') {
     if (tdm.active) endMatch(false);
     where = 'range';
-    gadgets.clear();
+    gadgets.clear(); burning.clear();
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
     document.body.classList.remove('stadium');
@@ -919,7 +959,7 @@ function enterStadium() {
   if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
   if (arriving) {
     where = 'stadium';
-    gadgets.clear();
+    gadgets.clear(); burning.clear();
     botMgr.stop();
     course.reset();
     cutscene = null; pressSeq = null;
@@ -1121,7 +1161,7 @@ function startOnline(info) {
   menu.classList.add('hidden');
   enterStadium();
   batches.world = null;
-  gadgets.clear();
+  gadgets.clear(); burning.clear();
   resetGlass();
   const sp = stadium.spawns[info.team];
   player.spawn(sp.pos, sp.yaw);
@@ -1149,7 +1189,7 @@ function setTeamsHud(m) {
 function startMatch(m) {
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
-  gadgets.clear();
+  gadgets.clear(); burning.clear();
   resetGlass();
   walls.forEach((w) => w.reset());
   tdm.start(m, stadium, player, classLo.cls);
@@ -1161,7 +1201,7 @@ function startMatch(m) {
 }
 function endMatch(toMenu) {
   if (tdm === online) { online.leave(); tdm = ai; } else tdm.stop();
-  gadgets.clear();
+  gadgets.clear(); burning.clear();
   match = null;
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
@@ -1829,7 +1869,7 @@ function frameBody(now) {
     handleWeaponEvents(w);
   }
   dummies.forEach((d) => d.update(dt, time));
-  if (playing && !bench.open) gadgets.update(dt, [padRider]);
+  if (playing && !bench.open) { gadgets.update(dt, [padRider]); updateBurns(dt); }
   effects.update(dt);
 
   // ---- render ----
@@ -1972,4 +2012,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { gadgets, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

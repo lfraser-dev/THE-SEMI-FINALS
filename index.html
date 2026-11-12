@@ -41,6 +41,7 @@
   #damage .dmg { position: absolute; left: 0; top: 0; font-weight: 800; font-style: italic; font-size: 22px; color: #fff;
     -webkit-text-stroke: 1px var(--ink); text-shadow: 0 2px 0 rgba(0,0,0,.25); }
   #damage .dmg.head { color: #ffc21a; font-size: 28px; }
+  #damage .dmg.burn { color: #ff7a1a; font-size: 17px; }
 
   .panel { position: absolute; background: rgba(17,18,22,.88); color: #fff; padding: 8px 14px; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
   #ammobox { right: 28px; bottom: 26px; display: flex; align-items: baseline; gap: 8px; padding: 6px 22px 8px; }
@@ -645,7 +646,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.39</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.40</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -746,38 +747,38 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.39-1794475296",
-  "./src/audio.js": "./src/audio.js?v=0.39-1794475296",
-  "./src/batch.js": "./src/batch.js?v=0.39-1794475296",
-  "./src/bench.js": "./src/bench.js?v=0.39-1794475296",
-  "./src/bots.js": "./src/bots.js?v=0.39-1794475296",
-  "./src/classes.js": "./src/classes.js?v=0.39-1794475296",
-  "./src/contestant.js": "./src/contestant.js?v=0.39-1794475296",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.39-1794475296",
-  "./src/course.js": "./src/course.js?v=0.39-1794475296",
-  "./src/effects.js": "./src/effects.js?v=0.39-1794475296",
-  "./src/elevator.js": "./src/elevator.js?v=0.39-1794475296",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.39-1794475296",
-  "./src/input.js": "./src/input.js?v=0.39-1794475296",
-  "./src/main.js": "./src/main.js?v=0.39-1794475296",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.39-1794475296",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.39-1794475296",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.39-1794475296",
-  "./src/math.js": "./src/math.js?v=0.39-1794475296",
-  "./src/nav.js": "./src/nav.js?v=0.39-1794475296",
-  "./src/net.js": "./src/net.js?v=0.39-1794475296",
-  "./src/player.js": "./src/player.js?v=0.39-1794475296",
-  "./src/props.js": "./src/props.js?v=0.39-1794475296",
-  "./src/renderer.js": "./src/renderer.js?v=0.39-1794475296",
-  "./src/rig.js": "./src/rig.js?v=0.39-1794475296",
-  "./src/tdm.js": "./src/tdm.js?v=0.39-1794475296",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.39-1794475296",
-  "./src/weapon.js": "./src/weapon.js?v=0.39-1794475296",
-  "./src/weapons.js": "./src/weapons.js?v=0.39-1794475296",
-  "./src/world.js": "./src/world.js?v=0.39-1794475296"
+  "./src/attachments.js": "./src/attachments.js?v=0.40-1794476821",
+  "./src/audio.js": "./src/audio.js?v=0.40-1794476821",
+  "./src/batch.js": "./src/batch.js?v=0.40-1794476821",
+  "./src/bench.js": "./src/bench.js?v=0.40-1794476821",
+  "./src/bots.js": "./src/bots.js?v=0.40-1794476821",
+  "./src/classes.js": "./src/classes.js?v=0.40-1794476821",
+  "./src/contestant.js": "./src/contestant.js?v=0.40-1794476821",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.40-1794476821",
+  "./src/course.js": "./src/course.js?v=0.40-1794476821",
+  "./src/effects.js": "./src/effects.js?v=0.40-1794476821",
+  "./src/elevator.js": "./src/elevator.js?v=0.40-1794476821",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.40-1794476821",
+  "./src/input.js": "./src/input.js?v=0.40-1794476821",
+  "./src/main.js": "./src/main.js?v=0.40-1794476821",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.40-1794476821",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.40-1794476821",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.40-1794476821",
+  "./src/math.js": "./src/math.js?v=0.40-1794476821",
+  "./src/nav.js": "./src/nav.js?v=0.40-1794476821",
+  "./src/net.js": "./src/net.js?v=0.40-1794476821",
+  "./src/player.js": "./src/player.js?v=0.40-1794476821",
+  "./src/props.js": "./src/props.js?v=0.40-1794476821",
+  "./src/renderer.js": "./src/renderer.js?v=0.40-1794476821",
+  "./src/rig.js": "./src/rig.js?v=0.40-1794476821",
+  "./src/tdm.js": "./src/tdm.js?v=0.40-1794476821",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.40-1794476821",
+  "./src/weapon.js": "./src/weapon.js?v=0.40-1794476821",
+  "./src/weapons.js": "./src/weapons.js?v=0.40-1794476821",
+  "./src/world.js": "./src/world.js?v=0.40-1794476821"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.39-1794475296"></script>
+<script type="module" src="src/main.js?v=0.40-1794476821"></script>
 </body>
 </html>

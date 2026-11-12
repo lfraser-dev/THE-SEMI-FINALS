@@ -126,6 +126,7 @@ export class Sounds {
   barricadeBreak() { this.burst(0.5, 500, 0.5); this.burst(0.3, 2600, 0.15, 'bandpass', 1.5); this.tone(160, 50, 0.4, 0.2); }
   padDrop() { this.click(1500, 0.3, 3); this.tone(500, 900, 0.12, 0.06, 'triangle'); }
   bounce() { this.tone(180, 720, 0.22, 0.16, 'triangle'); this.burst(0.25, 900, 0.28, 'bandpass', 0.9); this.click(2600, 0.2, 4); }
+  ignite() { this.burst(0.35, 700, 0.18, 'bandpass', 0.7); this.tone(120, 60, 0.3, 0.05); }
   denied() { this.tone(320, 220, 0.12, 0.08, 'square'); }
   crumble() { this.burst(0.3, 700, 0.35); }
   dry() { this.tone(2200, 1800, 0.03, 0.12, 'square'); }

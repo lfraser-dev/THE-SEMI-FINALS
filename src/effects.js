@@ -63,6 +63,15 @@ export class Effects {
     }
   }
 
+  // a lick of flame: glowing, drifts up and fades (incendiary hits, burning targets, dragon's breath)
+  flame(pos, vel = [0, 0, 0], big = 1) {
+    const sz = (0.05 + Math.random() * 0.08) * big;
+    const col = Math.random() < 0.5 ? [1, 0.55, 0.12] : Math.random() < 0.6 ? [1, 0.32, 0.05] : [1, 0.85, 0.35];
+    this.spawnPiece(pos, [sz, sz, sz], [vel[0] + (Math.random() - 0.5) * 0.7, vel[1] + 1.2 + Math.random() * 1.4, vel[2] + (Math.random() - 0.5) * 0.7], col, 0.28 + Math.random() * 0.35, 1);
+    const d = this.debris[this.debris.length - 1];
+    d.noGravity = true; d.flame = true; d.shape = 'sphere';
+  }
+
   casing(pos, vel) {
     this.spawnPiece(pos, [0.012, 0.012, 0.032], vel, [0.86, 0.66, 0.24], 2.2, 0.15);
   }
@@ -124,10 +133,18 @@ export class Effects {
     }
   }
 
+  // flames swell then shrink, and cool from white-yellow through orange to a dull red as they die
+  flameLook(d) {
+    const k = d.life / d.maxLife;
+    const sz = d.size.map((v) => v * (k > 0.75 ? 0.6 + (1 - k) * 2.4 : 0.4 + k * 0.85));
+    const col = k > 0.7 ? [1, 0.8, 0.25] : k > 0.4 ? [1, 0.42, 0.04] : [0.75, 0.14, 0.02];
+    return [sz, col];
+  }
+
   drawOpaque(r) {
     for (const d of this.decals) r.draw(d.model, d.size, [0.12, 0.12, 0.13], 0, 0, 0.6);
     for (const d of this.debris) {
-      if (d.life < 0.5) continue;
+      if (d.life < 0.5 || d.flame) continue;
       compose(this.m, d.pos, d.rot, d.size);
       r.draw(this.m, d.size, d.color, 0, d.size[0] > 0.03 ? 1 : 0, d.emissive);
     }
@@ -135,6 +152,12 @@ export class Effects {
 
   drawTransparent(r) {
     for (const d of this.debris) {
+      if (d.flame) {
+        const [sz, col] = this.flameLook(d);
+        compose(this.m, d.pos, d.rot, sz);
+        r.draw(this.m, sz, col, 0, 0, 1, Math.min(1, d.life / d.maxLife * 2.5), 'sphere');
+        continue;
+      }
       if (d.life >= 0.5) continue;
       compose(this.m, d.pos, d.rot, d.size);
       r.draw(this.m, d.size, d.color, 0, 1, d.emissive, d.life / 0.5);

@@ -892,35 +892,55 @@ bespoke('rt7', 'shotgun', {
   P('butt', [0, -0.01, 0.4], [0.056, 0.11, 0.02], BLACK, { m: 'rubber', grp: 'stock' }),
 ]);
 
-// HC-50: hand cannon. Big bright-steel slide over a long fixed barrel, wooden grip panels, exposed hammer.
+// HC-50: hand cannon (Desert Eagle-style). A fixed, rail-topped barrel runs the full length over a slab-sided
+// polished slide; squared-off muzzle face, big hooked trigger guard, wrap-around rubber grip, ambi safeties.
 bespoke('hc50', 'pistol', {
   name: 'HC-50', type: 'HAND CANNON', rpm: 170, mag: 7, dmg: 78, headMult: 2, reloadAnim: 'classic',
   reload: 1.6, reloadEmpty: 2.0,
   spread: { base: 0.004, move: 0.016, air: 0.026, bloom: 0.02, bloomMax: 0.05, ads: 0.35 },
   recoil: { up: 0.05, side: 0.012, vm: 2.4 }, adsSpeed: 14,
-  sightY: 0.072, adsZ: -0.36, hip: [0.15, -0.165, -0.44], muzzle: [0, 0.036, -0.16],
-  grip: [0, -0.06, 0.06], foreGrip: [-0.03, -0.08, 0.05], eject: [0.025, 0.05, 0], magPos: [0, -0.11, 0.07], bolt: [0, 0.036, -0.015],
+  sightY: 0.074, adsZ: -0.36, hip: [0.15, -0.165, -0.44], muzzle: [0, 0.05, -0.165],
+  grip: [0, -0.062, 0.062], foreGrip: [-0.03, -0.085, 0.055], eject: [0.025, 0.05, -0.01], magPos: [0, -0.115, 0.078], bolt: [0, 0.03, -0.02],
   sound: { freq: 1700, thump: 90, gain: 0.85, dur: 0.32 },
 }, [
-  P('frame', [0, 0, -0.015], [0.034, 0.036, 0.2], DARK2, { m: 'metal' }),
-  P('slide', [0, 0.036, -0.015], [0.038, 0.044, 0.26], STEEL2, { bolt: true, m: 'steel', shape: 0.004 }),
-  P('slideTop', [0, 0.059, -0.03], [0.02, 0.004, 0.2], DARK2, { bolt: true, m: 'metal' }),
-  ...[0.07, 0.08, 0.09, 0.1].flatMap((z) => [-1, 1].map((sx) => P('serr', [sx * 0.0192, 0.036, z], [0.002, 0.034, 0.004], DARK, { bolt: true }))),
-  P('port', [0.0192, 0.044, 0.0], [0.002, 0.02, 0.05], PORT, { bolt: true }),
-  P('muzzleFace', [0, 0.036, -0.146], [0.026, 0.026, 0.004], PORT, { bolt: true }),
-  P('front', [0, 0.066, -0.13], [0.006, 0.012, 0.01], RED, { em: 1, bolt: true }),
-  P('rearL', [-0.011, 0.063, 0.1], [0.006, 0.012, 0.01], BLACK, { bolt: true }),
-  P('rearR', [0.011, 0.063, 0.1], [0.006, 0.012, 0.01], BLACK, { bolt: true }),
-  P('grip', [0, -0.06, 0.06], [0.036, 0.12, 0.056], BLACK, { rx: -0.22, m: 'rubber' }),
-  P('gripPanel', [0.0185, -0.06, 0.06], [0.002, 0.08, 0.04], WOOD, { rx: -0.22, m: 'wood' }),
-  P('gripPanelL', [-0.0185, -0.06, 0.06], [0.002, 0.08, 0.04], WOOD, { rx: -0.22, m: 'wood' }),
-  P('guardFront', [0, -0.024, -0.05], [0.012, 0.022, 0.006], DARK2, { m: 'metal' }),
-  P('guard', [0, -0.032, -0.02], [0.012, 0.006, 0.065], DARK2, { m: 'metal' }),
-  P('trigger', [0, -0.022, -0.012], [0.006, 0.02, 0.006], STEEL, { m: 'steel', rx: 0.25 }),
-  P('hammer', [0, 0.03, 0.12], [0.012, 0.022, 0.014], BLACK, { rx: -0.4, m: 'metal' }),
-  P('slideStop', [-0.018, 0.008, 0.0], [0.003, 0.006, 0.022], BLACK),
-  P('mag', [0, -0.11, 0.07], [0.028, 0.07, 0.044], DARK, { rx: -0.22, mag: true, m: 'metal' }),
-  P('magBase', [0, -0.148, 0.079], [0.032, 0.01, 0.048], BLACK, { rx: -0.22, mag: true, grp: 'mag', m: 'poly' }),
+  // frame and dust cover with a short rail underneath
+  P('frame', [0, -0.002, -0.02], [0.032, 0.03, 0.2], DARK2, { m: 'metal', shape: 0.004 }),
+  P('dustRail', [0, -0.019, -0.085], [0.028, 0.008, 0.07], DARK2, { m: 'metal' }),
+  ...[-0.065, -0.08, -0.095, -0.11].map((z) => P('railNotch', [0, -0.0235, z], [0.029, 0.002, 0.005], BLACK)),
+  // the slide: slab sides, bevelled top, deep slanted serrations, engraved line, big port, ambi safeties
+  P('slide', [0, 0.03, -0.02], [0.038, 0.036, 0.26], STEEL2, { bolt: true, m: 'steel', shape: 0.003 }),
+  P('slideBevel', [0, 0.05, -0.02], [0.03, 0.008, 0.26], STEEL2, { bolt: true, m: 'steel' }),
+  ...[0.06, 0.07, 0.08, 0.09, 0.1].flatMap((z) => [-1, 1].map((sx) => P('serr', [sx * 0.0192, 0.03, z], [0.002, 0.03, 0.004], DARK, { bolt: true, rx: 0.3 }))),
+  ...[-1, 1].map((sx) => P('slideLine', [sx * 0.0192, 0.045, -0.06], [0.002, 0.002, 0.17], DARK, { bolt: true })),
+  P('port', [0.0192, 0.036, -0.005], [0.002, 0.018, 0.06], PORT, { bolt: true }),
+  ...[-1, 1].map((sx) => P('safety', [sx * 0.0215, 0.038, 0.092], [0.006, 0.009, 0.022], BLACK, { bolt: true, m: 'metal' })),
+  // the fixed barrel on top: full-length, with a vented rib and a squared-off face
+  P('barrelTop', [0, 0.06, -0.04], [0.024, 0.014, 0.23], STEEL2, { m: 'steel', shape: 0.003 }),
+  ...[-0.12, -0.09, -0.06, -0.03, 0.0, 0.03].map((z) => P('ribSlot', [0, 0.0672, z], [0.016, 0.0016, 0.008], DARK)),
+  P('muzzleFace', [0, 0.04, -0.1565], [0.038, 0.05, 0.004], DARK, { m: 'metal' }),
+  C('bore', [0, 0.05, -0.159], 0.015, 0.003, PORT),
+  // sights
+  P('front', [0, 0.072, -0.142], [0.005, 0.012, 0.012], BLACK, { m: 'metal' }),
+  P('frontDot', [0, 0.074, -0.1355], [0.003, 0.004, 0.001], RED, { em: 1 }),
+  P('rearL', [-0.009, 0.071, 0.068], [0.007, 0.01, 0.012], BLACK, { m: 'metal' }),
+  P('rearR', [0.009, 0.071, 0.068], [0.007, 0.01, 0.012], BLACK, { m: 'metal' }),
+  // trigger guard with a hooked front, trigger, controls
+  P('guard', [0, -0.039, -0.024], [0.012, 0.006, 0.07], DARK2, { m: 'metal' }),
+  P('guardFront', [0, -0.025, -0.058], [0.012, 0.034, 0.008], DARK2, { m: 'metal', rx: -0.2 }),
+  P('guardHook', [0, -0.042, -0.064], [0.012, 0.006, 0.012], DARK2, { m: 'metal' }),
+  P('trigger', [0, -0.024, -0.016], [0.007, 0.022, 0.007], STEEL, { m: 'steel', rx: 0.25 }),
+  P('slideStop', [-0.0175, 0.006, -0.01], [0.003, 0.007, 0.026], BLACK, { m: 'metal' }),
+  P('magRelease', [-0.0175, -0.01, 0.025], [0.003, 0.012, 0.01], BLACK, { m: 'metal' }),
+  // wrap-around rubber grip, steel backstrap, beavertail and a big ring hammer
+  P('grip', [0, -0.066, 0.062], [0.038, 0.125, 0.058], BLACK, { rx: -0.25, m: 'rubber', shape: 0.008 }),
+  ...[-1, 1].map((sx) => P('gripPanel', [sx * 0.0195, -0.07, 0.062], [0.002, 0.085, 0.042], [0.05, 0.05, 0.055], { rx: -0.25, m: 'rubber' })),
+  ...[0, 1, 2].map((k) => P('fingerGroove', [0, -0.05 - k * 0.024, 0.036 + k * 0.006], [0.039, 0.004, 0.006], [0.05, 0.05, 0.055], { rx: -0.25 })),
+  P('backstrap', [0, -0.062, 0.092], [0.03, 0.11, 0.008], DARK2, { rx: -0.25, m: 'metal' }),
+  P('beaver', [0, 0.006, 0.098], [0.03, 0.012, 0.03], DARK2, { m: 'metal' }),
+  P('hammer', [0, 0.03, 0.118], [0.012, 0.024, 0.012], BLACK, { rx: -0.5, m: 'metal' }),
+  P('hammerSpur', [0, 0.044, 0.126], [0.012, 0.006, 0.012], BLACK, { m: 'metal' }),
+  P('mag', [0, -0.115, 0.078], [0.028, 0.06, 0.042], DARK, { rx: -0.25, mag: true, m: 'metal' }),
+  P('magBase', [0, -0.135, 0.083], [0.04, 0.012, 0.06], BLACK, { rx: -0.25, mag: true, grp: 'mag', m: 'poly' }),
 ]);
 
 // RK-74: light machine gun. Long rifle with wooden furniture, a 75-round drum, folded bipod by the muzzle.
