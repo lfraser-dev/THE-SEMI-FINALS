@@ -600,9 +600,65 @@
 .downmark{position:absolute;left:0;top:0;display:flex;flex-direction:column;align-items:center;pointer-events:none;color:#7fd0ff;font-weight:800;letter-spacing:.12em;text-shadow:0 1px 4px rgba(0,0,0,.7)}
 .downmark b{font-size:20px;line-height:1}.downmark span{font-size:10px;margin-top:2px}.downmark small{font-size:9px;opacity:.75}
 .downmark.foe{color:#ff5a3a}
+  /* password gate */
+  #gate { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: radial-gradient(circle at 50% 35%, #26262c, #0b0b0d 70%); color: #fff; font-family: var(--font); }
+  #gate.hidden { display: none; }
+  #gate .g-card { width: min(380px, 100%); text-align: center; }
+  #gate .g-kick { font-weight: 800; letter-spacing: .35em; font-size: 12px; color: #ffb21a; }
+  #gate h1 { margin: 8px 0 22px; white-space: nowrap; font-size: clamp(24px, 7.5vw, 42px); font-style: italic; font-weight: 900; letter-spacing: .01em; line-height: 1; }
+  #gate form { display: flex; gap: 8px; }
+  #gate input { flex: 1; min-width: 0; padding: 14px 16px; border: 2px solid #3a3a42; border-radius: 6px; background: #151518; color: #fff;
+    font: 700 18px var(--font); letter-spacing: .25em; outline: none; }
+  #gate input:focus { border-color: #ffb21a; }
+  #gate button { padding: 0 20px; border: 0; border-radius: 6px; background: #e8261a; color: #fff; font: 900 15px var(--font); letter-spacing: .12em; cursor: pointer; }
+  #gate .g-msg { height: 18px; margin-top: 12px; font-size: 12px; font-weight: 700; letter-spacing: .15em; color: #ff5a3a; }
+  #gate.shake .g-card { animation: gshake .35s; }
+  @keyframes gshake { 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
 </style>
 </head>
 <body>
+<div id="gate">
+  <div class="g-card">
+    <div class="g-kick">PRIVATE ACCESS</div>
+    <h1>THE SEMI-FINALS</h1>
+    <form id="gate-form" autocomplete="off">
+      <input id="gate-pw" type="password" placeholder="PASSWORD" aria-label="Password" autofocus>
+      <button type="submit">ENTER</button>
+    </form>
+    <div class="g-msg" id="gate-msg"></div>
+  </div>
+</div>
+<script>
+// Password screen. Only a hash of the password is stored here, never the password itself.
+// A device that got in once is remembered, so friends only type it the first time.
+(() => {
+  const HASH = '8b78e159b598ad5da234cdd1b0e42224083a0d7dbb40fe6fb045607b92e0de57';
+  const gate = document.getElementById('gate'), form = document.getElementById('gate-form');
+  const pw = document.getElementById('gate-pw'), msg = document.getElementById('gate-msg');
+  let ok = false;
+  try { ok = localStorage.getItem('semifinals.gate') === HASH; } catch { /* private window */ }
+  if (ok) { gate.classList.add('hidden'); return; }
+  // nothing reaches the game while the gate is up (typing in the box stays in the box)
+  const stop = (e) => { if (!gate.classList.contains('hidden') && !gate.contains(e.target)) e.stopImmediatePropagation(); };
+  for (const t of ['keydown', 'keyup', 'mousedown', 'click']) { addEventListener(t, stop, true); gate.addEventListener(t, (e) => e.stopPropagation()); }
+  const sha = async (t) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const h = await sha('semifinals:' + pw.value.trim().toLowerCase());
+    if (h === HASH) {
+      try { localStorage.setItem('semifinals.gate', HASH); } catch { /* ignore */ }
+      gate.classList.add('hidden');
+      for (const t of ['keydown', 'keyup', 'mousedown', 'click']) removeEventListener(t, stop, true);
+    } else {
+      msg.textContent = 'WRONG PASSWORD';
+      pw.value = '';
+      gate.classList.remove('shake'); void gate.offsetWidth; gate.classList.add('shake');
+    }
+  });
+  setTimeout(() => pw.focus(), 50);
+})();
+</script>
 <canvas id="game"></canvas>
 
 <div id="vignette"></div>
@@ -672,7 +728,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.49</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.50</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -783,40 +839,40 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.49-1794491021",
-  "./src/audio.js": "./src/audio.js?v=0.49-1794491021",
-  "./src/batch.js": "./src/batch.js?v=0.49-1794491021",
-  "./src/bench.js": "./src/bench.js?v=0.49-1794491021",
-  "./src/bots.js": "./src/bots.js?v=0.49-1794491021",
-  "./src/classes.js": "./src/classes.js?v=0.49-1794491021",
-  "./src/contestant.js": "./src/contestant.js?v=0.49-1794491021",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.49-1794491021",
-  "./src/course.js": "./src/course.js?v=0.49-1794491021",
-  "./src/effects.js": "./src/effects.js?v=0.49-1794491021",
-  "./src/elevator.js": "./src/elevator.js?v=0.49-1794491021",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.49-1794491021",
-  "./src/heavy.js": "./src/heavy.js?v=0.49-1794491021",
-  "./src/input.js": "./src/input.js?v=0.49-1794491021",
-  "./src/main.js": "./src/main.js?v=0.49-1794491021",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.49-1794491021",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.49-1794491021",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.49-1794491021",
-  "./src/math.js": "./src/math.js?v=0.49-1794491021",
-  "./src/nav.js": "./src/nav.js?v=0.49-1794491021",
-  "./src/net.js": "./src/net.js?v=0.49-1794491021",
-  "./src/player.js": "./src/player.js?v=0.49-1794491021",
-  "./src/props.js": "./src/props.js?v=0.49-1794491021",
-  "./src/renderer.js": "./src/renderer.js?v=0.49-1794491021",
-  "./src/rig.js": "./src/rig.js?v=0.49-1794491021",
-  "./src/takedown.js": "./src/takedown.js?v=0.49-1794491021",
-  "./src/tdm.js": "./src/tdm.js?v=0.49-1794491021",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.49-1794491021",
-  "./src/weapon.js": "./src/weapon.js?v=0.49-1794491021",
-  "./src/weapons.js": "./src/weapons.js?v=0.49-1794491021",
-  "./src/world.js": "./src/world.js?v=0.49-1794491021"
+  "./src/attachments.js": "./src/attachments.js?v=0.50-1794492341",
+  "./src/audio.js": "./src/audio.js?v=0.50-1794492341",
+  "./src/batch.js": "./src/batch.js?v=0.50-1794492341",
+  "./src/bench.js": "./src/bench.js?v=0.50-1794492341",
+  "./src/bots.js": "./src/bots.js?v=0.50-1794492341",
+  "./src/classes.js": "./src/classes.js?v=0.50-1794492341",
+  "./src/contestant.js": "./src/contestant.js?v=0.50-1794492341",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.50-1794492341",
+  "./src/course.js": "./src/course.js?v=0.50-1794492341",
+  "./src/effects.js": "./src/effects.js?v=0.50-1794492341",
+  "./src/elevator.js": "./src/elevator.js?v=0.50-1794492341",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.50-1794492341",
+  "./src/heavy.js": "./src/heavy.js?v=0.50-1794492341",
+  "./src/input.js": "./src/input.js?v=0.50-1794492341",
+  "./src/main.js": "./src/main.js?v=0.50-1794492341",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.50-1794492341",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.50-1794492341",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.50-1794492341",
+  "./src/math.js": "./src/math.js?v=0.50-1794492341",
+  "./src/nav.js": "./src/nav.js?v=0.50-1794492341",
+  "./src/net.js": "./src/net.js?v=0.50-1794492341",
+  "./src/player.js": "./src/player.js?v=0.50-1794492341",
+  "./src/props.js": "./src/props.js?v=0.50-1794492341",
+  "./src/renderer.js": "./src/renderer.js?v=0.50-1794492341",
+  "./src/rig.js": "./src/rig.js?v=0.50-1794492341",
+  "./src/takedown.js": "./src/takedown.js?v=0.50-1794492341",
+  "./src/tdm.js": "./src/tdm.js?v=0.50-1794492341",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.50-1794492341",
+  "./src/weapon.js": "./src/weapon.js?v=0.50-1794492341",
+  "./src/weapons.js": "./src/weapons.js?v=0.50-1794492341",
+  "./src/world.js": "./src/world.js?v=0.50-1794492341"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.49-1794491021"></script>
+<script type="module" src="src/main.js?v=0.50-1794492341"></script>
 </body>
 </html>
