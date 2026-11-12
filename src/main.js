@@ -41,7 +41,7 @@ try {
 }
 
 // ---------- settings ----------
-const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold', dashKey: 'KeyQ', grappleKey: 'KeyG', slamKey: 'KeyZ', abilityKey: 'KeyQ' };
+const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold', trackpad: false, dashKey: 'KeyQ', grappleKey: 'KeyG', slamKey: 'KeyZ', abilityKey: 'KeyQ' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('semifinals.settings') || '{}')); } catch { /* ignore */ }
 const saveSettings = () => { try { localStorage.setItem('semifinals.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 
@@ -61,7 +61,7 @@ const effects = new Effects(world);
 const input = new Input(canvas);
 const sounds = new Sounds();
 const gadgets = new Gadgets(world, effects, sounds);     // barricades and bounce pads
-const applyBinds = () => { input.binds = { aim: settings.aimKey, fire: settings.fireKey }; input.aimMode = settings.aimMode; };
+const applyBinds = () => { input.binds = { aim: settings.aimKey, fire: settings.fireKey }; input.aimMode = settings.aimMode; input.trackpad = !!settings.trackpad; };
 applyBinds();
 sounds.setVolume(settings.volume);
 const player = new Player(world);
@@ -1557,6 +1557,7 @@ let rebinding = null;
 function refreshBindButtons() {
   for (const [k, id] of Object.entries(BINDS)) $(id).textContent = keyName(settings[k]);
   $('aim-mode').textContent = settings.aimMode === 'toggle' ? 'TOGGLE' : 'HOLD';
+  $('trackpad-mode').textContent = settings.trackpad ? 'ON' : 'OFF';
   document.querySelectorAll('.keyhint-aim').forEach((el) => { el.textContent = keyName(settings.aimKey); });
   document.querySelectorAll('.keyhint-fire').forEach((el) => { el.textContent = keyName(settings.fireKey); });
   document.querySelectorAll('.keyhint-ability').forEach((el) => { el.textContent = keyName(settings.abilityKey); });
@@ -1568,6 +1569,10 @@ function startRebind(which, btn) {
   $('bindnote').textContent = 'Esc to cancel';
 }
 for (const [k, id] of Object.entries(BINDS)) $(id).addEventListener('click', (e) => startRebind(k, e.currentTarget));
+$('trackpad-mode').addEventListener('click', () => {
+  settings.trackpad = !settings.trackpad;
+  applyBinds(); saveSettings(); refreshBindButtons();
+});
 $('aim-mode').addEventListener('click', () => {
   settings.aimMode = settings.aimMode === 'toggle' ? 'hold' : 'toggle';
   applyBinds(); saveSettings(); refreshBindButtons();
