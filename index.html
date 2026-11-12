@@ -582,6 +582,20 @@
   .me-row.mine { background: rgba(255,255,255,.14); }
   .me-row.adv i { color: #4dff7a; opacity: 1; }
   .me-card button { all: unset; cursor: pointer; margin-top: 24px; display: inline-block; padding: 12px 40px; font: 800 italic 28px var(--font); background: var(--red); clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+  .me-card button.alt { background: rgba(255,255,255,.12); margin-left: 12px; }
+  .me-wait { margin-top: 22px; font: 700 14px var(--font); letter-spacing: .2em; opacity: .7; }
+  #board { position: fixed; left: 50%; top: 12vh; transform: translateX(-50%); z-index: 40; width: min(860px, 94vw); display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    font-family: var(--font); color: #fff; pointer-events: none; }
+  #board .bd-title { grid-column: 1 / -1; text-align: center; font: 800 14px var(--font); letter-spacing: .34em; color: var(--red); text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+  .bd-team { background: rgba(10,10,13,.86); border-top: 4px solid var(--t); padding: 10px 12px 12px; }
+  .bd-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .bd-head b { font: 800 italic 24px var(--font); color: var(--t); } .bd-head span { font: 800 13px var(--font); letter-spacing: .14em; opacity: .8; }
+  .bd-row { display: grid; grid-template-columns: 1fr 74px 30px 30px; gap: 8px; padding: 6px 8px; font: 700 15px var(--font); background: rgba(255,255,255,.05); margin-top: 3px; }
+  .bd-row span:nth-child(n+3) { text-align: right; } .bd-row span:nth-child(2) { font-size: 11px; letter-spacing: .14em; opacity: .7; align-self: center; }
+  .bd-labels { background: none; font: 800 10px var(--font); letter-spacing: .2em; opacity: .55; padding-bottom: 0; }
+  .bd-row.me { background: rgba(255,255,255,.18); box-shadow: inset 3px 0 0 var(--t); } .bd-row.dead { opacity: .45; }
+  .nt-fill { all: unset; cursor: pointer; display: inline-block; margin: 18px 10px 0 0; padding: 8px 16px; font: 800 13px var(--font); letter-spacing: .14em; background: rgba(255,255,255,.1); }
+  .nt-fill.on { background: rgba(77,255,122,.22); box-shadow: inset 0 0 0 1px rgba(77,255,122,.6); }
 </style>
 </head>
 <body>
@@ -632,6 +646,7 @@
 <div id="mmk" class="hidden"></div>
 <div id="net" class="hidden"></div>
 <div id="matchend" class="hidden"></div>
+<div id="board" class="hidden"></div>
 
 <div id="menu">
   <header class="mm-top">
@@ -651,7 +666,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.43</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.44</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -757,39 +772,39 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.43-1794482687",
-  "./src/audio.js": "./src/audio.js?v=0.43-1794482687",
-  "./src/batch.js": "./src/batch.js?v=0.43-1794482687",
-  "./src/bench.js": "./src/bench.js?v=0.43-1794482687",
-  "./src/bots.js": "./src/bots.js?v=0.43-1794482687",
-  "./src/classes.js": "./src/classes.js?v=0.43-1794482687",
-  "./src/contestant.js": "./src/contestant.js?v=0.43-1794482687",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.43-1794482687",
-  "./src/course.js": "./src/course.js?v=0.43-1794482687",
-  "./src/effects.js": "./src/effects.js?v=0.43-1794482687",
-  "./src/elevator.js": "./src/elevator.js?v=0.43-1794482687",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.43-1794482687",
-  "./src/heavy.js": "./src/heavy.js?v=0.43-1794482687",
-  "./src/input.js": "./src/input.js?v=0.43-1794482687",
-  "./src/main.js": "./src/main.js?v=0.43-1794482687",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.43-1794482687",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.43-1794482687",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.43-1794482687",
-  "./src/math.js": "./src/math.js?v=0.43-1794482687",
-  "./src/nav.js": "./src/nav.js?v=0.43-1794482687",
-  "./src/net.js": "./src/net.js?v=0.43-1794482687",
-  "./src/player.js": "./src/player.js?v=0.43-1794482687",
-  "./src/props.js": "./src/props.js?v=0.43-1794482687",
-  "./src/renderer.js": "./src/renderer.js?v=0.43-1794482687",
-  "./src/rig.js": "./src/rig.js?v=0.43-1794482687",
-  "./src/tdm.js": "./src/tdm.js?v=0.43-1794482687",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.43-1794482687",
-  "./src/weapon.js": "./src/weapon.js?v=0.43-1794482687",
-  "./src/weapons.js": "./src/weapons.js?v=0.43-1794482687",
-  "./src/world.js": "./src/world.js?v=0.43-1794482687"
+  "./src/attachments.js": "./src/attachments.js?v=0.44-1794483137",
+  "./src/audio.js": "./src/audio.js?v=0.44-1794483137",
+  "./src/batch.js": "./src/batch.js?v=0.44-1794483137",
+  "./src/bench.js": "./src/bench.js?v=0.44-1794483137",
+  "./src/bots.js": "./src/bots.js?v=0.44-1794483137",
+  "./src/classes.js": "./src/classes.js?v=0.44-1794483137",
+  "./src/contestant.js": "./src/contestant.js?v=0.44-1794483137",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.44-1794483137",
+  "./src/course.js": "./src/course.js?v=0.44-1794483137",
+  "./src/effects.js": "./src/effects.js?v=0.44-1794483137",
+  "./src/elevator.js": "./src/elevator.js?v=0.44-1794483137",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.44-1794483137",
+  "./src/heavy.js": "./src/heavy.js?v=0.44-1794483137",
+  "./src/input.js": "./src/input.js?v=0.44-1794483137",
+  "./src/main.js": "./src/main.js?v=0.44-1794483137",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.44-1794483137",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.44-1794483137",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.44-1794483137",
+  "./src/math.js": "./src/math.js?v=0.44-1794483137",
+  "./src/nav.js": "./src/nav.js?v=0.44-1794483137",
+  "./src/net.js": "./src/net.js?v=0.44-1794483137",
+  "./src/player.js": "./src/player.js?v=0.44-1794483137",
+  "./src/props.js": "./src/props.js?v=0.44-1794483137",
+  "./src/renderer.js": "./src/renderer.js?v=0.44-1794483137",
+  "./src/rig.js": "./src/rig.js?v=0.44-1794483137",
+  "./src/tdm.js": "./src/tdm.js?v=0.44-1794483137",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.44-1794483137",
+  "./src/weapon.js": "./src/weapon.js?v=0.44-1794483137",
+  "./src/weapons.js": "./src/weapons.js?v=0.44-1794483137",
+  "./src/world.js": "./src/world.js?v=0.44-1794483137"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.43-1794482687"></script>
+<script type="module" src="src/main.js?v=0.44-1794483137"></script>
 </body>
 </html>

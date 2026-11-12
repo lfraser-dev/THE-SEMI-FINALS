@@ -1403,6 +1403,17 @@ const netHooks = {
   remoteGadget: (spec) => gadgets.place(spec),
   remoteHeavy: (m) => heavy.remote(m),
   remoteGadgetHit: (gid, dmg) => gadgets.damage(gadgets.byId(gid), dmg),
+  get stadium() { return stadium; },
+  // hooks for the bots I run when I'm hosting: the usual bot hooks, but their shots are seen by everyone, kills are
+  // reported by the online match, and they leave their gear at home
+  bot: {
+    ...botHooks,
+    shot: (b, from, end, pd) => { botHooks.shot(b, from, end, pd); online.send({ t: 'shot', id: b.agent.id, f: from.map((v) => +v.toFixed(2)), e: end.map((v) => +v.toFixed(2)) }); },
+    hitPlayer: (dmg, bot, from) => { player.lastHitBy = bot.agent.id; damagePlayer(dmg, from, bot.name); },
+    onBotKill: () => {},
+    botGear: () => 30,
+    barricade: () => false,
+  },
 };
 function startOnline(info) {
   if (ai.active) ai.stop();
@@ -1422,7 +1433,14 @@ function startOnline(info) {
   player.spawn(sp.pos, sp.yaw);
   Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5, lastHitBy: null });
   $('matchend').classList.add('hidden');
+  if (!playing) banner('CLICK TO PLAY', `${stadium.name} · THE MATCH IS ON`, 'good', 3);
 }
+// in a match but not holding the mouse (the match started from the lobby, or a rematch): a click jumps back in
+addEventListener('mousedown', () => {
+  if (playing || bench.open || lobby.open || !tdm.active || !inStadium()) return;
+  if (!menu.classList.contains('hidden') || !$('matchend').classList.contains('hidden')) return;
+  start();
+});
 $('mm-online').addEventListener('click', () => { sounds.unlock(); menu.classList.add('hidden'); lobby.show(); });
 addEventListener('keydown', (e) => {
   if (!lobby.open || e.target?.tagName === 'INPUT') return;
@@ -1441,7 +1459,9 @@ function setTeamsHud(m) {
   }));
 }
 // ---------- tdm match: start / end, events, HUD ----------
+let lastMatch = null;
 function startMatch(m) {
+  lastMatch = m;
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
   gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
@@ -1491,10 +1511,13 @@ function showMatchEnd() {
     r.querySelector('b').textContent = tm.name;
     card.append(r);
   });
-  const btn = document.createElement('button');
-  btn.type = 'button'; btn.textContent = 'BACK TO LOBBY';
-  btn.onclick = () => endMatch(true);
-  card.append(btn);
+  const btn = (text, fn, cls = '') => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = cls; b.onclick = fn; card.append(b); return b; };
+  const again = () => { $('matchend').classList.add('hidden'); start(); };
+  if (tdm === online) {
+    if (online.isHost) btn('REMATCH', () => { online.rematch(); again(); });
+    else { const w = document.createElement('p'); w.className = 'me-wait'; w.textContent = 'WAITING FOR THE HOST TO START A REMATCH…'; card.append(w); }
+  } else if (lastMatch) btn('PLAY AGAIN', () => { startMatch(lastMatch); again(); });
+  btn(tdm === online ? 'LEAVE' : 'BACK TO LOBBY', () => endMatch(true), 'alt');
   el.replaceChildren(card);
   el.classList.remove('hidden');
   if (document.pointerLockElement) document.exitPointerLock();
@@ -1505,7 +1528,39 @@ function poolEl(pool, parent, cls, i) {
   if (!pool[i]) { const d = document.createElement('div'); d.className = cls; d.innerHTML = '<i></i><b></b><small></small>'; parent.append(d); pool[i] = d; }
   return pool[i];
 }
+// ---------- scoreboard: hold Tab in a match ----------
+let boardT = 0;
+function updateBoard(dt) {
+  const show = tdm.active && inStadium() && playing && input.down('Tab');
+  $('board').classList.toggle('hidden', !show);
+  if (!show || (boardT -= dt) > 0) return;
+  boardT = 0.25;
+  const kd = (e) => (tdm === online ? online.kd?.[e.isPlayer ? online.myId : e.id] || { k: 0, d: 0 } : { k: e.kills || 0, d: e.deaths || 0 });
+  const rows = tdm.entities().map((e) => ({ e, ...kd(e) }));
+  const cols = tdm.teams.map((t) => {
+    const col = document.createElement('div');
+    col.className = `bd-team${t === tdm.myTeam ? ' mine' : ''}`;
+    col.style.setProperty('--t', t.col);
+    col.innerHTML = '<div class="bd-head"><b></b><span></span></div><div class="bd-row bd-labels"><span>PLAYER</span><span>CLASS</span><span>K</span><span>D</span></div>';
+    col.querySelector('.bd-head b').textContent = t.name;
+    col.querySelector('.bd-head span').textContent = `${t.kills} KILLS`;
+    for (const r of rows.filter((x) => x.e.team === t).sort((a, b) => b.k - a.k || a.d - b.d)) {
+      const row = document.createElement('div');
+      row.className = `bd-row${r.e.isPlayer ? ' me' : ''}${r.e.alive ? '' : ' dead'}`;
+      const name = r.e.isPlayer ? `${lobby.name || 'YOU'} (YOU)` : r.e.name;
+      const cls = r.e.isPlayer ? classLo.cls : r.e.cls;
+      for (const v of [name, CLASSES[cls]?.name || '', r.k, r.d]) { const c = document.createElement('span'); c.textContent = v; row.append(c); }
+      col.append(row);
+    }
+    return col;
+  });
+  const head = document.createElement('div');
+  head.className = 'bd-title';
+  head.textContent = `${stadium.name} · FIRST TO ${tdm === online ? 10 : 10}`;
+  $('board').replaceChildren(head, ...cols);
+}
 function updateMatchHud(dt) {
+  updateBoard(dt);
   const on = tdm.active && inStadium() && (playing || !!tdm.over);
   $('objective').classList.toggle('hidden', !on);
   $('markers').classList.toggle('hidden', !on);

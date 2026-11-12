@@ -12,6 +12,9 @@ import { Bot, teamPalette } from './bots.js';
 import { compose, mat4 } from './math.js';
 import { TEAM_NAMES } from './matchmaking.js';
 import { CLASSES } from './classes.js';
+import { Agent, Deathmatch } from './tdm.js';
+import { Nav } from './nav.js';
+const BOT_NAMES = ['BOT·VEX', 'BOT·RIVET', 'BOT·NOVA', 'BOT·KOI', 'BOT·DASH', 'BOT·ORBIT', 'BOT·FLINT'];
 
 export const NET_GOAL = 10;
 const PEERJS = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
@@ -402,6 +405,7 @@ export class Online {
   async host(mode, arena) {
     this.leave();
     this.isHost = true; this.mode = mode; this.arenaPick = arena;
+    this.fill = true;              // bots fill the empty slots
     this.max = mode === '2v2' ? 4 : 2;
     let code;
     for (let tries = 0; tries < 4; tries++) {
@@ -451,7 +455,7 @@ export class Online {
     if (m.t === 'bye') { this.dropPlayer(from); return; }
     if (m.t === 'cls') { const p = this.players.find((q) => q.id === from); if (p && CLASSES[m.cls]) { p.cls = m.cls; this.pushLobby(); } return; }
     // game traffic: relay it on (to one player, or everyone else), and act on it here too
-    if (m.to) { if (m.to === this.myId) this.handle(m); else this.tx.sendTo(m.to, m); }
+    if (m.to) { if (m.to === this.myId || this.byId(m.to)?.isAI) this.handle(m); else this.tx.sendTo(m.to, m); }
     else { for (const p of this.players) if (p.id !== this.myId && p.id !== from) this.tx.sendTo(p.id, m); this.handle(m); }
   }
 
@@ -482,17 +486,32 @@ export class Online {
   }
   canStart() {
     if (!this.isHost || this.active) return false;
+    if (this.fill) return this.players.some((p) => !p.bot);
     return this.players.length >= 2 && [0, 1].every((k) => this.players.some((p) => p.team === k));
   }
   startMatch() {
     if (!this.canStart()) return;
     const arena = this.arenaPick >= 0 ? this.arenaPick : Math.floor(Math.random() * this.ui.arenas.length);
+    // fill the empty slots with bots (they run on my machine)
+    this.players = this.players.filter((p) => !p.bot);
+    if (this.fill) {
+      const cap = this.max / 2, names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
+      for (const k of [0, 1]) {
+        while (this.players.filter((p) => p.team === k).length < cap) {
+          const n = this.players.filter((p) => p.bot).length;
+          this.players.push({ id: `bot-${n + 1}-${Math.floor(Math.random() * 1e4)}`, name: names[n] || `BOT ${n + 1}`, cls: ['light', 'medium', 'heavy'][Math.floor(Math.random() * 3)], team: k, bot: true });
+        }
+      }
+    }
     const msg = { t: 'start', arena, players: this.players, teamNames: this.teamNames, mode: this.mode };
     this.broadcast(msg);
     this.handle(msg);
   }
 
-  broadcast(m) { if (this.isHost) for (const p of this.players) if (p.id !== this.myId) this.tx.sendTo(p.id, m); }
+  // after a match: everyone back in for another (new arena if it's random), bots topped up again
+  rematch() { if (this.isHost && this.over) { this.active = false; this.startMatch(); } }
+
+  broadcast(m) { if (this.isHost) for (const p of this.players) if (p.id !== this.myId && !p.bot) this.tx.sendTo(p.id, m); }
   // send game traffic: the host handles it and relays; clients send it to the host
   send(m) {
     if (!this.tx) return;
@@ -508,11 +527,18 @@ export class Online {
       case 'closed': this.ui.status?.('THE HOST CLOSED THE ROOM'); if (this.active) this.ui.onHostLeft?.(); this.leave(); this.ui.lobby?.(null, false); break;
       case 'start': this.begin(m); break;
       case 'st': { const r = this.byId(m.id); if (r) r.state(m); break; }
-      case 'shot': { if (m.id === this.myId) break; const r = this.byId(m.id); if (r?.bot?.alive) { r.bot.muzzleT = 0.05; r.bot.recoil = 1; } this.g?.remoteShot(m.f, m.e, r); break; }
+      case 'shot': { if (m.id === this.myId || this.byId(m.id)?.isAI) break; const r = this.byId(m.id); if (r?.bot?.alive) { r.bot.muzzleT = 0.05; r.bot.recoil = 1; } this.g?.remoteShot(m.f, m.e, r); break; }
       case 'gad': if (m.id !== this.myId && this.active) this.g?.remoteGadget?.(m.g); break;
       case 'gl': case 'boom': case 'drn': case 'tsh': case 'trap': case 'trapgone': case 'teth': case 'gdel': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
       case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
-      case 'hit': if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head); break;
+      case 'hit':
+        if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head);
+        else if (this.isHost && this.active) {
+          // someone shot one of my bots
+          const a = this.byId(m.to);
+          if (a?.isAI && a.bot.alive) { a.lastHitBy = m.by === this.myId ? this.you : this.byId(m.by) || null; a.bot.damage(m.dmg, [0, 0, 1]); }
+        }
+        break;
       case 'died': this.onDied(m); break;
       case 'score': if (this.teams) { this.teams.forEach((t, i) => { t.kills = m.k[i]; }); if (m.over != null && !this.over) this.finish(this.teams[m.over]); } break;
       case 'left': {
@@ -542,10 +568,40 @@ export class Online {
     const player = this.g.player;
     this.you = { isPlayer: true, team: this.myTeam, name: 'YOU', id: this.myId, get pos() { return player.pos; }, get alive() { return !player.dead; }, eye: () => player.eye() };
     this.agents.forEach((a) => a.remove());
-    this.agents = m.players.filter((p) => p.id !== this.myId).map((p) => new Remote(this.world, p, this.teams[p.team]));
+    this.kd = {};
+    this.co = null;
+    this.agents = m.players.filter((p) => p.id !== this.myId).map((p) => (p.bot && this.isHost ? this.makeBot(p) : new Remote(this.world, p, this.teams[p.team])));
+    if (this.co) this.co.agents = this.agents.filter((a) => a.isAI);
     this.active = true;
     this.t = 0;
     this.events.push({ type: 'start' });
+  }
+
+  // ---------------- bots (host only): the same AI as offline matches, with the online match as its coordinator
+  makeBot(p) {
+    if (!this.co) {
+      const map = this.g.stadium;
+      if (!map.navObj) { map.navObj = new Nav(this.world); map.navObj.build(map.nav); }
+      this.teams.forEach((t, i) => { t.spawn = map.spawns[i]; t.intel = new Map(); });
+      const co = Object.create(Deathmatch.prototype);
+      Object.assign(co, { world: this.world, map, nav: map.navObj, teams: this.teams, myTeam: this.myTeam, you: this.you, player: this.g.player, agents: [], active: true, t: 0, events: [], over: null });
+      co.anchors = co.highSpots();
+      co.entities = () => this.entities();
+      // a bot went down: tell everyone, the same way a player's death is reported
+      co.onDeath = (a) => {
+        const by = a.lastHitBy, byId = by === this.you ? this.myId : by?.id ?? null;
+        a.lastHitBy = null;
+        const msg = { t: 'died', id: a.id, by: byId };
+        this.send(msg); this.onDied(msg);
+      };
+      // a bot shot another player: their game takes the damage
+      co.netHit = (tgt, dmg, agent, from) => this.send({ t: 'hit', to: tgt.id, by: agent.id, dmg, head: false, f: from.map((v) => +v.toFixed(2)) });
+      this.co = co;
+    }
+    const slot = this.players.filter((q) => q.team === p.team).findIndex((q) => q.id === p.id);
+    const a = new Agent(this.co, this.teams[p.team], { name: p.name, cls: p.cls }, slot + 1);
+    Object.assign(a, { id: p.id, isAI: true, kill() {}, remove() { if (this.bot && !this.bot.removed) { this.bot.remove(); this.bot.removed = true; } } });
+    return a;
   }
 
   stop() {
@@ -563,6 +619,10 @@ export class Online {
 
   onDied(m) {
     if (m.id !== this.myId) { const r = this.byId(m.id); r?.kill(); }
+    if (this.kd) {
+      (this.kd[m.id] ??= { k: 0, d: 0 }).d++;
+      if (m.by && m.by !== m.id) (this.kd[m.by] ??= { k: 0, d: 0 }).k++;
+    }
     const victim = m.id === this.myId ? 'YOU' : this.nameOf(m.id);
     if (m.id !== this.myId) this.g?.feed(m.by ? this.nameOf(m.by) : '—', victim, m.by === this.myId ? this.g.weaponId() : this.byId(m.by)?.wep);
     // the host keeps score
@@ -591,10 +651,15 @@ export class Online {
   update(dt, g) {
     if (!this.active) return;
     this.t += dt;
-    for (const a of this.agents) a.update(dt, g);
+    for (const a of this.agents) a.update(dt, a.isAI ? g.bot : g);
     this.sendT -= dt;
     if (this.sendT <= 0) {
       this.sendT = 1 / SEND_HZ;
+      for (const a of this.agents) {
+        if (!a.isAI) continue;
+        const b = a.bot;
+        this.send({ t: 'st', id: a.id, p: b.pos.map((v) => +v.toFixed(3)), y: +b.yaw.toFixed(3), pi: +(b.aimPitch || 0).toFixed(3), hp: Math.max(0, Math.round(b.hp)), mh: b.maxHp, d: b.alive ? 0 : 1, w: ({ light: 'smg', medium: 'ar', heavy: 'lmg' })[a.cls] });
+      }
       const p = g.player;
       this.send({ t: 'st', id: this.myId, p: p.pos.map((v) => +v.toFixed(3)), y: +p.yaw.toFixed(3), pi: +(p.pitch || 0).toFixed(3), hp: Math.max(0, Math.round(p.hp)), mh: p.maxHp, d: p.dead ? 1 : 0, w: g.weaponId?.(), gr: g.grapplePoint?.() || undefined, cl: g.cloaked?.() ? 1 : undefined });
     }
@@ -706,13 +771,14 @@ export class Lobby {
             if (on.isHost && l.max > 2) row.append(btn('nt-swap', '⇄', () => on.swapTeam(p.id)));
             t.append(row);
           }
-          for (let i = l.players.filter((q) => q.team === k).length; i < l.max / 2; i++) t.append(el('div', 'nt-p empty', 'WAITING FOR PLAYER…'));
+          for (let i = l.players.filter((q) => q.team === k).length; i < l.max / 2; i++) t.append(el('div', 'nt-p empty', on.isHost && on.fill ? 'BOT (UNTIL SOMEONE JOINS)' : 'WAITING FOR PLAYER…'));
           teams.append(t);
         });
         box.append(teams);
       }
       const row = el('div', 'nt-row');
       if (on.isHost) {
+        row.append(btn(`nt-fill${on.fill ? ' on' : ''}`, `BOTS FILL EMPTY SLOTS: ${on.fill ? 'ON' : 'OFF'}`, () => { on.fill = !on.fill; this.render(); }));
         const go = btn('nt-go', 'START MATCH', () => on.startMatch());
         go.disabled = !on.canStart();
         row.append(go);

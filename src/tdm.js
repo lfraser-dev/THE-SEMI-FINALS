@@ -14,7 +14,7 @@ const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
 const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 
 // ---------------------------------------------------------------- one AI contestant
-class Agent {
+export class Agent {
   constructor(co, team, info, slot) {
     Object.assign(this, { co, team, name: info.name, cls: info.cls, slot });
     this.isPlayer = false;
@@ -272,6 +272,7 @@ class Agent {
     if (Math.random() < chance) {
       end = aim;
       if (tgt.isPlayer) g.hitPlayer(b.t.dmg, b, from);
+      else if (tgt.isRemote) this.co.netHit?.(tgt, b.t.dmg, this, from);     // a real player online
       else {
         const d = [aim[0] - from[0], aim[1] - from[1], aim[2] - from[2]], l = Math.hypot(...d) || 1;
         tgt.lastHitBy = this;
