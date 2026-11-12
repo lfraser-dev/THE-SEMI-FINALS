@@ -9,7 +9,7 @@ import { Sounds } from './audio.js';
 import { Dummy, DestructibleWall, Workbench, gunCrates } from './props.js';
 import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, anglesFor, clamp } from './math.js';
 import { buildDef, ratings } from './attachments.js';
-import { CLASSES, CLASS_ORDER, ABILITIES, HEAVIES, SIDEARMS, THROWABLES, THROW_ORDER, loadLoadout, saveLoadout } from './classes.js';
+import { CLASSES, CLASS_ORDER, ABILITIES, HEAVIES, SIDEARMS, THROWABLES, THROW_ORDER, TAKEDOWNS, takedownsFor, loadLoadout, saveLoadout } from './classes.js';
 import { Contestant } from './contestant.js';
 import { Thumbs } from './thumbs.js';
 import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
@@ -274,14 +274,15 @@ function updateCamera() {
   camFwd = player.forward(w.kick, w.kickYaw);
   if (player.dead) {
     // slump to the floor and tip over
-    const k = Math.min(1, (3 - deathT) / 0.6);
+    const k = Math.min(1, (deathDur - deathT) / 0.6);
     camEye = [camEye[0], camEye[1] - k * (player.eyeH - 0.35), camEye[2]];
   }
   if (cutscene) { const c = cutsceneCam(); camEye = c.eye; camFwd = c.fwd; }
+  else if (td && !player.dead) { const c = takedownCam(); camEye = c.eye; camFwd = c.fwd; }
   camRight = norm(cross(camFwd, [0, 1, 0]));
   camUp = cross(camRight, camFwd);
   // apply roll to the basis so tracers/casings line up with what you see
-  const roll = cutscene ? 0 : player.dead ? player.roll + Math.min(1, (3 - deathT) / 0.6) * 0.9 : player.roll;
+  const roll = cutscene ? 0 : player.dead ? player.roll + Math.min(1, (deathDur - deathT) / 0.6) * 0.9 : player.roll;
   const c = Math.cos(roll), s = Math.sin(roll);
   const r2 = [0, 1, 2].map((k) => camRight[k] * c + camUp[k] * s);
   camUp = [0, 1, 2].map((k) => camUp[k] * c - camRight[k] * s);
@@ -574,7 +575,9 @@ function die(name) {
   if (online.active && tdm === online) online.myDeath(typeof player.lastHitBy === 'string' ? player.lastHitBy : null);
   player.hp = 0;
   player.dead = true;
-  deathT = 3;
+  deathT = deathDur = tdm.active ? DOWNED_TIME : 3;    // in a match you're downed (and can be finished off) until you respawn
+  player.downed = !!tdm.active;
+  takenBy = null; td = null;
   killer = name;
   sounds.death();
   killFeed(name, 'RIFLE', 'YOU', false);
@@ -588,9 +591,224 @@ function respawnPlayer() {
   const onDeck = botMgr.running || (P[0] > A.min[0] && P[0] < A.max[0] && P[1] > A.min[1] && P[1] < A.max[1] && P[2] > A.min[2] && P[2] < A.max[2]);
   const r = onDeck ? map.deck.respawn : { pos: player.spawnPoint, yaw: player.spawnYaw };
   player.teleport(r.pos, r.yaw);
-  Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5 });
+  Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5, downed: false });
+  takenBy = null;
   slots.forEach((w) => { w.ammo = w.def.mag; w.reload = null; });
   weapon().equip();
+}
+
+// ---------- downed + takedowns ----------
+// Killed in a match, you (and everyone else) go down for DOWNED_TIME seconds before respawning. While someone's down
+// an enemy can walk up and press E for a takedown: a short scripted finisher (three per class, picked in the Armoury)
+// worth a bonus point and 50 HP.
+const DOWNED_TIME = 10;
+let deathDur = 3, takenBy = null, td = null, downedNear = null, tdShake = 0;
+const bodyPt = (b) => b.toWorld([0, 0.3, (b.fallSign || 1) * 1.0]);
+function myTakedownKind() {
+  const list = takedownsFor(classLo.cls), k = classLo[classLo.cls].takedown;
+  return list.includes(k) ? k : list[0];
+}
+function findDowned() {
+  if (!tdm.active || !inStadium() || player.dead || td) return null;
+  let best = null, bd = 2.4;
+  for (const e of tdm.entities()) {
+    if (e === tdm.you || e.team === tdm.myTeam || !e.downed || !e.bot) continue;
+    const p = bodyPt(e.bot), d = Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]);
+    if (d < bd && Math.abs(p[1] - player.pos[1]) < 1.6) { bd = d; best = e; }
+  }
+  return best;
+}
+function startTakedown(victim) {
+  const kind = myTakedownKind(), def = TAKEDOWNS[kind];
+  const body = bodyPt(victim.bot);
+  const dx = player.pos[0] - body[0], dz = player.pos[2] - body[2], l = Math.hypot(dx, dz) || 1;
+  const stand = [body[0] + dx / l * 1.45, player.pos[1], body[2] + dz / l * 1.45];
+  // only step in if there's room
+  const free = !world.firstOverlap([stand[0] - 0.25, stand[1] + 0.2, stand[2] - 0.25], [stand[0] + 0.25, stand[1] + 1.6, stand[2] + 0.25]);
+  td = { t: 0, kind, def, victim, bot: victim.bot, body, from: [...player.pos], to: free ? stand : [...player.pos], hit: false, swish: 0 };
+  player.vel = [0, 0, 0];
+  player.cancelAbilities?.();
+  sounds.cloth?.();
+}
+// effects on the body, shared by my takedowns, bots' and other players' (seen online)
+function takedownFx(bot, kind, mine) {
+  const def = TAKEDOWNS[kind] || TAKEDOWNS.blade, p = bodyPt(bot);
+  const away = norm([p[0] - (mine ? player.pos[0] : p[0] + 0.01), 0, p[2] - (mine ? player.pos[2] : p[2])]);
+  bot.downed = false;
+  const near = Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]);
+  const vol = Math.max(0.2, 1 - near / 30);
+  switch (def.fx) {
+    case 'launch':
+      bot.killDir = [away[0] * 3, 1.6, away[2] * 3];
+      effects.dust(p, 8, [away[0] * 2, 0, away[2] * 2]); sounds.whoosh?.(); sounds.hit?.();
+      break;
+    case 'zap':
+      bot.killDir = [0, 1.5, 0];
+      for (let i = 0; i < 18; i++) effects.spawnPiece(p, [0.03, 0.03, 0.09], [(Math.random() - 0.5) * 7, 1 + Math.random() * 5, (Math.random() - 0.5) * 7], [0.4, 0.8, 1], 0.4 + Math.random() * 0.4, 1);
+      sounds.lock?.(); sounds.hit?.();
+      break;
+    case 'burst':
+      bot.killDir = [0, 2.6, 0];
+      for (let i = 0; i < 12; i++) effects.flame([p[0] + (Math.random() - 0.5) * 0.8, p[1] + Math.random() * 0.4, p[2] + (Math.random() - 0.5) * 0.8], [(Math.random() - 0.5) * 3, 1 + Math.random() * 2, (Math.random() - 0.5) * 3], 1.4);
+      effects.dust(p, 10);
+      sounds.boom?.(vol);
+      break;
+    case 'flatten':
+      bot.killDir = [0, -1, 0];
+      for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; effects.dust([p[0] + Math.cos(a) * 0.6, p[1], p[2] + Math.sin(a) * 0.6], 1, [Math.cos(a) * 3, 0.3, Math.sin(a) * 3]); }
+      sounds.slam?.();
+      break;
+    default:
+      bot.killDir = [away[0] * 1.2, 0.8, away[2] * 1.2];
+      sounds.hit?.();
+  }
+  if (near < 6 && !mine) player.shake = Math.max(player.shake || 0, 0.25 * (1 - near / 6));
+}
+function landTakedown() {
+  const v = td.victim, kind = td.kind;
+  takedownFx(td.bot, kind, true);
+  tdShake = TAKEDOWNS[kind].fx === 'flatten' || TAKEDOWNS[kind].fx === 'burst' ? 0.45 : 0.22;
+  player.hp = Math.min(player.maxHp, player.hp + 50);
+  banner('TAKEDOWN', `${v.name} · ${TAKEDOWNS[kind].name} · +1 · +50 HP`, 'good', 1.4);
+  sounds.checkpoint?.();
+  if (online.active && tdm === online) online.myTakedown(v.id, kind);
+  else { killFeed('YOU', TAKEDOWNS[kind].name, v.name, false); tdm.takedown?.(tdm.you, v); }
+}
+function updateTakedown(dt) {
+  const T = td, d = T.def;
+  T.t += dt;
+  const k = Math.min(1, T.t / 0.22);
+  for (const i of [0, 2]) player.pos[i] = T.from[i] + (T.to[i] - T.from[i]) * k;
+  // swishes on the way in
+  const swings = T.kind === 'blade' || T.kind === 'buttstroke' ? [d.hitAt * 0.45, d.hitAt] : [d.hitAt * 0.85];
+  while (T.swish < swings.length && T.t > swings[T.swish] - 0.12) { T.swish++; sounds.whoosh?.(); }
+  if (!T.hit && T.t >= d.hitAt) { T.hit = true; landTakedown(); }
+  if (T.t >= d.dur) { td = null; player.invuln = Math.max(player.invuln || 0, 0.4); weapon().equip(); }
+}
+// the camera during a takedown: look at the body, with a little performance per finisher
+function takedownCam() {
+  const T = td, d = T.def, t = T.t, h = d.hitAt;
+  const base = player.eye();
+  const to = [T.body[0] - base[0], 0, T.body[2] - base[2]], l = Math.hypot(to[0], to[2]) || 1, f = [to[0] / l, 0, to[2] / l];
+  const ease = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+  const pre = ease(t / h), post = ease((t - h) / Math.max(0.01, d.dur - h));
+  let up = 0, fw = 0, flip = 0;
+  switch (T.kind) {
+    case 'elbowdrop': case 'bodyslam': {
+      const r = ease(t / (h * 0.6)), fall = ease((t - h * 0.6) / (h * 0.4));
+      up = r * 1.1 - fall * 1.7 + post * 0.6; fw = fall * 0.6 - post * 0.6;
+      if (T.kind === 'bodyslam' && t > h) up += Math.sin(Math.min(1, (t - h) / 0.35) * Math.PI) * 0.5;
+      break;
+    }
+    case 'stomp': up = Math.sin(pre * Math.PI) * 0.25 - (t > h ? 0.1 * (1 - post) : 0); fw = pre * 0.15; break;
+    case 'flipkick': fw = pre * 0.35 - post * 1.2; up = Math.sin(post * Math.PI) * 0.7; flip = post * Math.PI * 2; break;
+    case 'sledge': up = Math.sin(pre * Math.PI) * 0.15; fw = -Math.sin(pre * Math.PI) * 0.25 + (t > h ? 0.2 : 0); break;
+    case 'pocketnade': up = -pre * 0.45 + post * 0.45; fw = pre * 0.35 - post * 0.9; break;
+    default: up = -pre * 0.35 + post * 0.35; fw = pre * 0.3 - post * 0.3;
+  }
+  const eye = [base[0] + f[0] * fw, base[1] + up, base[2] + f[2] * fw];
+  const tgt = [T.body[0] + f[0] * 0.5, T.body[1] + 0.1, T.body[2] + f[2] * 0.5];   // just past them, so it's not straight down
+  let fwd = norm([tgt[0] - eye[0], tgt[1] - eye[1], tgt[2] - eye[2]]);
+  if (flip) {
+    // a backflip: spin about the camera's right axis
+    const r = norm(cross(fwd, [0, 1, 0])), u = cross(r, fwd), c = Math.cos(flip), s = Math.sin(flip);
+    fwd = [0, 1, 2].map((i) => fwd[i] * c + u[i] * s);
+  }
+  // blend in from where you were looking, and back out
+  const pf = player.forward(), bi = Math.min(1, t / 0.18) * Math.min(1, (d.dur - t) / 0.15 + 0.0001);
+  fwd = norm([0, 1, 2].map((i) => pf[i] + (fwd[i] - pf[i]) * Math.min(1, bi)));
+  tdShake = Math.max(0, tdShake - 1 / 60);
+  if (tdShake > 0) for (let i = 0; i < 3; i++) eye[i] += (Math.random() - 0.5) * tdShake * 0.25;
+  return { eye, fwd };
+}
+// what you see in your hands during a takedown (in the camera's frame: x right, y up, d forward)
+function takedownParts(out) {
+  const T = td, d = T.def, t = T.t, h = d.hitAt, c = CLASSES[classLo.cls], sk = c.skin;
+  const glove = sk.gloves, sleeve = sk.top, accent = c.color;
+  const R = camRight, U = camUp, F = camFwd;
+  const at = (x, y, z) => [0, 1, 2].map((i) => camEye[i] + R[i] * x + U[i] * y + F[i] * z);
+  const dirOf = (x, y, z) => norm([0, 1, 2].map((i) => R[i] * x + U[i] * y + F[i] * z));
+  const P = Heavy.framePart;
+  // a stick from a pivot along a direction: [offset along it, size, colour, extra]
+  const stick = (piv, dir, pieces) => { for (const [z, size, col, ex] of pieces) P(out, piv, dir, 0, 0, -z, size, col, ex || {}); };
+  const ease = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+  const pre = ease(t / h), back = ease((t - h) / Math.max(0.01, d.dur - h));
+  const fist = (x, y, z, col = glove) => stick(at(x, y, z), F, [[0, [0.09, 0.09, 0.11], col], [-0.2, [0.08, 0.08, 0.3], sleeve]]);
+  switch (d.prop) {
+    case 'knife': {
+      // two slashes, right to left then back
+      const s1 = ease(t / (h * 0.45)), s2 = ease((t - h * 0.55) / (h * 0.45));
+      const a = t < h * 0.5 ? -1 + 2 * s1 : 1 - 2 * s2;
+      const piv = at(0.25 - a * 0.25, -0.22 - back * 0.3, 0.45);
+      stick(piv, dirOf(-a * 0.9, 0.3, 0.6), [[0, [0.05, 0.05, 0.11], [0.06, 0.06, 0.07]], [0.15, [0.012, 0.05, 0.22], [0.85, 0.87, 0.9], { mat: 'metal' }]]);
+      fist(0.25 - a * 0.25, -0.24 - back * 0.3, 0.4);
+      break;
+    }
+    case 'kick': {
+      const y = -1.0 + pre * 0.75 - back * 1.0, z = 0.35 + pre * 0.55;
+      stick(at(0, y, z), dirOf(0, -0.4, 1), [[0, [0.14, 0.12, 0.3], sk.shoes], [-0.32, [0.13, 0.13, 0.42], sk.bottom]]);
+      break;
+    }
+    case 'glove': {
+      const z = 0.3 + pre * 0.35 - back * 0.25, em = Math.min(1, t / h) * (t < h + 0.2 ? 1 : 0);
+      stick(at(0.12, -0.28 - back * 0.2, z), dirOf(0, -0.15, 1), [[0, [0.12, 0.12, 0.14], [0.3 + em * 0.3, 0.7, 1], { em }], [-0.22, [0.09, 0.09, 0.32], sleeve]]);
+      if (em > 0.4) P(out, at(0.12, -0.28, z + 0.12), F, 0, 0, 0, [0.16 * em, 0.16 * em, 0.16 * em], [0.5, 0.85, 1], { em: 1, shape: 'sphere' });
+      break;
+    }
+    case 'stock': {
+      // two downward chops with the rifle stock
+      const s = t < h * 0.5 ? ease(t / (h * 0.45)) : ease((t - h * 0.55) / (h * 0.45));
+      const ang = 1.2 - s * 1.9;
+      const dir = dirOf(0, Math.sin(ang), Math.cos(ang) * 0.6 + 0.4);
+      stick(at(0.05, -0.15 - back * 0.4, 0.35), dir, [[0.05, [0.07, 0.11, 0.3], [0.16, 0.16, 0.18]], [0.28, [0.08, 0.16, 0.18], [0.08, 0.08, 0.09]], [-0.25, [0.05, 0.07, 0.4], [0.12, 0.12, 0.13]]]);
+      fist(0.12, -0.22 - back * 0.4, 0.3);
+      break;
+    }
+    case 'nade': {
+      // pull the pin, drop it on them, step back
+      const z = 0.35 + pre * 0.35, y = -0.25 - pre * 0.25 - back * 0.4;
+      if (t < h) P(out, at(0.1, y, z + 0.1), F, 0, 0, 0, [0.09, 0.11, 0.09], [0.25, 0.32, 0.15], { shape: 'sphere' });
+      if (t < h * 0.35) P(out, at(0.1, y + 0.08, z + 0.1), F, 0, 0, 0, [0.03, 0.03, 0.03], [0.8, 0.8, 0.8], { shape: 'sphere' });
+      fist(0.12, y - 0.04, z);
+      if (t > h * 0.3 && t < h) P(out, at(-0.08 - (t - h * 0.3) * 0.4, -0.15 + (t - h * 0.3) * 0.6, 0.45), F, 0, 0, 0, [0.04, 0.04, 0.012], [0.85, 0.75, 0.3], {});
+      break;
+    }
+    case 'elbow': {
+      const y = -0.15 - pre * 0.25 - back * 0.4;
+      stick(at(0.05, y, 0.4), dirOf(0.3, 0.6, -0.4), [[0, [0.12, 0.12, 0.14], sleeve], [0.2, [0.1, 0.1, 0.32], sleeve], [0.4, [0.09, 0.09, 0.1], glove]]);
+      break;
+    }
+    case 'boot': {
+      const y = -0.15 + Math.sin(Math.min(1, t / (h * 0.7)) * Math.PI * 0.5) * 0.15 - ease((t - h * 0.7) / (h * 0.3)) * 0.85 - back * 0.4;
+      stick(at(0, y, 0.6), dirOf(0, 1, 0.15), [[0, [0.18, 0.12, 0.34], sk.shoes, { shape: 0.02 }], [0.35, [0.16, 0.5, 0.17], sk.bottom], [0.08, [0.2, 0.05, 0.36], [0.05, 0.05, 0.05]]]);
+      break;
+    }
+    case 'hammer': {
+      // up over the shoulder, then all the way down
+      const ang = t < h * 0.55 ? 0.4 + ease(t / (h * 0.55)) * 1.9 : 2.3 - ease((t - h * 0.55) / (h * 0.45)) * 3.3;
+      const dir = dirOf(0.08, Math.sin(ang), Math.cos(ang));
+      const piv = at(0.12, -0.3 - back * 0.5, 0.25);
+      stick(piv, dir, [[0.35, [0.045, 0.045, 0.8], [0.35, 0.24, 0.13]], [0.82, [0.34, 0.2, 0.2], [0.22, 0.22, 0.24], { mat: 'metal' }], [0.82, [0.36, 0.08, 0.08], accent]]);
+      fist(0.12, -0.32 - back * 0.5, 0.25); fist(-0.02, -0.3 - back * 0.5, 0.35);
+      break;
+    }
+    case 'slam': {
+      const spread = Math.sin(Math.min(1, t / h) * Math.PI * 0.5) * 0.35;
+      const y = -0.1 - pre * 0.1 - back * 0.4;
+      for (const s of [-1, 1]) stick(at(s * (0.35 + spread), y, 0.4), dirOf(s, 0.2, 0.3), [[0, [0.12, 0.12, 0.14], glove], [-0.25, [0.1, 0.1, 0.38], sleeve]]);
+      break;
+    }
+  }
+}
+// someone finished me off: the respawn timer jumps on
+function takenDown(name, kind) {
+  if (!player.dead) return;
+  player.downed = false;
+  takenBy = { name, k: TAKEDOWNS[kind]?.name || 'TAKEDOWN' };
+  killer = name;
+  deathT = Math.min(deathT, 3);
+  tdShake = 0.4; player.shake = Math.max(player.shake || 0, 0.4);
+  sounds.hit?.(); sounds.crumble?.();
 }
 
 const botHooks = {
@@ -604,6 +822,14 @@ const botHooks = {
     effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal);
   },
   onBotKill: (killer, victim) => { killFeed(killer.name, 'RIFLE', victim.name, false); },
+  // a bot finishes off someone who's downed
+  botTakedown: (agent, victim) => {
+    const list = takedownsFor(agent.cls || 'medium'), kind = list[Math.floor(Math.random() * list.length)];
+    if (victim.isPlayer) takenDown(agent.name, kind);
+    else if (victim.bot) takedownFx(victim.bot, kind, false);
+    killFeed(agent.name, TAKEDOWNS[kind].name, victim.name, false);
+    tdm.takedown?.(agent, victim);
+  },
   smokeBlocks: (a, b) => heavy.smokeBlocks(a, b),
   // a bot uses its gear: returns how long until it thinks about it again
   botGear: (agent, tgt, dist, hurting) => {
@@ -988,7 +1214,7 @@ const hud = {
   scope: $('scope'), slots: [$('slot1'), $('slot2')],
   ab: { main: $('ab-main'), heavy: $('ab-heavy'), thr: $('ab-throw') },
   hp: $('health'), hpBar: $('hpbar'), hpNum: $('hpnum'), dmg: $('dmgdirs'), lowhp: $('lowhp'), killfeed: $('killfeed'),
-  wave: $('wavepanel'), waveTitle: $('wavetitle'), waveInfo: $('waveinfo'), banner: $('banner'), death: $('death'), deathSub: $('deathsub'),
+  wave: $('wavepanel'), waveTitle: $('wavetitle'), waveInfo: $('waveinfo'), banner: $('banner'), death: $('death'), deathSub: $('deathsub'), deathTitle: $('death').querySelector('b'),
   speedo: $('speedo'), speedBar: $('speedbar'), speedNum: $('speednum'), chain: $('chain'),
   course: $('course'), courseTime: $('coursetime'), courseInfo: $('courseinfo'), flash: $('flash'), fade: $('fade'),
 };
@@ -1180,7 +1406,11 @@ function updateHud(dt, fovRad) {
   hud.banner.style.transform = `translate(-50%, -50%) scale(${1 + Math.max(0, bannerT - (bannerT > 1.5 ? 1.5 : 99)) * 0.3})`;
   // death screen
   hud.death.classList.toggle('hidden', !player.dead);
-  if (player.dead) hud.deathSub.textContent = `BY ${killer} · RESPAWN IN ${Math.ceil(deathT)}`;
+  if (player.dead) {
+    hud.deathTitle.textContent = player.downed ? 'DOWNED' : takenBy ? 'TAKEN DOWN' : 'ELIMINATED';
+    hud.deathSub.textContent = takenBy ? `${takenBy.k} BY ${takenBy.name} · RESPAWN IN ${Math.ceil(deathT)}`
+      : `BY ${killer} · ${player.downed ? 'THEY CAN FINISH YOU · ' : ''}RESPAWN IN ${Math.ceil(deathT)}`;
+  }
 
   const spreadPx = Math.tan(w.spread(player)) / Math.tan(fovRad / 2) * (innerHeight / 2);
   hud.cross.style.setProperty('--gap', `${Math.max(4, spreadPx).toFixed(1)}px`);
@@ -1190,7 +1420,10 @@ function updateHud(dt, fovRad) {
 
   const lb = playing && !player.dead && inStadium() ? lookLiftButton() : null;
   const hk = settings.abilityKey.replace(/^Key/, '');
-  if (inStadium() && stadium.hook && playing && !player.dead && player.grapple?.anchor) {
+  if (downedNear && playing && !player.dead && !td) {
+    hud.prompt.innerHTML = `<kbd>E</kbd> TAKEDOWN <b>${downedNear.name}</b> <span>${TAKEDOWNS[myTakedownKind()].name}</span>`;
+    hud.prompt.style.opacity = 1;
+  } else if (inStadium() && stadium.hook && playing && !player.dead && player.grapple?.anchor) {
     hud.prompt.innerHTML = `<kbd>${hk}</kbd> CUT THE LINE <span>OR JUMP</span>`;
     hud.prompt.style.opacity = 1;
   } else if (inStadium() && stadium.hook && playing && !player.dead && !player.grounded && player.vel[1] < -5 && fallTop != null && fallTop - player.pos[1] > 5) {
@@ -1478,6 +1711,9 @@ const netHooks = {
   cloaked: () => cloakT > 0,
   grapplePoint: () => (player.grapple && player.grapple.phase !== 'miss' ? player.grapple.point.map((v) => +v.toFixed(2)) : null),
   remoteGadget: (spec) => gadgets.place(spec),
+  takenDown: (name, kind) => takenDown(name, kind),
+  takedownFx: (bot, kind, mine) => { if (!mine) takedownFx(bot, kind, false); },
+  feedTakedown: (a, kind, b) => killFeed(a, TAKEDOWNS[kind]?.name || 'TAKEDOWN', b, false),
   remoteHeavy: (m) => heavy.remote(m),
   remoteChunks: (h) => { for (const [w, r, k, d] of h) { const wall = walls[w]; if (wall?.hp) wall.hitCell(r, k, d); } },
   remoteGadgetHit: (gid, dmg) => gadgets.damage(gadgets.byId(gid), dmg),
@@ -1489,6 +1725,10 @@ const netHooks = {
     shot: (b, from, end, pd) => { botHooks.shot(b, from, end, pd); online.send({ t: 'shot', id: b.agent.id, f: from.map((v) => +v.toFixed(2)), e: end.map((v) => +v.toFixed(2)) }); },
     hitPlayer: (dmg, bot, from) => { player.lastHitBy = bot.agent.id; damagePlayer(dmg, from, bot.name); },
     onBotKill: () => {},
+    botTakedown: (agent, victim) => {
+      const list = takedownsFor(agent.cls || 'medium'), kind = list[Math.floor(Math.random() * list.length)];
+      online.myTakedown(victim.isPlayer ? online.myId : victim.id, kind, agent.id);
+    },
     botGear: () => 30,
     barricade: () => false,
   },
@@ -1788,6 +2028,16 @@ function renderMenu() {
     b.style.setProperty('--c', rgb(c.color));
     b.append(el('b', null, a.name), el('small', null, a.cd), el('p', null, a.desc));
     b.onclick = () => { sel.throwable = id; classDirty = true; saveLoadout(classLo); sounds.click?.(2600, 0.3, 4); renderMenu(); };
+    return b;
+  }));
+  // takedowns
+  $('mm-takedowns').replaceChildren(...takedownsFor(classLo.cls).map((id) => {
+    const a = TAKEDOWNS[id];
+    const b = el('button', `mm-abl${id === (sel.takedown || takedownsFor(classLo.cls)[0]) ? ' on' : ''}`);
+    b.type = 'button';
+    b.style.setProperty('--c', rgb(c.color));
+    b.append(el('b', null, a.name), el('small', null, `E ON A DOWNED ENEMY · ${a.dur.toFixed(1)} S`), el('p', null, a.desc));
+    b.onclick = () => { sel.takedown = id; saveLoadout(classLo); sounds.click?.(2600, 0.3, 4); renderMenu(); };
     return b;
   }));
   // abilities
@@ -2234,10 +2484,12 @@ function frameBody(now) {
   }
   perfLast = now;
 
-  if (playing && !bench.open && (cutscene || pressSeq || player.dead)) {
+  if (playing && !bench.open && (cutscene || pressSeq || player.dead || td)) {
     // the player isn't in control right now
+    downedNear = null;
     if (input.hit('KeyT') && !tdm.active) resetRange();
     if (cutscene) updateCutscene(dt);
+    else if (td && !player.dead) updateTakedown(dt);
     else if (pressSeq) {
       updatePress(dt);
       weapon().update(dt, idleInput, player, weaponCtx);
@@ -2259,7 +2511,9 @@ function frameBody(now) {
     nearCase = findCase();
     nearBench = findBench();
     const liftBtn = lookLiftButton();
-    if (liftBtn && input.hit('KeyE')) liftBtn.lift.press(liftBtn, sounds);
+    downedNear = findDowned();
+    if (downedNear && input.hit('KeyE')) startTakedown(downedNear);
+    else if (liftBtn && input.hit('KeyE')) liftBtn.lift.press(liftBtn, sounds);
     else if (nearConsole() && input.hit('KeyE')) pressConsole();
     else if (nearCase?.ammo && input.hit('KeyE')) { slots.forEach((w) => { w.ammo = w.def.mag; }); sounds.magIn?.(); sounds.pickup(); }
     else if (nearCase && input.hit('KeyE')) pickUp(nearCase.def);
@@ -2360,8 +2614,9 @@ function frameBody(now) {
   perspective(vmProjM, 58 * Math.PI / 180, aspect, 0.01, 10);
   lookDir(vmViewM, [0, 0, 0], [0, 0, -1], [0, 1, 0], player.roll * 0.5);
   worldVfov = vfov; worldAspect = aspect;
-  const vmParts = bench.open || cutscene || player.dead ? [] : w.viewmodel(player, time);
+  const vmParts = bench.open || cutscene || player.dead || td ? [] : w.viewmodel(player, time);
   const botParts = tdm.active && inStadium() ? [...botMgr.drawParts(), ...tdm.drawParts()] : botMgr.drawParts();
+  if (td && !player.dead) takedownParts(botParts);
   const beams = worldBeams(w);
 
   // shadow pass
@@ -2479,4 +2734,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

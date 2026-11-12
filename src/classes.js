@@ -36,6 +36,19 @@ export const THROWABLES = {
   flash: { name: 'FLASHBANG', short: 'FLASH', desc: 'Whites out anyone looking at it (worse the closer and more head-on). Blinded bots can\'t pick targets for a few seconds.', cd: '2 × 14 S' },
 };
 export const THROW_ORDER = ['frag', 'smoke', 'flash'];
+// Takedowns (E on a downed enemy): three per class. `fx` is how the body goes (shatter / launch / burst / flatten).
+export const TAKEDOWNS = {
+  blade: { cls: 'light', name: 'BLADE', desc: 'A quick knife: two slashes and gone. The fastest finisher in the game.', dur: 0.9, hitAt: 0.55, fx: 'shatter', prop: 'knife' },
+  flipkick: { cls: 'light', name: 'FLIP KICK', desc: 'A backflip off their chest that punts the body across the floor.', dur: 1.15, hitAt: 0.5, fx: 'launch', prop: 'kick' },
+  shockpalm: { cls: 'light', name: 'SHOCK PALM', desc: 'A charged glove to the chest. Sparks, a crack, and they come apart.', dur: 1.05, hitAt: 0.7, fx: 'zap', prop: 'glove' },
+  buttstroke: { cls: 'medium', name: 'RIFLE BUTT', desc: 'Two swings of the stock. Simple, honest, effective.', dur: 1.1, hitAt: 0.72, fx: 'shatter', prop: 'stock' },
+  pocketnade: { cls: 'medium', name: 'POCKET GRENADE', desc: 'Pin out, nade in their pocket, step back. Pop.', dur: 1.25, hitAt: 1.0, fx: 'burst', prop: 'nade' },
+  elbowdrop: { cls: 'medium', name: 'ELBOW DROP', desc: 'Off the top rope, minus the rope. Straight down onto them.', dur: 1.1, hitAt: 0.75, fx: 'flatten', prop: 'elbow' },
+  stomp: { cls: 'heavy', name: 'STOMP', desc: 'One boot, all your weight. The floor shakes for everyone nearby.', dur: 1.0, hitAt: 0.62, fx: 'flatten', prop: 'boot' },
+  sledge: { cls: 'heavy', name: 'SLEDGEHAMMER', desc: 'Where did you keep this? Overhead and down. Rubble.', dur: 1.35, hitAt: 0.95, fx: 'shatter', prop: 'hammer' },
+  bodyslam: { cls: 'heavy', name: 'BODY SLAM', desc: 'Jump, land on them, bounce off. A small shockwave knocks the dust up.', dur: 1.3, hitAt: 0.8, fx: 'burst', prop: 'slam' },
+};
+export const takedownsFor = (cls) => Object.keys(TAKEDOWNS).filter((k) => TAKEDOWNS[k].cls === cls);
 
 export const CLASSES = {
   light: {
@@ -75,9 +88,9 @@ const KEY = 'semifinals.loadout';
 export function loadLoadout() {
   const def = {
     cls: 'medium',
-    light: { weapon: 'smg', sidearm: 'pistol', ability: 'grapple', heavy: 'dronepod', throwable: 'flash' },
-    medium: { weapon: 'ar', sidearm: 'pistol', ability: 'pad', heavy: 'gl_frag', throwable: 'smoke' },
-    heavy: { weapon: 'lmg', sidearm: 'revolver', ability: 'barricade', heavy: 'turret_mg', throwable: 'frag' },
+    light: { weapon: 'smg', sidearm: 'pistol', ability: 'grapple', heavy: 'dronepod', throwable: 'flash', takedown: 'blade' },
+    medium: { weapon: 'ar', sidearm: 'pistol', ability: 'pad', heavy: 'gl_frag', throwable: 'smoke', takedown: 'buttstroke' },
+    heavy: { weapon: 'lmg', sidearm: 'revolver', ability: 'barricade', heavy: 'turret_mg', throwable: 'frag', takedown: 'stomp' },
   };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -88,6 +101,7 @@ export function loadLoadout() {
         if (s[c] && CLASSES[c].sidearms.includes(s[c].sidearm)) def[c].sidearm = s[c].sidearm;
         if (s[c] && CLASSES[c].heavies.includes(s[c].heavy)) def[c].heavy = s[c].heavy;
         if (s[c] && THROWABLES[s[c].throwable]) def[c].throwable = s[c].throwable;
+        if (s[c] && TAKEDOWNS[s[c].takedown]?.cls === c) def[c].takedown = s[c].takedown;
       }
       def.cls = s.cls;
     }

@@ -330,6 +330,7 @@ class Remote {
   }
   get pos() { return this.bot ? this.bot.pos : [0, -999, 0]; }
   get alive() { return !!this.bot && this.bot.alive && !this.dead; }
+  get downed() { return !!this.bot && !this.bot.alive && !!this.bot.downed; }
   eye() { return this.bot.eye(); }
   get hpFrac() { return this.maxHp ? this.hp / this.maxHp : 1; }
 
@@ -346,7 +347,8 @@ class Remote {
     if (!b.alive) {
       if (b.dying >= 0) {
         b.dying += dt; b.flash -= dt;
-        if (b.dying > 0.75 && !b.shattered) { b.shattered = true; b.remove(); b.removed = true; g.onShatter?.(b); }
+        if (b.dying > 9.6) b.downed = false;          // about to respawn: the body goes
+        if (b.dying > 0.75 && !b.downed && !b.shattered) { b.shattered = true; b.remove(); b.removed = true; g.onShatter?.(b); }
       }
       return;
     }
@@ -378,6 +380,7 @@ class Remote {
   kill(dir) {
     if (!this.bot || !this.bot.alive) { this.dead = true; return; }
     this.bot.damage(1e6, dir || [0, 0, 1]);
+    this.bot.downed = true;          // lies there until their respawn (or a takedown)
     this.dead = true;
   }
   remove() { if (this.bot && !this.bot.removed) { this.bot.remove(); this.bot.removed = true; } }
@@ -531,6 +534,7 @@ export class Online {
       case 'gad': if (m.id !== this.myId && this.active) this.g?.remoteGadget?.(m.g); break;
       case 'gl': case 'boom': case 'drn': case 'tsh': case 'trap': case 'trapgone': case 'teth': case 'gdel': if (m.id !== this.myId && this.active) this.g?.remoteHeavy?.(m); break;
       case 'gdm': if (this.active) this.g?.remoteGadgetHit?.(m.gid, m.dmg); break;
+      case 'td': if (m.id !== this.myId && this.active) this.onTakedown(m); break;
       case 'chk': if (m.id !== this.myId && this.active) this.g?.remoteChunks?.(m.h); break;
       case 'hit':
         if (m.to === this.myId && this.active) this.g?.remoteHit(m.dmg, m.f, this.nameOf(m.by), m.by, m.head);
@@ -567,7 +571,7 @@ export class Online {
     this.over = null;
     this.ui.onStart({ arena: m.arena, team: me.team, teams: this.teams, mode: m.mode });   // sets up the arena, places the player, sets this.g
     const player = this.g.player;
-    this.you = { isPlayer: true, team: this.myTeam, name: 'YOU', id: this.myId, get pos() { return player.pos; }, get alive() { return !player.dead; }, eye: () => player.eye() };
+    this.you = { isPlayer: true, team: this.myTeam, name: 'YOU', id: this.myId, get pos() { return player.pos; }, get alive() { return !player.dead; }, get downed() { return !!player.downed; }, eye: () => player.eye() };
     this.agents.forEach((a) => a.remove());
     this.kd = {};
     this.co = null;
@@ -616,6 +620,24 @@ export class Online {
   // ---- my own events, reported by the game
   myShot(from, end) { this.send({ t: 'shot', id: this.myId, f: from.map((v) => +v.toFixed(2)), e: end.map((v) => +v.toFixed(2)) }); }
   myHit(remote, dmg, head, from) { this.send({ t: 'hit', to: remote.id, by: this.myId, dmg, head, f: from.map((v) => +v.toFixed(2)) }); }
+  // takedowns: { t: 'td', id: who did it, v: who was downed, k: which takedown }
+  myTakedown(victimId, kind, byId = this.myId) { const m = { t: 'td', id: byId, v: victimId, k: kind }; this.send(m); this.onTakedown(m); }
+  onTakedown(m) {
+    if (m.v === this.myId) this.g?.takenDown?.(this.nameOf(m.id), m.k);
+    else { const r = this.byId(m.v); if (r?.bot) { r.bot.downed = false; this.g?.takedownFx?.(r.bot, m.k, m.id === this.myId); } }
+    if (this.kd) (this.kd[m.id] ??= { k: 0, d: 0 }).td = ((this.kd[m.id].td) || 0) + 1;
+    this.g?.feedTakedown?.(this.nameOf(m.id), m.k, this.nameOf(m.v));
+    // the host keeps score: a takedown is a bonus point
+    if (this.isHost && this.teams && !this.over) {
+      const bp = this.players.find((p) => p.id === m.id);
+      if (!bp) return;
+      const team = this.teams[bp.team];
+      team.kills++;
+      const over = team.kills >= NET_GOAL ? team.idx : null;
+      this.send({ t: 'score', k: this.teams.map((t) => t.kills), over });
+      if (over != null) this.finish(team);
+    }
+  }
   myDeath(byId) { const m = { t: 'died', id: this.myId, by: byId || null }; this.send(m); this.onDied(m); }
 
   onDied(m) {

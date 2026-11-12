@@ -6,7 +6,7 @@ import { Nav } from './nav.js';
 import { compose, mat4, clamp } from './math.js';
 
 export const GOAL = 10;
-const BOT_RESPAWN = 4;
+const BOT_RESPAWN = 10;      // seconds downed before coming back (a takedown clears the body sooner)
 const MAGS = { rifle: 30, rusher: 32, heavy: 60 };
 const INTEL_TTL = 9;       // seconds a sighting / sound stays useful
 const TYPE_OF = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
@@ -50,6 +50,7 @@ export class Agent {
 
   get pos() { return this.bot.pos; }
   get alive() { return this.bot.alive; }
+  get downed() { return !!this.bot && !this.bot.alive && !!this.bot.downed; }
   eye() { return this.bot.eye(); }
   get hpFrac() { return this.bot.hp / this.bot.maxHp; }
 
@@ -73,11 +74,13 @@ export class Agent {
       if (!this.dead) {
         this.dead = true;
         this.respawnT = BOT_RESPAWN;
+        b.downed = true;                 // on the floor until a takedown or the respawn
         co.onDeath(this);
       }
+      if (this.respawnT < 0.5) b.downed = false;
       if (b.dying >= 0) {
         b.dying += dt; b.flash -= dt;
-        if (b.dying > 0.75 && !b.shattered) { b.shattered = true; b.remove(); b.removed = true; g.onShatter?.(b); }
+        if (b.dying > 0.75 && !b.downed && !b.shattered) { b.shattered = true; b.remove(); b.removed = true; g.onShatter?.(b); }
       }
       this.respawnT -= dt;
       if (this.respawnT <= 0) this.spawnBot();
@@ -164,7 +167,16 @@ export class Agent {
       b.pos[0] = nx[0]; b.pos[2] = nx[2];
       return st;
     };
-    if (tgt && tDist < hi * 1.5) {
+    // nobody shooting at me and an enemy's downed nearby: go and finish them off
+    let finishing = null;
+    if (!tgt && g.botTakedown) {
+      this.tdCd = (this.tdCd ?? 0) - dt;
+      if (this.tdCd <= 0) for (const e of co.entities()) if (e.team !== this.team && e.downed && dist2(e.pos, b.pos) < 10 && Math.abs(e.pos[1] - b.pos[1]) < 1.5) { finishing = e; break; }
+    }
+    if (finishing) {
+      if (dist2(finishing.pos, b.pos) < 1.4) { g.botTakedown(this, finishing); this.tdCd = 8; }
+      else { const r = stepTo(finishing.pos[0], finishing.pos[2], b.t.speed); if (r > 0) moved = r; else this.tdCd = 3; }
+    } else if (tgt && tDist < hi * 1.5) {
       const wantCover = this.pauseCd > 0.35 || this.hpFrac < 0.5 || this.reloadT > 0;
       // heavies throw up a barricade when they're taking a beating with nowhere to hide
       this.barCd = (this.barCd ?? 3) - dt;
@@ -202,6 +214,7 @@ export class Agent {
     const intel = tgt ? null : co.nearestIntel(this);
     this.facing = tgt ? [...tgt.pos] : intel ? intel.pos : null;
     if (tgt) want = Math.atan2(-(tgt.pos[0] - b.pos[0]), -(tgt.pos[2] - b.pos[2]));
+    else if (finishing) want = Math.atan2(-(finishing.pos[0] - b.pos[0]), -(finishing.pos[2] - b.pos[2]));
     else if (intel && dist2(intel.pos, b.pos) < 30 && this.goal?.mode !== 'retreat') want = Math.atan2(-(intel.pos[0] - b.pos[0]), -(intel.pos[2] - b.pos[2]));   // pre-aim where they were
     else if (this.path && this.pi < this.path.length) { const p = this.path[this.pi]; if (dist2(p, b.pos) > 0.2) want = Math.atan2(-(p[0] - b.pos[0]), -(p[2] - b.pos[2])); }
     let dy = want - b.yaw;
@@ -316,7 +329,7 @@ export class Deathmatch {
     this.myTeam = this.teams.find((t) => t.mine);
     this.you = {
       isPlayer: true, team: this.myTeam, name: 'YOU', cls: classOf, kills: 0, deaths: 0,
-      get pos() { return player.pos; }, get alive() { return !player.dead; }, eye: () => player.eye(),
+      get pos() { return player.pos; }, get alive() { return !player.dead; }, get downed() { return !!player.downed; }, eye: () => player.eye(),
     };
     this.agents = [];
     for (const t of this.teams) t.intel = new Map();     // enemy → { pos, t, seen }
@@ -464,6 +477,19 @@ export class Deathmatch {
       if (d > 4 && d < bd) { bd = d; best = o.pos; }
     }
     return { pos: best ? [...best] : [...a.team.spawn.pos], mode: 'retreat', r: 2.5 };
+  }
+
+  // a takedown on someone downed: a bonus point for the team that did it
+  takedown(by, victim) {
+    if (this.over) return;
+    const team = by.team;
+    team.kills++;
+    by.takedowns = (by.takedowns || 0) + 1;
+    this.events.push({ type: 'takedown', team, by, victim });
+    if (team.kills >= GOAL) {
+      this.over = { winner: team, standings: [...this.teams].sort((x, y) => y.kills - x.kills) };
+      this.events.push({ type: 'end', winner: team });
+    }
   }
 
   // the player has no objective to interact with

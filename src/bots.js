@@ -301,7 +301,7 @@ export class Bot {
   // Everything is posed in bot space (feet at origin, facing -z) then moved into the world.
   parts() {
     const dyingT = this.dying;
-    if (!this.alive && (dyingT < 0 || dyingT > 0.75)) return [];
+    if (!this.alive && (dyingT < 0 || (dyingT > 0.75 && !this.downed))) return [];     // downed: stays lying there
     if (this.alive && !this.visible) return [];
     const t = this.t, s = this.sc, b = t.build;
     const g = this.moving, w = this.walk;
