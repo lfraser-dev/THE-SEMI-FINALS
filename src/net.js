@@ -627,7 +627,7 @@ export class Online {
   myTakedown(victimId, kind, byId = this.myId) { const m = { t: 'td', id: byId, v: victimId, k: kind }; this.send(m); this.onTakedown(m); }
   onTakedown(m) {
     if (m.v === this.myId) this.g?.takenDown?.(this.nameOf(m.id), m.k);
-    else { const r = this.byId(m.v); if (r?.bot) { r.bot.downed = false; this.g?.takedownFx?.(r.bot, m.k, m.id === this.myId); } }
+    else { const r = this.byId(m.v); if (r?.bot) { this.g?.takedownFx?.(r.bot, m.k, m.id === this.myId); if (!this.g?.takedownFx) r.bot.downed = false; } }
     if (this.kd) (this.kd[m.id] ??= { k: 0, d: 0 }).td = ((this.kd[m.id].td) || 0) + 1;
     this.g?.feedTakedown?.(this.nameOf(m.id), m.k, this.nameOf(m.v));
     // the host keeps score: a takedown is a bonus point

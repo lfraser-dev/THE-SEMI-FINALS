@@ -284,7 +284,7 @@ function updateCamera() {
   camRight = norm(cross(camFwd, [0, 1, 0]));
   camUp = cross(camRight, camFwd);
   // apply roll to the basis so tracers/casings line up with what you see
-  const roll = cutscene || td || victimCam ? 0 : player.dead ? player.roll + Math.min(1, (deathDur - deathT) / 0.6) * 0.9 : player.roll;
+  const roll = cutscene ? 0 : td || victimCam ? cineRoll : player.dead ? player.roll + Math.min(1, (deathDur - deathT) / 0.6) * 0.9 : player.roll;
   const c = Math.cos(roll), s = Math.sin(roll);
   const r2 = [0, 1, 2].map((k) => camRight[k] * c + camUp[k] * s);
   camUp = [0, 1, 2].map((k) => camUp[k] * c - camRight[k] * s);
@@ -607,7 +607,7 @@ function respawnPlayer() {
 // Armoury) worth a bonus point and 50 HP. The same animations play on bots and on other players online.
 const DOWNED_TIME = 10;
 const BODY_TYPE = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
-let deathDur = 3, takenBy = null, td = null, downedNear = null, tdShake = 0, victimCam = null;
+let deathDur = 3, takenBy = null, td = null, downedNear = null, tdShake = 0, victimCam = null, cineFov = 0, cineRoll = 0;
 const bodyPt = (b) => b.toWorld([0, 0.3, (b.fallSign || 1) * 1.0]);
 function myTakedownKind() {
   const list = takedownsFor(classLo.cls), k = classLo[classLo.cls].takedown;
@@ -659,7 +659,18 @@ function takedownFx(bot, kind, mine, from) {
   const def = TAKEDOWNS[kind] || TAKEDOWNS.blade, p = bodyPt(bot);
   const src = from || (mine ? player.pos : null);
   const away = src ? norm([p[0] - src[0], 0, p[2] - src[2]]) : [0, 0, 0];
-  bot.downed = false;
+  // a white hit-flash on the body and a beat before it breaks apart
+  bot.flash = 0.16;
+  setTimeout(() => { bot.downed = false; }, 110);
+  // shock ring along the floor and a burst of bright sparks
+  const g0 = [p[0], bot.pos[1] + 0.04, p[2]];
+  for (let i = 0; i < 20; i++) {
+    const a = i / 20 * Math.PI * 2;
+    effects.spawnPiece(g0, [0.07, 0.025, 0.07], [Math.cos(a) * 7, 0, Math.sin(a) * 7], [1, 0.95, 0.82], 0.22, 1);
+    effects.debris[effects.debris.length - 1].noGravity = true;
+  }
+  for (let i = 0; i < 10; i++) effects.spawnPiece(p, [0.025, 0.025, 0.07], [(Math.random() - 0.5) * 6, 1.5 + Math.random() * 4, (Math.random() - 0.5) * 6], [1, 0.85, 0.5], 0.35 + Math.random() * 0.3, 1);
+  effects.dust(g0, 5);
   const near = Math.hypot(p[0] - player.pos[0], p[2] - player.pos[2]);
   const vol = Math.max(0.2, 1 - near / 30);
   switch (def.fx) {
@@ -694,7 +705,8 @@ function landTakedown() {
   const v = td.victim, kind = td.kind;
   takedownFx(td.bot, kind, true);
   tdShake = TAKEDOWNS[kind].fx === 'flatten' || TAKEDOWNS[kind].fx === 'burst' ? 0.6 : 0.35;
-  slowmo = 0.22;
+  slowmo = 0.3;
+  cineFlash();
   player.hp = Math.min(player.maxHp, player.hp + 50);
   sounds.checkpoint?.();
   if (online.active && tdm === online) online.myTakedown(v.id, kind);
@@ -723,9 +735,12 @@ function cineCam(A, yaw, B, t, def, lift, eye0, fwd0, out) {
   const ease = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
   const dur = def.dur, h = def.hitAt;
   const f = [-Math.sin(yaw), 0, -Math.cos(yaw)], r = [Math.cos(yaw), 0, -Math.sin(yaw)];
-  const mid = [(A[0] + B[0]) / 2, A[1] + 0.75 + lift * 0.5, (A[2] + B[2]) / 2];
-  const th = 0.55 + ease(t / dur) * 1.15 * (def.side || 1);
+  const mid = [A[0] * 0.45 + B[0] * 0.55, A[1] + 0.7 + lift * 0.5, A[2] * 0.45 + B[2] * 0.55];
+  const th = 1.05 + ease(t / dur) * 0.85;     // from over the shoulder round to side-on, so you see both of them
   const close = Math.exp(-((t - h) * (t - h)) / 0.08);
+  // a longer lens that punches in at the hit, and a slight dutch tilt
+  cineFov = -20 - 14 * close;
+  cineRoll = 0.1 * close * (Math.sin(yaw * 3) > 0 ? 1 : -1);
   const dist = 3.7 - 1.1 * close - 0.3 * ease(t / h);
   const hgt = 1.45 - 0.55 * close + lift * 0.4;
   const dir = norm([-f[0] * Math.cos(th) + r[0] * Math.sin(th), hgt / dist, -f[2] * Math.cos(th) + r[2] * Math.sin(th)]);
@@ -758,7 +773,7 @@ function takedownParts(out) {
     a.pos = [...player.pos]; a.yaw = td.yaw;
     a.tdAnim = { kind: td.kind, t: td.t };
     out.push(...a.parts());
-    takedownProps(out, a, td.kind, td.t, td.def, td.body);
+    takedownProps(out, a, td.kind, td.t, td.def, td.body, tdm.myTeam?.rgb);
   }
   if (victimCam) out.push(...victimCam.me.parts());
 }
@@ -767,7 +782,7 @@ function agentTakedownParts(out) {
   if (!tdm.active || !inStadium()) return;
   for (const a of tdm.agents) {
     const b = a.bot;
-    if (b?.tdAnim && b.alive) takedownProps(out, b, b.tdAnim.kind, b.tdAnim.t, TAKEDOWNS[b.tdAnim.kind], b.tdAnim.body);
+    if (b?.tdAnim && b.alive) takedownProps(out, b, b.tdAnim.kind, b.tdAnim.t, TAKEDOWNS[b.tdAnim.kind], b.tdAnim.body, a.team?.rgb);
   }
 }
 // letterbox bars + a title card while a takedown cutscene plays
@@ -776,13 +791,17 @@ function cine(on, title = '', sub = '') {
   if (!cineEl) {
     cineEl = document.createElement('div');
     cineEl.id = 'cine';
-    cineEl.innerHTML = '<i></i><i></i><div class="cine-t"><small>TAKEDOWN</small><b></b><span></span></div>';
+    cineEl.innerHTML = '<i></i><i></i><div class="cine-t"><small>TAKEDOWN</small><b></b><span></span></div><div class="cine-f"></div>';
     document.body.append(cineEl);
     const st = document.createElement('style');
     st.textContent = `#cine{position:fixed;inset:0;pointer-events:none;z-index:40}
 #cine>i{position:absolute;left:0;right:0;height:13vh;background:#000;transition:transform .35s cubic-bezier(.2,.8,.2,1)}
 #cine>i:first-child{top:0;transform:translateY(-100%)}#cine>i:nth-child(2){bottom:0;transform:translateY(100%)}
 #cine.on>i{transform:none}
+#cine .cine-f{position:absolute;inset:0;background:radial-gradient(circle,rgba(255,255,255,.85),rgba(255,240,210,.35) 60%,rgba(255,255,255,0));opacity:0;transition:opacity .35s}
+#cine .cine-f.go{opacity:1;transition:none}
+#cine::after{content:'';position:absolute;inset:0;box-shadow:inset 0 0 18vh rgba(0,0,0,.55);opacity:0;transition:opacity .4s}
+#cine.on::after{opacity:1}
 #cine .cine-t{position:absolute;left:5vw;bottom:2.2vh;color:#fff;font-family:inherit;opacity:0;transform:translateX(-30px);transition:opacity .3s .15s,transform .4s .15s cubic-bezier(.2,.8,.2,1);text-shadow:0 2px 12px rgba(0,0,0,.6)}
 #cine.on .cine-t{opacity:1;transform:none}
 #cine .cine-t small{display:block;font-weight:800;letter-spacing:.35em;font-size:13px;color:#ffb21a}
@@ -794,6 +813,12 @@ body.cine-on #hud,body.cine-on #banner,body.cine-on #killfeed{opacity:0!importan
   if (on) { cineEl.querySelector('small').textContent = sub === 'YOU' ? 'TAKEN DOWN' : 'TAKEDOWN'; cineEl.querySelector('b').textContent = title; cineEl.querySelector('span').textContent = sub === 'YOU' ? '' : sub; }
   cineEl.classList.toggle('on', on);
   document.body.classList.toggle('cine-on', on);
+}
+function cineFlash() {
+  const f = cineEl?.querySelector('.cine-f');
+  if (!f) return;
+  f.classList.add('go');
+  requestAnimationFrame(() => requestAnimationFrame(() => f.classList.remove('go')));
 }
 // someone has started a takedown on me: watch it from outside
 function watchMyTakedown(attackerBot, kind) {
@@ -807,7 +832,7 @@ function watchMyTakedown(attackerBot, kind) {
 function updateVictimCam(dt) {
   const V = victimCam;
   V.t += dt;
-  if (V.t > V.def.hitAt && !V.hit) { V.hit = true; V.me.downed = false; tdShake = 0.4; }
+  if (V.t > V.def.hitAt && !V.hit) { V.hit = true; V.me.flash = 0.16; setTimeout(() => { V.me.downed = false; }, 110); tdShake = 0.45; cineFlash(); }
   if (V.me.dying >= 0) V.me.dying += V.hit ? dt : 0;
   if (V.t >= V.def.dur || !V.attacker.alive) { victimCam = null; cine(false); }
 }
@@ -2655,7 +2680,7 @@ function frameBody(now) {
     requestAnimationFrame(frame);
     return;
   }
-  const targetKick = player.dash ? 16 : player.grapple?.phase === 'pull' ? 10 : player.slam?.phase === 'fall' ? 7 : player.wallRunning ? 8 : player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
+  const targetKick = td || victimCam ? cineFov : player.dash ? 16 : player.grapple?.phase === 'pull' ? 10 : player.slam?.phase === 'fall' ? 7 : player.wallRunning ? 8 : player.vaulting ? 8 : player.sliding ? 9 : player.sprinting ? 5 : player.mantle ? 3 : 0;
   fovKick += (targetKick - fovKick) * damp(player.dash ? 18 : 6, dt);
   const hfov = (settings.fov + fovKick) * (1 - w.adsT * (1 - w.def.adsZoom)) * Math.PI / 180;
   const vfov = 2 * Math.atan(Math.tan(Math.min(hfov, 2.9) / 2) / aspect);

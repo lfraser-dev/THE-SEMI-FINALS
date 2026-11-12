@@ -315,7 +315,8 @@ export class Bot {
     const fa = dyingT >= 0 ? Math.min(1, dyingT / 0.6) ** 2 * 1.45 : 0, fs = this.fallSign;
     // a takedown (or cutscene) pose: whole-body offset and pitch, crouch, hand and foot targets
     const P = this.pose || (this.tdAnim && this.alive ? takedownPose(this.tdAnim.kind, this.tdAnim.t) : null);
-    const pr = P ? P.rot : 0, pc = Math.cos(pr), ps = Math.sin(pr);
+    // flips and slams turn the whole body; everything else leans from the hips with the feet planted
+    const pr = P?.spin ? P.rot : 0, pc = Math.cos(pr), ps = Math.sin(pr);
     const posed = (v) => {
       if (!P) return v;
       const y = v[1] - 0.95, z = v[2];
@@ -338,7 +339,8 @@ export class Bot {
     const bob = -Math.abs(Math.sin(w)) * 0.06 * g;
     const breathe = Math.sin(this.breath * 2.1) * 0.012 * (1 - g);
     const pelvis = [0, 0.95 + bob - crouch, 0];
-    const leanF = 0.12 * g + (this.type === 'rusher' ? 0.12 * g : 0) - this.flinch * 0.35 - this.recoil * 0.05 + this.landK * 0.2;
+    const hipLean = P && !P.spin ? P.rot : 0;
+    const leanF = 0.12 * g + (this.type === 'rusher' ? 0.12 * g : 0) - this.flinch * 0.35 - this.recoil * 0.05 + this.landK * 0.2 + hipLean;
     const twist = Math.sin(w) * 0.12 * g + this.flinch * this.flinchTwist;
     const tr = (v) => lean([v[0] * Math.cos(twist) + v[2] * Math.sin(twist), v[1], -v[0] * Math.sin(twist) + v[2] * Math.cos(twist)], leanF);
     const up = (v) => add3(pelvis, tr(v));
@@ -356,6 +358,7 @@ export class Bot {
       const foot = side > 0 && P?.footR ? P.footR : [hip[0] + md[0] * Math.sin(swing) * 0.8 + side * 0.03, footLift + 0.06, hip[2] + md[1] * Math.sin(swing) * 0.8];
       const knee = ik(hip, foot, legL, legL, [0, 0.2, -1]);
       const ankle = add3(foot, [0, 0.07, 0.03]);
+      if (side > 0) this.footW = W(foot);
       ell(hip, BB, [0.15 * b, 0.15, 0.15], FRAME, emD);                                      // hip joint
       cap(hip, knee, 0.065 * b, 0.05 * b, FRAME, emD);
       cap(lerp3(hip, knee, 0.08), lerp3(hip, knee, 0.78), 0.1 * b, 0.075 * b, RED);          // thigh armour
@@ -414,7 +417,11 @@ export class Bot {
     const muz = add3(gunC, gd.map((v) => v * 0.39));
     this.muzzlePt = W(muz);
     let gripR = add3(gunC, [0, -0.05, 0.16]), gripL = add3(gunC, gd.map((v) => v * 0.18)).map((v, i) => v + (i === 1 ? -0.05 : 0));
-    if (noGun) { gripL = P.hands[0]; gripR = P.hands[1]; }
+    if (noGun) {
+      // hand targets lean with the upper body
+      const hl = (v) => hipLean ? add3(pelvis, lean(sub3(v, pelvis), hipLean)) : v;
+      gripL = hl(P.hands[0]); gripR = hl(P.hands[1]);
+    }
     this.armW = { hL: W(gripL), hR: W(gripR) };
 
     // --- arms solved to the gun
