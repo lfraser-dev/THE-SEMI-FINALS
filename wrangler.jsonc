@@ -1,0 +1,7 @@
+// Cloudflare hosting: only the locked copy in site/ is published (the password screen + the encrypted game).
+// Rebuild it with: python3 tools/stamp.py && python3 tools/seal.py
+{
+  "name": "semifinals",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./site" }
+}

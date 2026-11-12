@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>THE SEMI-FINALS</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0b0d; color: #fff; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  #gate { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: radial-gradient(circle at 50% 35%, #26262c, #0b0b0d 70%); }
+  .g-card { width: min(400px, 100%); text-align: center; }
+  .g-kick { font-weight: 800; letter-spacing: .35em; font-size: 12px; color: #ffb21a; }
+  h1 { margin: 8px 0 22px; white-space: nowrap; font-size: clamp(24px, 7.5vw, 42px); font-style: italic; font-weight: 900; line-height: 1; }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; padding: 14px 16px; border: 2px solid #3a3a42; border-radius: 6px; background: #151518; color: #fff;
+    font: 700 18px system-ui, sans-serif; letter-spacing: .2em; outline: none; }
+  input:focus { border-color: #ffb21a; }
+  input:disabled { opacity: .5; }
+  button { padding: 0 20px; border: 0; border-radius: 6px; background: #e8261a; color: #fff; font: 900 15px system-ui, sans-serif; letter-spacing: .12em; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .g-msg { min-height: 18px; margin-top: 12px; font-size: 12px; font-weight: 700; letter-spacing: .15em; color: #ff5a3a; }
+  .g-msg.ok { color: #9aa0aa; }
+  .shake .g-card { animation: gshake .35s; }
+  @keyframes gshake { 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="gate" class="hidden">
+  <div class="g-card">
+    <div class="g-kick">PRIVATE ACCESS</div>
+    <h1>THE SEMI-FINALS</h1>
+    <form id="f" autocomplete="off">
+      <input id="pw" type="password" placeholder="PASSWORD" aria-label="Password">
+      <button id="go" type="submit">ENTER</button>
+    </form>
+    <div class="g-msg" id="msg"></div>
+  </div>
+</div>
+<script>
+// The game is stored encrypted (g.bin). The password is turned into a key here, in your browser, and only the right
+// key can unscramble the game. Nothing about the password is stored on the site. A device that unlocked it once keeps
+// the key, so you only type it the first time. Too many wrong guesses lock the box for a while.
+(() => {
+  const SALT = '3rtjOG4YsiAJ072fGDa7KA==', ITER = 600000, VER = '0.51-5e8231';
+  const $ = (id) => document.getElementById(id);
+  const gate = $('gate'), pw = $('pw'), go = $('go'), msg = $('msg');
+  const b64 = (u) => btoa(String.fromCharCode(...u));
+  const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  const hex = (u) => [...u].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* private window */ } }, del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } } };
+
+  async function derive(p) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(p.trim().toLowerCase().replace(/\s+/g, '')), 'PBKDF2', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64(SALT), iterations: ITER }, base, 512));
+  }
+  let blob = null;
+  async function bundle() {
+    if (!blob) blob = new Uint8Array(await (await fetch('g.bin?v=' + VER, { cache: 'no-cache' })).arrayBuffer());
+    return blob;
+  }
+  async function boot(bits) {
+    const buf = await bundle();
+    const k1 = await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['decrypt']);
+    let pt;
+    try { pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, k1, buf.slice(12)); } catch { return false; }
+    const B = JSON.parse(await new Response(new Blob([pt]).stream().pipeThrough(new DecompressionStream('gzip'))).text());
+    // the key for online play (rooms and traffic are encrypted, so only people with the password can find or join them)
+    const nb = bits.slice(32);
+    window.__sfNet = { key: await crypto.subtle.importKey('raw', nb, 'AES-GCM', false, ['encrypt', 'decrypt']), tag: hex(new Uint8Array(await crypto.subtle.digest('SHA-256', nb))).slice(0, 12) };
+    const imports = {};
+    for (const [p, code] of Object.entries(B.mods)) imports['@sf/' + p] = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+    const start = '<script type="importmap">' + JSON.stringify({ imports }) + '<\/script><script type="module">import "@sf/src/main.js";<\/script>';
+    const html = B.html.replace('</body>', start + '</body>');
+    document.open(); document.write(html); document.close();
+    return true;
+  }
+
+  // wrong-guess lockout: 5 free tries, then 30 s, doubling each time
+  const lock = () => { try { return JSON.parse(store.get('sf.lock')) || { n: 0, until: 0 }; } catch { return { n: 0, until: 0 }; } };
+  let tick = null;
+  function showLock() {
+    const L = lock(), left = Math.ceil((L.until - Date.now()) / 1000);
+    const locked = left > 0;
+    pw.disabled = go.disabled = locked;
+    if (locked) { msg.className = 'g-msg'; msg.textContent = `TOO MANY TRIES · WAIT ${left} S`; }
+    else if (msg.textContent.startsWith('TOO MANY')) { msg.textContent = ''; pw.focus(); }
+    clearTimeout(tick);
+    if (locked) tick = setTimeout(showLock, 500);
+  }
+
+  $('f').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (lock().until > Date.now() || !pw.value.trim()) return;
+    pw.disabled = go.disabled = true;
+    msg.className = 'g-msg ok'; msg.textContent = 'UNLOCKING…';
+    let ok = false, bits = null;
+    try { bits = await derive(pw.value); ok = await boot(bits); } catch (err) { msg.className = 'g-msg'; msg.textContent = "COULDN'T LOAD THE GAME. CHECK YOUR CONNECTION."; pw.disabled = go.disabled = false; return; }
+    if (ok) { store.set('sf.key', b64(bits)); store.del('sf.lock'); return; }
+    const L = lock(); L.n++;
+    if (L.n >= 5) L.until = Date.now() + 30000 * 2 ** (L.n - 5);
+    store.set('sf.lock', JSON.stringify(L));
+    pw.value = ''; pw.disabled = go.disabled = false;
+    msg.className = 'g-msg'; msg.textContent = 'WRONG PASSWORD';
+    gate.classList.remove('shake'); void gate.offsetWidth; gate.classList.add('shake');
+    showLock();
+    if (!pw.disabled) pw.focus();
+  });
+
+  // remembered device: try the saved key first
+  (async () => {
+    const saved = store.get('sf.key');
+    if (saved) {
+      try { if (await boot(unb64(saved))) return; } catch { /* fall through to the gate */ }
+      store.del('sf.key');
+    }
+    gate.classList.remove('hidden');
+    showLock();
+    if (!pw.disabled) pw.focus();
+  })();
+})();
+</script>
+</body>
+</html>

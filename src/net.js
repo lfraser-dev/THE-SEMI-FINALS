@@ -18,7 +18,10 @@ const BOT_NAMES = ['BOT·VEX', 'BOT·RIVET', 'BOT·NOVA', 'BOT·KOI', 'BOT·DASH
 
 export const NET_GOAL = 10;
 const PEERJS = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
-const PREFIX = 'semifinals-room-';
+// In the locked (password) build, the password screen hands over a key: rooms are then hidden under a tag made from
+// it, and all relay traffic is encrypted with it, so nobody without the password can find, read or join a game.
+const NET = window.__sfNet || null;
+const PREFIX = 'semifinals-room-' + (NET ? NET.tag + '-' : '');
 const SEND_HZ = 15;     // position updates per second (through the relay server)
 const TYPE_OF = { light: 'rusher', medium: 'rifle', heavy: 'heavy' };
 const COLS = ['#ff7a1a', '#2f8cff'];
@@ -143,7 +146,30 @@ const BROKERS = [
   { name: 'hivemq', url: 'wss://broker.hivemq.com:8884/mqtt' },
   { name: 'mosquitto', url: 'wss://test.mosquitto.org:8081/mqtt' },
 ];
-const TOPIC = 'semifinals-tsf/v1/';
+const TOPIC = 'semifinals-tsf/v1/' + (NET ? NET.tag + '/' : '');
+const te = new TextEncoder(), td = new TextDecoder();
+async function packMsg(obj) {
+  const s = JSON.stringify(obj);
+  if (!NET) return s;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, NET.key, te.encode(s)));
+  const out = new Uint8Array(12 + ct.length);
+  out.set(iv); out.set(ct, 12);
+  return out;
+}
+async function unpackMsg(buf) {
+  try {
+    if (!NET) return JSON.parse(buf.toString());
+    const b = new Uint8Array(buf);
+    if (b.length < 29) return null;
+    return JSON.parse(td.decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.slice(0, 12) }, NET.key, b.slice(12))));
+  } catch { return null; }
+}
+// handle a client's messages in arrival order even though unpacking is async
+function onMessages(c, fn) {
+  let q = Promise.resolve();
+  c.on('message', (topic, buf) => { q = q.then(() => unpackMsg(buf)).then((m) => { if (m) fn(topic, m); }).catch(() => {}); });
+}
 let mqttLib = null;
 function loadMQTT() {
   if (window.mqtt) return Promise.resolve(window.mqtt);
@@ -178,7 +204,11 @@ const firstOf = (ps) => new Promise((res, rej) => {
 
 class RelayTransport {
   constructor() { this.id = rid(); this.peers = new Map(); }   // peer id -> last heard (ms)
-  pub(topic, obj, retain = false) { try { this.c?.publish(TOPIC + this.code + topic, JSON.stringify(obj), { qos: 0, retain }); } catch { /* ignore */ } }
+  pub(topic, obj, retain = false) {
+    const c = this.c, t = TOPIC + this.code + topic;
+    if (!c) return;
+    this.pq = (this.pq || Promise.resolve()).then(() => packMsg(obj)).then((p) => { try { c.publish(t, p, { qos: 0, retain }); } catch { /* ignore */ } }).catch(() => {});
+  }
   async listen(code) {
     const mqtt = await loadMQTT();
     this.code = code;
@@ -189,9 +219,8 @@ class RelayTransport {
     // drop the other servers that also answered
     tries.forEach((p) => p.then(({ c }) => { if (c !== this.c) c.end(true); }, () => {}));
     this.c.subscribe(TOPIC + code + '/h');
-    this.c.on('message', (topic, buf) => {
-      let m; try { m = JSON.parse(buf.toString()); } catch { return; }
-      if (!m || !m.from) return;
+    onMessages(this.c, (topic, m) => {
+      if (!m.from) return;
       const known = this.peers.has(m.from);
       this.peers.set(m.from, Date.now());
       if (m.kind === 'hello') { this.pub('/c/' + m.from, { kind: 'welcome', from: 'host' }); if (!known) this.onPeer?.(m.from); }
@@ -228,10 +257,9 @@ class RelayTransport {
         if (done) { c.end(true); return; }
         clients.push(c);
         c.subscribe(TOPIC + code + '/beacon');
-        c.on('message', (topic, buf) => {
+        onMessages(c, (topic, m) => {
           if (!topic.endsWith('/beacon')) return;
-          let m; try { m = JSON.parse(buf.toString()); } catch { return; }
-          if (m && m.t && Math.abs(Date.now() - m.t) < 5 * 60 * 1000) finish({ c, b });
+          if (m.t && Math.abs(Date.now() - m.t) < 5 * 60 * 1000) finish({ c, b });
         });
       }, () => { if (--pending === 0 && !clients.length) finish(null, new Error("COULDN'T REACH ANY GAME SERVER. CHECK YOUR INTERNET AND TRY AGAIN.")); }));
     });
@@ -242,9 +270,7 @@ class RelayTransport {
       const t = setTimeout(() => rej(new Error("FOUND THE ROOM BUT THE HOST DIDN'T ANSWER. ASK THEM TO STAY ON THE ROOM SCREEN AND TRY AGAIN.")), 9000);
       this.lastHost = Date.now();
       this.c.subscribe(TOPIC + code + '/c/' + this.id, () => this.pub('/h', { kind: 'hello', from: this.id }));
-      this.c.on('message', (topic, buf) => {
-        let m; try { m = JSON.parse(buf.toString()); } catch { return; }
-        if (!m) return;
+      onMessages(this.c, (topic, m) => {
         this.lastHost = Date.now();
         if (m.kind === 'welcome') { clearTimeout(t); res(); }
         else if (m.kind === 'ping') { /* keep-alive */ }
