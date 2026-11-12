@@ -135,6 +135,8 @@ export class Sounds {
   turretHeavy() { this.burst(0.3, 500, 0.5); this.tone(140, 60, 0.25, 0.2); }
   tether() { this.tone(900, 300, 0.25, 0.12, 'sawtooth'); this.click(2400, 0.3, 3); }
   cloak() { this.tone(1400, 300, 0.35, 0.08, 'sine'); this.burst(0.2, 3000, 0.08, 'bandpass', 2); }
+  smoke() { this.burst(1.2, 600, 0.35, 'lowpass', 0.6); }
+  flashbang() { this.burst(0.25, 3000, 0.7, 'highpass', 0.8); this.tone(3800, 3700, 1.6, 0.05, 'sine'); }
   denied() { this.tone(320, 220, 0.12, 0.08, 'square'); }
   crumble() { this.burst(0.3, 700, 0.35); }
   dry() { this.tone(2200, 1800, 0.03, 0.12, 'square'); }

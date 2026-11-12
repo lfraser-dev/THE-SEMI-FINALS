@@ -119,7 +119,8 @@ export class Agent {
       const prev = this.target;
       this.target = null;
       let best = 1e9;
-      for (const e of co.entities()) {
+      this.blindT = Math.max(0, (this.blindT || 0) - 0.15);          // flashbanged: can't pick anyone out
+      for (const e of this.blindT > 0 ? [] : co.entities()) {
         if (e.team === this.team || !e.alive) continue;
         const d = Math.hypot(e.pos[0] - b.pos[0], e.pos[1] - b.pos[1], e.pos[2] - b.pos[2]);
         if (d > 48 || (e.cloaked && d > 4)) continue;          // a cloaked player is invisible unless right up close
@@ -129,6 +130,7 @@ export class Agent {
         if (score > best) continue;
         if (co.focus(this.team) === e) score -= 4;                     // focus fire
         if (!b.canSee(b.eye(), e.eye(), e.isPlayer ? null : e.bot)) continue;
+        if (g.smokeBlocks?.(b.eye(), e.eye())) continue;                // can't see through smoke
         best = score; this.target = e;
       }
       if (this.target) co.spot(this.team, this.target, this.target.pos, true);

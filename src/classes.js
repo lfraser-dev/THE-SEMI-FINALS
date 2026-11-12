@@ -29,6 +29,13 @@ export const HEAVIES = {
   turret_heavy: { name: 'CANNON TURRET', short: 'CANNON', desc: 'Slow, heavy rounds out to 45 m (45 a shot). Tougher: 400 HP, lasts 25 s.', cd: '28 S' },
 };
 export const SIDEARMS = ['pistol', 'mp', 'revolver', 'hc50'];
+// Throwables (Z): everyone picks one; two charges that recharge
+export const THROWABLES = {
+  frag: { name: 'FRAG GRENADE', short: 'FRAG', desc: 'Cook-free frag: bounces, then goes off 1.7 s after the throw. 90 damage in a 4.5 m blast.', cd: '2 × 14 S' },
+  smoke: { name: 'SMOKE GRENADE', short: 'SMOKE', desc: 'A thick cloud nearly 10 m across for 12 s. Bots and turrets can\'t see through it; neither can anyone else.', cd: '2 × 14 S' },
+  flash: { name: 'FLASHBANG', short: 'FLASH', desc: 'Whites out anyone looking at it (worse the closer and more head-on). Blinded bots can\'t pick targets for a few seconds.', cd: '2 × 14 S' },
+};
+export const THROW_ORDER = ['frag', 'smoke', 'flash'];
 
 export const CLASSES = {
   light: {
@@ -68,9 +75,9 @@ const KEY = 'semifinals.loadout';
 export function loadLoadout() {
   const def = {
     cls: 'medium',
-    light: { weapon: 'smg', sidearm: 'pistol', ability: 'grapple', heavy: 'dronepod' },
-    medium: { weapon: 'ar', sidearm: 'pistol', ability: 'pad', heavy: 'gl_frag' },
-    heavy: { weapon: 'lmg', sidearm: 'revolver', ability: 'barricade', heavy: 'turret_mg' },
+    light: { weapon: 'smg', sidearm: 'pistol', ability: 'grapple', heavy: 'dronepod', throwable: 'flash' },
+    medium: { weapon: 'ar', sidearm: 'pistol', ability: 'pad', heavy: 'gl_frag', throwable: 'smoke' },
+    heavy: { weapon: 'lmg', sidearm: 'revolver', ability: 'barricade', heavy: 'turret_mg', throwable: 'frag' },
   };
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || 'null');
@@ -80,6 +87,7 @@ export function loadLoadout() {
         if (s[c] && CLASSES[c].abilities.includes(s[c].ability)) def[c].ability = s[c].ability;
         if (s[c] && CLASSES[c].sidearms.includes(s[c].sidearm)) def[c].sidearm = s[c].sidearm;
         if (s[c] && CLASSES[c].heavies.includes(s[c].heavy)) def[c].heavy = s[c].heavy;
+        if (s[c] && THROWABLES[s[c].throwable]) def[c].throwable = s[c].throwable;
       }
       def.cls = s.cls;
     }

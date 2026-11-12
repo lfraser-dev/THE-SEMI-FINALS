@@ -9,7 +9,7 @@ import { Sounds } from './audio.js';
 import { Dummy, DestructibleWall, Workbench, gunCrates } from './props.js';
 import { mat4, perspective, lookDir, mul, cross, norm, damp, dot, compose, anglesFor, clamp } from './math.js';
 import { buildDef, ratings } from './attachments.js';
-import { CLASSES, CLASS_ORDER, ABILITIES, HEAVIES, SIDEARMS, loadLoadout, saveLoadout } from './classes.js';
+import { CLASSES, CLASS_ORDER, ABILITIES, HEAVIES, SIDEARMS, THROWABLES, THROW_ORDER, loadLoadout, saveLoadout } from './classes.js';
 import { Contestant } from './contestant.js';
 import { Thumbs } from './thumbs.js';
 import { SLOTS as CSLOTS, RARITY, ITEMS, FEATURED, CURRENCY, loadCosmetics, saveCosmetics, owns, itemsFor, buy, buildOutfit, gunSkinFor, skinDef, swatch, iconFor } from './cosmetics.js';
@@ -42,7 +42,7 @@ try {
 }
 
 // ---------- settings ----------
-const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold', trackpad: false, dashKey: 'KeyQ', grappleKey: 'KeyG', slamKey: 'KeyZ', abilityKey: 'KeyG', heavyKey: 'KeyQ' };
+const settings = { sens: 1.0, fov: 95, volume: 0.5, aimKey: 'KeyV', fireKey: 'KeyF', aimMode: 'hold', trackpad: false, dashKey: 'KeyQ', grappleKey: 'KeyG', slamKey: 'KeyZ', abilityKey: 'KeyG', heavyKey: 'KeyQ', throwKey: 'KeyZ' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('semifinals.settings') || '{}')); } catch { /* ignore */ }
 if (!settings.keysV2) { settings.abilityKey = 'KeyG'; settings.heavyKey = 'KeyQ'; settings.keysV2 = true; }   // build 0.41: ability on G, heavy weapon on Q
 const saveSettings = () => { try { localStorage.setItem('semifinals.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
@@ -88,6 +88,7 @@ const heavy = new Heavy(world, effects, sounds, gadgets, {
     if (player.grapple) player.releaseGrapple(false);
     banner('TETHERED', 'YOU ARE TIED DOWN', 'bad', 1.2);
   },
+  flash: (pos) => flashAt(pos),
   shake: (pos, r) => {
     const d = Math.hypot(player.pos[0] - pos[0], player.pos[1] - pos[1], player.pos[2] - pos[2]);
     if (d < r * 5) { player.shake = Math.max(player.shake || 0, 0.6 * (1 - d / (r * 5))); player.camPitchV += 0.6 * (1 - d / (r * 5)); }
@@ -186,6 +187,9 @@ function pickUp(caseDef) {
 // (classLo is hoisted into a var-like holder so defFor can be used while the file loads)
 let equippedAbility = classLo[classLo.cls].ability;
 let equippedHeavy = classLo[classLo.cls].heavy;
+let equippedThrow = classLo[classLo.cls].throwable || 'frag';
+let throwCharges = 2, throwT = 0, flashT = 0;
+const THROW_RECHARGE = 14;
 let heavyCd = 0;
 let classDirty = true;          // class changed since the current test-range session started
 function classWeapons() {
@@ -201,6 +205,8 @@ function applyClass() {
   current = 0; lastSlot = 1;
   equippedAbility = classLo[classLo.cls].ability;
   equippedHeavy = classLo[classLo.cls].heavy;
+  equippedThrow = classLo[classLo.cls].throwable || 'frag';
+  throwCharges = 2; throwT = 0;
   heavyCd = 0;
   launcherW = null;
   setHandLook(buildOutfit(cosmetics, classLo.cls));
@@ -570,6 +576,7 @@ const botHooks = {
     effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal);
   },
   onBotKill: (killer, victim) => { killFeed(killer.name, 'RIFLE', victim.name, false); },
+  smokeBlocks: (a, b) => heavy.smokeBlocks(a, b),
   // a bot uses its gear: returns how long until it thinks about it again
   botGear: (agent, tgt, dist, hurting) => {
     const c = CLASSES[agent.cls] || CLASSES.medium;
@@ -821,6 +828,42 @@ function updateHealing(dt) {
   }
 }
 
+// ---------- throwables (Z) ----------
+const THROW_KIND = { frag: 'frag_t', smoke: 'smoke', flash: 'flash' };
+function useThrowable() {
+  if (player.dead || launcherW) return;
+  if (throwCharges <= 0) { sounds.denied(); return; }
+  const kind = THROW_KIND[equippedThrow];
+  const e = player.eye(), from = [0, 1, 2].map((i) => e[i] + camFwd[i] * 0.45 + camRight[i] * 0.18 - camUp[i] * 0.12);
+  const v = [0, 1, 2].map((i) => camFwd[i] * 17 + (i === 1 ? 4 : 0) + player.vel[i] * 0.5);
+  heavy.launch(kind, from, v, true, HEAVY_STATS[kind].name);
+  throwCharges--;
+  weapon().equip();              // the gun dips while your hand's busy
+  player.camPitchV += 0.3;
+  sounds.cloth?.();
+}
+// a flashbang went off: white you out if you were looking, and blind bots that could see it
+function flashAt(pos) {
+  const e = player.eye(), d = [pos[0] - e[0], pos[1] - e[1], pos[2] - e[2]], L = Math.hypot(...d) || 1;
+  if (!player.dead && L < 24) {
+    const hit = world.raycast(e, d.map((v) => v / L), L, false);
+    if (!hit || hit.t > L - 0.4) {
+      const facing = (d[0] * camFwd[0] + d[1] * camFwd[1] + d[2] * camFwd[2]) / L;
+      const k = Math.max(0, 1 - L / 24) * (0.3 + 0.7 * Math.max(0, facing));
+      flashT = Math.max(flashT, Math.min(4, k * 5.5));
+    }
+  }
+  if (tdm.active) for (const a of tdm.agents) {
+    if (!a.isAI && tdm === online) continue;
+    if (!a.bot?.alive) continue;
+    const be = a.bot.eye(), bd = Math.hypot(be[0] - pos[0], be[1] - pos[1], be[2] - pos[2]);
+    if (bd > 18) continue;
+    const dir = [pos[0] - be[0], pos[1] - be[1], pos[2] - be[2]].map((v) => v / (bd || 1));
+    const hit = world.raycast(be, dir, bd, false, (b) => b.ref === a.bot);
+    if (!hit || hit.t > bd - 0.4) { a.blindT = Math.max(a.blindT || 0, 1.5 + 3 * (1 - bd / 18)); a.target = null; }
+  }
+}
+
 // ---------- heavy weapons (Q) ----------
 function useHeavy() {
   if (player.dead) return;
@@ -915,7 +958,7 @@ const hud = {
   kills: $('kills'), acc: $('acc'), chunks: $('chunks'), cross: $('crosshair'), hitmarker: $('hitmarker'),
   dmgLayer: $('damage'), state: $('state'), wname: $('weaponname'), wtype: $('weapontype'), prompt: $('prompt'),
   scope: $('scope'), slots: [$('slot1'), $('slot2')],
-  ab: { main: $('ab-main'), heavy: $('ab-heavy') },
+  ab: { main: $('ab-main'), heavy: $('ab-heavy'), thr: $('ab-throw') },
   hp: $('health'), hpBar: $('hpbar'), hpNum: $('hpnum'), dmg: $('dmgdirs'), lowhp: $('lowhp'), killfeed: $('killfeed'),
   wave: $('wavepanel'), waveTitle: $('wavetitle'), waveInfo: $('waveinfo'), banner: $('banner'), death: $('death'), deathSub: $('deathsub'),
   speedo: $('speedo'), speedBar: $('speedbar'), speedNum: $('speednum'), chain: $('chain'),
@@ -976,6 +1019,11 @@ function updateAbilityHud() {
   if (hv.dataset.name !== hn) { hv.dataset.name = hn; hv.querySelector('b').textContent = hn; }
   set(hv, heavyCd / hmax, heavyCd <= 0, heavyCd > 0 ? heavyCd.toFixed(1) : '');
   hv.classList.toggle('active', !!launcherW && !tetherOut);
+  // throwable: two charges
+  const th = hud.ab.thr, tn = THROWABLES[equippedThrow]?.short || '';
+  if (th.dataset.name !== tn) { th.dataset.name = tn; th.querySelector('b').textContent = tn; }
+  set(th, throwCharges > 0 ? 0 : 1 - throwT / THROW_RECHARGE, throwCharges > 0);
+  th.querySelectorAll('.pip').forEach((p, i) => p.classList.toggle('on', i < throwCharges));
   // grapple range hint on the crosshair
   grappleOk = equippedAbility === 'grapple' && a.grapple.cd <= 0 && !player.grapple && !!player.grappleTarget();
   hud.cross.classList.toggle('grapple', grappleOk);
@@ -983,6 +1031,7 @@ function updateAbilityHud() {
 function refreshAbilityKeys() {
   hud.ab.main.querySelector('kbd').textContent = keyLabel(settings.abilityKey);
   hud.ab.heavy.querySelector('kbd').textContent = keyLabel(settings.heavyKey);
+  hud.ab.thr.querySelector('kbd').textContent = keyLabel(settings.throwKey);
 }
 
 function updateSlotHud() {
@@ -1191,7 +1240,7 @@ function enterRange() {
   if (where !== 'range') {
     if (tdm.active) endMatch(false);
     where = 'range';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
     document.body.classList.remove('stadium');
@@ -1212,7 +1261,7 @@ function enterStadium() {
   if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
   if (arriving) {
     where = 'stadium';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
     botMgr.stop();
     course.reset();
     cutscene = null; pressSeq = null;
@@ -1427,7 +1476,7 @@ function startOnline(info) {
   menu.classList.add('hidden');
   enterStadium();
   batches.world = null;
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
   const sp = stadium.spawns[info.team];
   player.spawn(sp.pos, sp.yaw);
@@ -1464,7 +1513,7 @@ function startMatch(m) {
   lastMatch = m;
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
   walls.forEach((w) => w.reset());
   tdm.start(m, stadium, player, classLo.cls);
@@ -1476,7 +1525,7 @@ function startMatch(m) {
 }
 function endMatch(toMenu) {
   if (tdm === online) { online.leave(); tdm = ai; } else tdm.stop();
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   match = null;
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
@@ -1700,6 +1749,16 @@ function renderMenu() {
     b.onclick = () => { sel.heavy = id; classDirty = true; saveLoadout(classLo); sounds.click?.(2600, 0.3, 4); renderMenu(); };
     return b;
   }));
+  // throwables
+  $('mm-throws').replaceChildren(...THROW_ORDER.map((id) => {
+    const a = THROWABLES[id];
+    const b = el('button', `mm-abl${id === (sel.throwable || 'frag') ? ' on' : ''}`);
+    b.type = 'button';
+    b.style.setProperty('--c', rgb(c.color));
+    b.append(el('b', null, a.name), el('small', null, a.cd), el('p', null, a.desc));
+    b.onclick = () => { sel.throwable = id; classDirty = true; saveLoadout(classLo); sounds.click?.(2600, 0.3, 4); renderMenu(); };
+    return b;
+  }));
   // abilities
   $('mm-abilities').replaceChildren(...c.abilities.map((id) => {
     const a = ABILITIES[id];
@@ -1920,7 +1979,7 @@ bindSlider('vol', 'volume', (v) => `${Math.round(v * 100)}%`, (v) => sounds.setV
 // ---------- keyboard aim / shoot, rebindable ----------
 const RESERVED = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ControlLeft', 'KeyC', 'KeyR', 'KeyE',
   'KeyT', 'KeyX', 'Digit1', 'Digit2', 'Escape', 'KeyP', 'Enter'];
-const BINDS = { aimKey: 'bind-aim', fireKey: 'bind-fire', abilityKey: 'bind-ability', heavyKey: 'bind-heavy' };
+const BINDS = { aimKey: 'bind-aim', fireKey: 'bind-fire', abilityKey: 'bind-ability', heavyKey: 'bind-heavy', throwKey: 'bind-throw' };
 const keyName = (code) => code.replace(/^Key/, '').replace(/^Digit/, '').replace(/Left$|Right$/, (m) => ` ${m.toUpperCase()}`).toUpperCase();
 let rebinding = null;
 function refreshBindButtons() {
@@ -1931,6 +1990,7 @@ function refreshBindButtons() {
   document.querySelectorAll('.keyhint-fire').forEach((el) => { el.textContent = keyName(settings.fireKey); });
   document.querySelectorAll('.keyhint-ability').forEach((el) => { el.textContent = keyName(settings.abilityKey); });
   document.querySelectorAll('.keyhint-heavy').forEach((el) => { el.textContent = keyName(settings.heavyKey); });
+  document.querySelectorAll('.keyhint-throw').forEach((el) => { el.textContent = keyName(settings.throwKey); });
 }
 function startRebind(which, btn) {
   rebinding = { which, btn };
@@ -2192,6 +2252,7 @@ function frameBody(now) {
       else if (ABIL_CD[eq]) useGadget(eq);
     }
     if (input.hit(settings.heavyKey)) useHeavy();
+    if (input.hit(settings.throwKey)) useThrowable();
     if (launcherW && launcherT > 0 && (launcherT -= dt) <= 0) putAwayLauncher(true);
     elevator.update(dt, player, sounds);
     for (const l of lifts) l.update(dt, player, sounds);
@@ -2237,6 +2298,9 @@ function frameBody(now) {
     document.body.classList.toggle('cloaked', cloakT > 0);
     if (tdm.you) tdm.you.cloaked = cloakT > 0;
     heavyCd = Math.max(0, heavyCd - dt);
+    if (throwCharges < 2 && (throwT += dt) >= THROW_RECHARGE) { throwCharges++; throwT = 0; }
+    flashT = Math.max(0, flashT - dt);
+    $('flashfx').style.opacity = Math.min(1, flashT * 0.9).toFixed(3);
     if (player.dead && launcherW) putAwayLauncher(false);
   }
   effects.update(dt);
@@ -2341,10 +2405,11 @@ function frameBody(now) {
   for (const p of caseVis) renderer.drawPart(p);
   effects.drawOpaque(renderer);
   for (const p of botVis) renderer.drawPart(p);
+  for (const b of beams) if ((b.alpha ?? 1) >= 1) renderer.drawPart(b, 0);
   renderer.setBlend(true);
   for (const b of vis) if (b.alpha < 1) renderer.drawBox(b);
   effects.drawTransparent(renderer);
-  for (const b of beams) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
+  for (const b of beams) if ((b.alpha ?? 1) < 1) renderer.drawPart(b, 0);
   for (const b of botMgr.beams()) renderer.draw(b.model, b.scale, b.color, 0, 0, b.emissive, b.alpha);
   renderer.setBlend(false);
 
@@ -2382,4 +2447,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

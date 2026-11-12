@@ -21,6 +21,10 @@ export const HEAVY_STATS = {
   tether: { name: 'TETHER LAUNCHER', col: TETHER_COL, grav: 0.35 },
   gl_cluster: { cd: 12, dmg: 20, r: 2.2, name: 'CLUSTER LAUNCHER', col: [0.25, 0.6, 1], bomblets: 5 },
   bomblet: { dmg: 35, r: 2.5, name: 'CLUSTER LAUNCHER', col: [0.25, 0.6, 1], fuse: 0.9 },
+  // throwables (Z), thrown by hand: they bounce, then go off on a fuse
+  frag_t: { dmg: 90, r: 4.5, fuse: 1.7, name: 'FRAG GRENADE', col: [0.33, 0.37, 0.22], bounce: true },
+  smoke: { fuse: 1.1, r: 4.8, dur: 12, name: 'SMOKE GRENADE', col: [0.78, 0.78, 0.8], bounce: true },
+  flash: { fuse: 1.3, name: 'FLASHBANG', col: [0.95, 0.95, 0.98], bounce: true },
   mines: { cd: 20, dmg: 70, r: 3.2, trig: 2.2, name: 'PROXIMITY MINES' },
   turret_mg: { cd: 24, range: 30, rate: 0.12, dmg: 8, spread: 0.035, turn: 7, name: 'MG TURRET', reach: 0.7 },
   turret_heavy: { cd: 28, range: 45, rate: 1.1, dmg: 45, spread: 0.006, turn: 3.5, name: 'CANNON TURRET', reach: 0.86 },
@@ -55,16 +59,48 @@ export class Heavy {
     this.fires = [];
     this.tethers = [];     // { ref | remoteId | me, anchor, len, t }
     this.traps = [];       // { id, pos, normal, t, mine }
+    this.smokes = [];      // { pos, t, puffs }
     this.sendT = 0;
     gadgets.onPodOpen = (pod) => this.podOpened(pod);
   }
 
-  clear() { this.grenades.length = 0; this.drones.length = 0; this.fires.length = 0; this.tethers.length = 0; this.traps.length = 0; }
+  clear() { this.grenades.length = 0; this.drones.length = 0; this.fires.length = 0; this.tethers.length = 0; this.traps.length = 0; this.smokes.length = 0; }
+
+  // ---------------------------------------------------------------- smoke and flashbangs
+  // does smoke hide b from someone at a?
+  smokeBlocks(a, b) {
+    for (const sm of this.smokes) {
+      if (sm.age < 0.6 || sm.t < 0.8) continue;
+      if (segDist(a, [b[0] - a[0], b[1] - a[1], b[2] - a[2]], [sm.pos[0], sm.pos[1] + 1.3, sm.pos[2]]) < HEAVY_STATS.smoke.r * 0.85) return true;
+    }
+    return false;
+  }
+  special(kind, pos, mine) {
+    if (mine === true) this.hooks.send?.({ t: 'boom', p: pos.map((v) => +v.toFixed(2)), r: 0, k: kind });
+    if (kind === 'smoke') {
+      const r = HEAVY_STATS.smoke.r, puffs = [];
+      for (let k = 0; k < 34; k++) {
+        const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * r * 0.8;
+        puffs.push({ off: [Math.cos(a) * rr, 0.4 + Math.random() * 2.8, Math.sin(a) * rr], size: 1.3 + Math.random() * 1.5, ph: Math.random() * 6, shade: 0.52 + Math.random() * 0.16 });
+      }
+      this.smokes.push({ pos: [...pos], t: HEAVY_STATS.smoke.dur, age: 0, puffs });
+      this.sounds.smoke?.();
+      this.effects.dust(pos, 10, [0, 3, 0]);
+    } else {
+      for (let k = 0; k < 14; k++) {
+        this.effects.spawnPiece(pos, [0.12, 0.12, 0.12], [(Math.random() - 0.5) * 16, Math.random() * 10, (Math.random() - 0.5) * 16], [1, 1, 0.95], 0.35, 1);
+        this.effects.debris[this.effects.debris.length - 1].noGravity = true;
+      }
+      this.sounds.flashbang?.();
+      this.hooks.flash?.(pos, mine);
+    }
+  }
 
   // can `from` see this target (nothing solid in between other than the target itself)?
   sees(from, tg) {
     const to = tg.chest, d = dist(from, to);
     if (d < 0.01) return true;
+    if (this.smokeBlocks(from, to)) return false;
     const hit = this.world.raycast(from, norm([to[0] - from[0], to[1] - from[1], to[2] - from[2]]), d, false);
     return !hit || hit.t > d - 0.4 || hit.box.ref === tg.ref;
   }
@@ -80,6 +116,7 @@ export class Heavy {
 
   // ---------------------------------------------------------------- explosions
   boom(pos, r, dmg, name, mine, kind = 'frag') {
+    if (kind === 'smoke' || kind === 'flash') { this.special(kind, pos, mine); return; }
     const fx = this.effects;
     const big = kind === 'mini' ? 0.7 : 1;
     for (let k = 0; k < 26 * big; k++) {
@@ -112,7 +149,7 @@ export class Heavy {
   launch(kind, pos, vel, mine, name) {
     const s = HEAVY_STATS[kind];
     this.grenades.push({ kind, pos: [...pos], vel: [...vel], t: 0, mine, name: name || s.name, stuck: null, fuse: s.fuse, col: s.col, spin: 0 });
-    this.sounds.launcher?.();
+    if (s.bounce) this.sounds.click?.(700, 0.3, 3); else this.sounds.launcher?.();
     if (mine === true) this.hooks.send?.({ t: 'gl', k: kind, p: pos.map((v) => +v.toFixed(2)), v: vel.map((v) => +v.toFixed(2)) });
   }
 
@@ -120,6 +157,7 @@ export class Heavy {
     const s = HEAVY_STATS[gr.kind];
     this.grenades.splice(this.grenades.indexOf(gr), 1);
     if (!gr.mine) return;             // the owner sends the explosion
+    if (gr.kind === 'smoke' || gr.kind === 'flash') { this.special(gr.kind, at, gr.mine); return; }
     this.boom(at, s.r, s.dmg, gr.name, gr.mine, gr.kind === 'gl_fire' ? 'fire' : gr.kind === 'bomblet' || gr.kind === 'gl_cluster' ? 'mini' : 'frag');
     if (gr.kind === 'gl_cluster') {
       // five bomblets thrown out in a ring
@@ -134,6 +172,30 @@ export class Heavy {
     for (const gr of [...this.grenades]) {
       gr.t += dt;
       gr.spin += dt * 20;
+      if (HEAVY_STATS[gr.kind].bounce) {
+        // a thrown grenade: bounces off whatever it hits, settles, and goes off when its fuse runs out
+        gr.fuse -= dt;
+        if (gr.fuse <= 0) { if (gr.mine) this.detonate(gr, [gr.pos[0], gr.pos[1] + 0.1, gr.pos[2]]); else this.grenades.splice(this.grenades.indexOf(gr), 1); continue; }
+        if (gr.rest) continue;
+        gr.vel[1] -= GRAV * dt;
+        const step = gr.vel.map((v) => v * dt), l = Math.hypot(...step);
+        // people aren't world boxes: bounce off anyone it would pass through
+        const body = gr.mine && this.hooks.targets(gr.mine).find((x) => segDist(gr.pos, step, [x.pos[0], x.pos[1] + 0.9, x.pos[2]]) < 0.45 || segDist(gr.pos, step, x.chest) < 0.45);
+        if (body) {
+          gr.vel = [-gr.vel[0] * 0.3, Math.max(0, gr.vel[1]) * 0.3, -gr.vel[2] * 0.3];
+          this.sounds.click?.(500, 0.25, 3);
+          continue;
+        }
+        const hit = l > 1e-5 ? this.world.raycast(gr.pos, norm(step), l + 0.05, false) : null;
+        if (hit) {
+          const n = hit.normal, vn = gr.vel[0] * n[0] + gr.vel[1] * n[1] + gr.vel[2] * n[2];
+          gr.vel = gr.vel.map((v, i) => (v - 2 * vn * n[i]) * 0.4);
+          gr.pos = hit.point.map((v, i) => v + n[i] * 0.05);
+          if (Math.hypot(...gr.vel) < 1.3 && n[1] > 0.7) { gr.rest = true; gr.vel = [0, 0, 0]; }
+          if (Math.abs(vn) > 2) this.sounds.click?.(600 + Math.random() * 300, 0.25, 3);
+        } else for (let k = 0; k < 3; k++) gr.pos[k] += step[k];
+        continue;
+      }
       if (gr.stuck) {
         // stuck to something: ride along with it, then go off
         const st = gr.stuck;
@@ -449,6 +511,7 @@ export class Heavy {
   }
 
   update(dt) {
+    for (const sm of [...this.smokes]) { sm.t -= dt; sm.age += dt; if (sm.t <= 0) this.smokes.splice(this.smokes.indexOf(sm), 1); }
     this.updateMines();
     this.updateGrenades(dt);
     this.updateTethers(dt);
@@ -565,6 +628,17 @@ export class Heavy {
     for (const tr of this.traps) {
       P(out, tr.pos, tr.normal, 0, 0, 0, [0.12, 0.12, 0.06], DARK, { shape: 'cyl', mat: 'metal' });
       P(out, tr.pos, tr.normal, 0, 0, -0.035, [0.08, 0.08, 0.012], TETHER_COL, { em: 0.5 + 0.5 * (Math.sin(time * 6) > 0 ? 1 : 0), shape: 'cyl' });
+    }
+    // smoke: big soft puffs that billow out, drift and thin away
+    for (const sm of this.smokes) {
+      const grow = Math.min(1, sm.age / 0.9), fade = Math.min(1, sm.t / 2.5);
+      for (const pf of sm.puffs) {
+        const sz = pf.size * (0.3 + 0.7 * grow) * (1 + 0.08 * Math.sin(time * 0.7 + pf.ph));
+        const c = [sm.pos[0] + pf.off[0] * grow + Math.sin(time * 0.3 + pf.ph) * 0.3, sm.pos[1] + pf.off[1] * grow, sm.pos[2] + pf.off[2] * grow];
+        const m = mat4();
+        compose(m, c, [0, pf.ph, 0], [sz, sz * 0.85, sz]);
+        out.push({ model: m, scale: [sz, sz * 0.85, sz], color: [pf.shade, pf.shade, pf.shade + 0.02], emissive: 0, shape: 'sphere', edges: 0, alpha: 0.42 * fade });
+      }
     }
     // grenades (and tether bolts)
     for (const gr of this.grenades) {
