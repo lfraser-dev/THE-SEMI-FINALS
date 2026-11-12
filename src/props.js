@@ -311,8 +311,8 @@ export function gunCrates(world, defs, benchPos) {
   const at = (x, y, z, sx, sy, sz, o) => add([x - sx / 2, y, z - sz / 2], [x + sx / 2, y + sy, z + sz / 2], o);
   const deco = (min, max, o) => add(min, max, { solid: false, noShadow: true, ...o });
   const [bx, by, bz] = benchPos;
-  const W = 2.5, D = 1.25, Hh = 0.62, t = 0.05;
-  const crates = [[bx - 3.35, bz + 0.62], [bx + 3.35, bz + 0.62]];
+  const W = 3.1, D = 1.25, Hh = 0.62, t = 0.05;
+  const crates = [[bx - 3.65, bz + 0.62], [bx + 3.65, bz + 0.62]];
   const items = [];
   const half = Math.ceil(defs.length / 2);
   // stencil "text": a row of short bars of varying width, like letters at a distance

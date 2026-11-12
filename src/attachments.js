@@ -52,17 +52,29 @@ const MOUNT = {
   lever: { railY: 0.06, railZ: -0.05, rail: true, sight: ['rearSight', 'rearNotch'], muzzle: [], stock: ['stock'], shiftAlso: ['front', 'band'],
     under: { y: -0.016, z: -0.3 }, laser: [0.03, -0.004, -0.26] },
   minigun: { railY: 0.124, railZ: -0.08, rail: true, sight: [], muzzle: [], stock: [], laser: [0.07, 0.03, -0.24] },
+  // build 0.39
+  hx17: { railY: 0.071, railZ: 0.0, sight: ['flipF', 'flipR'], muzzle: ['muzzle'], stock: ['stock'],
+    under: { y: 0.007, z: -0.24 }, laser: [0.044, 0.025, -0.24] },
+  zu9: { railY: 0.053, railZ: -0.04, rail: true, sight: ['front', 'frontEarL', 'frontEarR', 'rearL', 'rearR'], muzzle: ['muzzle'], stock: ['stock', 'stockArmT', 'stockArmB'],
+    under: { y: -0.02, z: -0.13 }, laser: [0.036, 0.0, -0.1] },
+  amr: { railY: 0.068, railZ: -0.02, sight: ['scope', 'scopeF', 'scopeEye', 'lens', 'turret', 'turretS', 'ring1', 'ring2'], muzzle: ['brake'], stock: ['stock', 'cheek'],
+    under: { y: -0.013, z: -0.33, hide: ['bipodBase'] }, laser: [0.044, 0.02, -0.3] },
+  rt7: { railY: 0.058, railZ: 0.0, sight: ['rear', 'frontPost'], muzzle: ['brake'], stock: ['stock'], laser: [0.046, 0.01, -0.27] },
+  hc50: { railY: 0.061, railZ: 0.0, sight: ['front', 'rearL', 'rearR'], muzzle: [], stock: [], barrelFront: -0.146, laser: [0, -0.031, -0.07] },
+  rk74: { railY: 0.063, railZ: 0.04, rail: true, sight: ['rearSight', 'frontPost'], muzzle: ['muzzle'], stock: ['stock'], shiftAlso: ['frontBase', 'frontPost', 'bipodBase', 'bipodLegL', 'bipodLegR'],
+    under: { y: -0.025, z: -0.25, hide: ['bipodBase'] }, laser: [0.036, 0.0, -0.27] },
 };
 // slots a gun simply doesn't have
 const NO_SLOT = { bullpup: ['stock'], double: ['magazine', 'barrel', 'muzzle'], lever: ['magazine'], minigun: ['barrel', 'muzzle', 'underbarrel', 'stock'] };
 
 // Base effective range (m) before damage falls off
 export const RANGE = { ar: 35, smg: 16, shotgun: 9, sniper: 120, lmg: 40, pistol: 20, burst: 45, dmr: 65, mp: 13, revolver: 30, autoshotgun: 8,
-  kv: 14, bullpup: 30, lever: 70, minigun: 26, double: 10 };
+  kv: 14, bullpup: 30, lever: 70, minigun: 26, double: 10, hx17: 50, zu9: 13, amr: 140, rt7: 9, hc50: 28, rk74: 38 };
 
 // variants take the attachments (and mounting points) of the gun they're built on
 export const STYLE = { burst: 'ar', dmr: 'ar', mp: 'pistol', revolver: 'pistol', autoshotgun: 'shotgun',
-  kv: 'smg', bullpup: 'ar', lever: 'sniper', minigun: 'lmg', double: 'shotgun' };
+  kv: 'smg', bullpup: 'ar', lever: 'sniper', minigun: 'lmg', double: 'shotgun',
+  hx17: 'ar', zu9: 'smg', amr: 'sniper', rt7: 'shotgun', hc50: 'pistol', rk74: 'lmg' };
 const styleOf = (id) => STYLE[id] || id;
 
 const P = (name, c, s, col, extra = {}) => ({ name, c, s, col, ...extra });
@@ -96,6 +108,16 @@ export const ATTACHMENTS = {
     optic: { h: 0.048, zoom: 0.3, scope: true, kind: 'tube', len: 0.24, d: 0.04, bell: 0.056 }, mods: { adsSpeed: 0.7, adsSpread: 0.7 } },
   scope6x: { slot: 'optic', name: '6× SCOPE', desc: 'Picks heads off at the far wall.', for: ['ar', 'lmg', 'sniper'],
     optic: { h: 0.052, zoom: 0.2, scope: true, kind: 'tube', len: 0.29, d: 0.042, bell: 0.064 }, mods: { adsSpeed: 0.6, adsSpread: 0.6 } },
+  aimpoint: { slot: 'optic', name: 'TUBE RED DOT', desc: 'A short open tube with a crisp dot. Quick and tidy.', for: NOPI,
+    optic: { h: 0.04, zoom: 0.84, kind: 'aimpoint' }, mods: { adsSpeed: 1.01, adsSpread: 0.96 } },
+  pistoldot: { slot: 'optic', name: 'PISTOL RED DOT', desc: 'Slide-mounted dot. Easier to track a target.', for: ['pistol'],
+    optic: { h: 0.02, zoom: 0.86, kind: 'mini' }, mods: { adsSpread: 0.86, adsSpeed: 0.97 } },
+  hybrid: { slot: 'optic', name: 'HOLO + MAGNIFIER', desc: 'Holo sight with a 3× magnifier flipped to the side.', for: LONG,
+    optic: { h: 0.032, zoom: 0.6, kind: 'hybrid' }, mods: { adsSpeed: 0.88, adsSpread: 0.84 } },
+  lpvo: { slot: 'optic', name: '1–6× LPVO', desc: 'Variable scope: close-ish to long. Middle of the road on speed.', for: LONG,
+    optic: { h: 0.044, zoom: 0.36, scope: true, kind: 'tube', len: 0.2, d: 0.036, bell: 0.046 }, mods: { adsSpeed: 0.75, adsSpread: 0.74 } },
+  scope12x: { slot: 'optic', name: '12× MARKSMAN SCOPE', desc: 'The biggest glass there is. Very slow, very far.', for: ['sniper'],
+    optic: { h: 0.062, zoom: 0.1, scope: true, kind: 'tube', len: 0.38, d: 0.046, bell: 0.08 }, mods: { adsSpeed: 0.42, adsSpread: 0.45 } },
   scope8x: { slot: 'optic', name: '8× SNIPER SCOPE', desc: 'Huge glass. Slow to bring up, deadly once you do.', for: ['sniper', 'ar'],
     optic: { h: 0.058, zoom: 0.14, scope: true, kind: 'tube', len: 0.34, d: 0.044, bell: 0.074 }, mods: { adsSpeed: 0.5, adsSpread: 0.5 } },
   // ---- muzzle
@@ -111,6 +133,12 @@ export const ATTACHMENTS = {
     muz: { d: 0.034, len: 0.07, prongs: true }, mods: { flash: 0.15, recoilUp: 0.96 } },
   linear: { slot: 'muzzle', name: 'LINEAR COMP', desc: 'Pushes the blast forward. Balanced recoil, mid range.', for: AUTO,
     muz: { d: 0.042, len: 0.07, col: [0.62, 0.6, 0.55] }, mods: { recoilUp: 0.88, recoilSide: 0.82, gain: 1.05 } },
+  compactsup: { slot: 'muzzle', name: 'COMPACT SUPPRESSOR', desc: 'Short can: mostly quiet, barely slows you down.', for: 'all',
+    muz: { d: 0.04, len: 0.12, col: [0.22, 0.22, 0.24], rings: true }, mods: { recoilUp: 0.95, range: 0.92, gain: 0.45, flash: 0, adsSpeed: 0.98 } },
+  monocore: { slot: 'muzzle', name: 'MONOCORE SUPPRESSOR', desc: 'Long tan can. Silent, keeps its range, cuts side kick.', for: NOSG,
+    muz: { d: 0.038, len: 0.22, col: [0.52, 0.43, 0.28], rings: true }, mods: { recoilSide: 0.86, gain: 0.3, flash: 0, adsSpeed: 0.9 } },
+  tripleport: { slot: 'muzzle', name: 'TRIPLE-PORT BRAKE', desc: 'Three rows of ports. Kills muzzle climb. Very loud.', for: NOSG,
+    muz: { d: 0.048, h: 0.044, len: 0.09, ports: 'side3' }, mods: { recoilUp: 0.68, recoilSide: 0.92, flash: 1.7, gain: 1.35 } },
   choke: { slot: 'muzzle', name: 'FULL CHOKE', desc: 'Tighter pellet spread, more range.', for: SG,
     muz: { d: 0.046, len: 0.055 }, mods: { spreadBase: 0.62, range: 1.3 } },
   duckbill: { slot: 'muzzle', name: 'DUCKBILL', desc: 'Spreads pellets in a wide flat line. Brutal up close.', for: SG,
@@ -126,6 +154,10 @@ export const ATTACHMENTS = {
     barrel: { add: 0.06, fins: true }, mods: { range: 1.12, adsSpeed: 1.05, spreadBase: 0.92 } },
   matchbarrel: { slot: 'barrel', name: 'MATCH BARREL', desc: 'Precision bore. Pinpoint first shots.', for: ['ar', 'sniper'],
     barrel: { add: 0.1, col: [0.55, 0.56, 0.6] }, mods: { spreadBase: 0.6, range: 1.2, adsSpeed: 0.92, rpm: 0.94 } },
+  carbonbarrel: { slot: 'barrel', name: 'CARBON BARREL', desc: 'Carbon-wrapped and light. Faster aiming, a touch more range.', for: NOPI,
+    barrel: { add: 0.04, col: [0.12, 0.12, 0.13] }, mods: { adsSpeed: 1.12, range: 1.06, recoilUp: 1.04 } },
+  sbr: { slot: 'barrel', name: 'SHORT BARREL', desc: 'Cut down for corners. Handles fast, loses some reach.', for: NOPI,
+    barrel: { mul: 0.75 }, mods: { range: 0.85, adsSpeed: 1.08, spreadMove: 0.85 } },
   // ---- underbarrel
   vgrip: { slot: 'underbarrel', name: 'VERTICAL GRIP', desc: 'Steadier vertical recoil.', for: LONG,
     grip: 'v', mods: { recoilUp: 0.8, adsSpeed: 0.95 } },
@@ -139,6 +171,10 @@ export const ATTACHMENTS = {
     grip: 'e', mods: { recoilUp: 0.9, recoilSide: 0.9, adsSpeed: 1.06 } },
   bipod: { slot: 'underbarrel', name: 'BIPOD', desc: 'Folded legs. Clamps recoil down, slow to swing.', for: ['ar', 'lmg', 'sniper'],
     grip: 'b', mods: { recoilUp: 0.7, recoilSide: 0.75, adsSpeed: 0.85, spreadMove: 1.15 } },
+  pgrip: { slot: 'underbarrel', name: 'PISTOL FOREGRIP', desc: 'Raked-back grip. Tames both kinds of recoil a little.', for: LONG,
+    grip: 'p', mods: { recoilSide: 0.8, recoilUp: 0.9, adsSpeed: 0.97 } },
+  fgrip: { slot: 'underbarrel', name: 'FOLDING GRIP', desc: 'Folded flat. Light, quick, steadier on the move.', for: LONG,
+    grip: 'f', mods: { adsSpeed: 1.12, spreadMove: 0.85 } },
   // ---- side rail
   laser: { slot: 'side', name: 'RED LASER', desc: 'Tighter hip-fire. Shows a red beam.', for: 'all',
     side: { laser: [1, 0.12, 0.08] }, mods: { hipSpread: 0.68 } },
@@ -148,6 +184,10 @@ export const ATTACHMENTS = {
     side: { light: true }, mods: { adsSpeed: 1.06, hipSpread: 0.9 } },
   combo: { slot: 'side', name: 'LASER-LIGHT COMBO', desc: 'Laser and light in one block. Heavy.', for: NOPI,
     side: { laser: [1, 0.12, 0.08], light: true }, mods: { hipSpread: 0.62, adsSpeed: 0.97 } },
+  irlaser: { slot: 'side', name: 'IR LASER', desc: 'A faint violet beam. Tighter hip-fire, quick to aim.', for: 'all',
+    side: { laser: [0.65, 0.25, 1] }, mods: { hipSpread: 0.74, adsSpeed: 1.03 } },
+  rangefinder: { slot: 'side', name: 'RANGEFINDER', desc: 'Laser rangefinder: steadier aim and a bit more range.', for: NOPI,
+    side: { laser: [1, 0.6, 0.1] }, mods: { adsSpread: 0.9, range: 1.05, hipSpread: 0.85 } },
   // ---- magazine
   extmag: { slot: 'magazine', name: 'EXTENDED MAG', desc: 'More rounds, slightly slower reload.', for: 'all',
     mods: { mag: 1.5, reload: 1.12, adsSpeed: 0.96 } },
@@ -159,6 +199,10 @@ export const ATTACHMENTS = {
     mods: { reload: 0.62, adsSpeed: 0.94 } },
   lightmag: { slot: 'magazine', name: 'POLYMER MAG', desc: 'Lighter mag, quicker handling, a few rounds less.', for: NOSG,
     mods: { mag: 0.8, adsSpeed: 1.1, reload: 0.9 } },
+  quadmag: { slot: 'magazine', name: 'QUAD-STACK MAG', desc: 'Four columns of rounds. Huge, heavy, slow to swap.', for: AUTO,
+    mods: { mag: 1.8, reload: 1.22, adsSpeed: 0.9 } },
+  speedmag: { slot: 'magazine', name: 'RAPID MAG', desc: 'Pull-loop and a slick follower. Faster reloads, fewer rounds.', for: 'all',
+    mods: { reload: 0.8, mag: 0.9 } },
   // ---- stock
   lightstock: { slot: 'stock', name: 'LIGHT STOCK', desc: 'Quicker handling, a bit more recoil.', for: NOPI,
     mods: { adsSpeed: 1.15, recoilUp: 1.1, spreadMove: 0.85 } },
@@ -170,6 +214,10 @@ export const ATTACHMENTS = {
     mods: { recoilUp: 0.78, adsSpeed: 0.94, spreadMove: 1.06 } },
   foldstock: { slot: 'stock', name: 'FOLDING STOCK', desc: 'Skeleton bars. Fast on the move.', for: ['ar', 'smg', 'shotgun'],
     mods: { spreadMove: 0.7, adsSpeed: 1.2, recoilUp: 1.18 } },
+  cheekstock: { slot: 'stock', name: 'CHEEK RISER STOCK', desc: 'Raised cheek rest. Steadier when aiming.', for: NOPI,
+    mods: { adsSpread: 0.88, adsSpeed: 0.95, recoilUp: 0.95 } },
+  tacstock: { slot: 'stock', name: 'TACTICAL STOCK', desc: 'Adjustable, padded. Steadier on the move and on the trigger.', for: NOPI,
+    mods: { recoilUp: 0.9, spreadMove: 0.9, adsSpeed: 1.02 } },
   // ---- ammo (no model: a coloured band on the mag)
   hollowpoint: { slot: 'ammo', name: 'HOLLOW POINT', desc: 'Hits much harder up close, falls off fast.', for: 'all',
     ammo: [1, 0.5, 0.1], mods: { dmg: 1.15, range: 0.7 } },
@@ -181,6 +229,12 @@ export const ATTACHMENTS = {
     ammo: [1, 0.85, 0.1], mods: { range: 1.4, recoilUp: 1.12 } },
   matchammo: { slot: 'ammo', name: 'MATCH GRADE', desc: 'Consistent rounds: tighter spread, better headshots.', for: NOSG,
     ammo: [0.2, 0.9, 0.5], mods: { spreadBase: 0.8, headMult: 1.12, rpm: 0.95 } },
+  incendiary: { slot: 'ammo', name: 'INCENDIARY', desc: 'Burning rounds: a little more damage, a big flash, less range.', for: NOSG,
+    ammo: [1, 0.35, 0.05], mods: { dmg: 1.07, flash: 1.5, range: 0.9 } },
+  tracer: { slot: 'ammo', name: 'TRACER', desc: 'See every shot land. A bit tighter from the hip.', for: NOSG,
+    ammo: [0.4, 1, 0.3], mods: { hipSpread: 0.9, spreadBase: 0.95 } },
+  flechette: { slot: 'ammo', name: 'FLECHETTE', desc: 'Steel darts: tighter, much further, a little less punch.', for: SG,
+    ammo: [0.7, 0.8, 0.9], mods: { range: 1.5, dmg: 0.9, spreadBase: 0.85 } },
   slugs: { slot: 'ammo', name: 'SLUG ROUNDS', desc: 'One heavy slug instead of pellets. Accurate and far.', for: SG,
     ammo: [0.9, 0.9, 0.9], slug: true, mods: { range: 3.2 } },
   dragon: { slot: 'ammo', name: "DRAGON'S BREATH", desc: 'Fiery pellets: a bit more damage, a huge flash.', for: SG,
@@ -232,7 +286,7 @@ function bounds(p) {
   }
   return { lo, hi };
 }
-const RETICLE = /^(dot|hoDot|rdDot|rxChev|rxGlass|kbDot|kbDotV|prChev|prStadia|scopeDot|hoRing|sightGlassL|sightBtn)$/;
+const RETICLE = /^(apDot|dot|hoDot|rdDot|rxChev|rxGlass|kbDot|kbDotV|prChev|prStadia|scopeDot|hoRing|sightGlassL|sightBtn)$/;
 function surfaces(def) {
   const solid = () => def.parts.filter((p) => !p.hidden && !p.mag && !p.em && !RETICLE.test(p.name)).map((p) => ({ p, b: bounds(p) }));
   const over = (b, i, a0, a1) => b.lo[i] <= a1 && b.hi[i] >= a0;
@@ -318,6 +372,7 @@ export function buildDef(base, loadout = {}) {
       if (muz === 'heavysup') for (let i = 1; i < 4; i++) add(P('supBand', [0, y, front - len * i / 4], [dims[0] + 0.003, dims[1] + 0.003, 0.008], BLACK));
     }
     if (mz.ports === 'top') add(P('compPort', [0, y + dims[1] / 2, front - len / 2], [0.014, 0.004, 0.04], GREY));
+    if (mz.ports === 'side3') for (let i = 0; i < 3; i++) for (const sx of [-1, 1]) add(P('brakePort3', [sx * dims[0] / 2, y, front - len * (0.22 + i * 0.28)], [0.004, 0.026, 0.016], GREY));
     if (mz.ports === 'side') {
       add(P('brakeL', [-dims[0] / 2, y, front - len / 2], [0.004, 0.022, 0.05], GREY));
       add(P('brakeR', [dims[0] / 2, y, front - len / 2], [0.004, 0.022, 0.05], GREY));
@@ -348,7 +403,19 @@ export function buildDef(base, loadout = {}) {
         P('rdR', [0.014, h, rz + 0.01], [0.004, 0.024, 0.006], BLACK),
         P('rdTop', [0, h + 0.013, rz + 0.01], [0.032, 0.004, 0.006], BLACK),
         P('rdDot', [0, h, rz + 0.012], [0.003, 0.003, 0.001], RED, { em: 1 }));
-    } else if (o.kind === 'holo') {
+    } else if (o.kind === 'aimpoint') {
+      // a short open tube (twelve rim staves) on a riser, with turret caps
+      const r = 0.021, L = 0.05;
+      add(P('apBase', [0, ry + 0.005, rz], [0.03, 0.01, 0.05], BLACK, { m: 'metal' }),
+        P('apRiser', [0, (ry + 0.01 + h - r) / 2, rz], [0.02, Math.max(0.004, h - r - ry - 0.008), 0.03], BLACK, { m: 'metal' }));
+      for (let i = 0; i < 12; i++) {
+        const a = (i * Math.PI) / 6;
+        add(P('apRim', [Math.cos(a) * r, h + Math.sin(a) * r, rz - 0.005], [0.012, 0.007, L], DARK, { m: 'metal', rz: a + H }));
+      }
+      add(P('apKnob', [r + 0.008, h, rz + 0.005], [0.014, 0.014, 0.014], BLACK, { shape: 'cyl', ry: H, m: 'steel' }),
+        P('apCap', [0, h + r + 0.008, rz + 0.005], [0.014, 0.014, 0.012], BLACK, { shape: 'cyl', rx: H, m: 'steel' }),
+        P('apDot', [0, h, rz + 0.012], [0.003, 0.003, 0.001], RED, { em: 1 }));
+    } else if (o.kind === 'holo' || o.kind === 'hybrid') {
       add(P('hoBase', [0, ry + 0.006, rz], [0.044, 0.012, 0.08], BLACK),
         P('hoL', [-0.023, (ry + 0.01 + h + 0.028) / 2, rz - 0.01], [0.005, h + 0.018 - ry, 0.055], DARK),
         P('hoR', [0.023, (ry + 0.01 + h + 0.028) / 2, rz - 0.01], [0.005, h + 0.018 - ry, 0.055], DARK),
@@ -356,6 +423,15 @@ export function buildDef(base, loadout = {}) {
         P('hoDot', [0, h, rz - 0.02], [0.0025, 0.0025, 0.001], RED, { em: 1 }));
       for (const [dx, dy, sx, sy] of [[0, 0.009, 0.007, 0.0016], [0, -0.009, 0.007, 0.0016], [0.009, 0, 0.0016, 0.007], [-0.009, 0, 0.0016, 0.007]]) {
         add(P('hoRing', [dx, h + dy, rz - 0.02], [sx, sy, 0.001], RED, { em: 1 }));
+      }
+      if (o.kind === 'hybrid') {
+        // a 3× magnifier behind it, flipped out to the right on its hinge
+        const mz = rz + 0.07;
+        add(P('mgBase', [0, ry + 0.005, mz], [0.03, 0.01, 0.04], BLACK, { m: 'metal' }),
+          P('mgHinge', [0.022, ry + 0.012, mz], [0.014, 0.024, 0.03], BLACK, { m: 'metal' }),
+          P('mgTube', [0.046, ry + 0.03, mz], [0.036, 0.036, 0.07], BLACK, { shape: 'cyl', m: 'metal' }),
+          P('mgEye', [0.046, ry + 0.03, mz + 0.04], [0.04, 0.04, 0.012], BLACK, { shape: 'cyl', m: 'rubber' }),
+          P('mgLens', [0.046, ry + 0.03, mz - 0.036], [0.03, 0.03, 0.002], LENS, { em: 0.4, shape: 'cyl' }));
       }
     } else if (o.kind === 'reflex') {
       // a big round-ish lens frame on a short mount
@@ -423,6 +499,14 @@ export function buildDef(base, loadout = {}) {
     } else if (g === 'h') {
       add(P('handstop', [0, u.y - 0.011, u.z], [0.026, 0.024, 0.02], BLACK, { rx: -0.3 }));
       def.foreGrip = [0, u.y - 0.02, u.z + 0.02];
+    } else if (g === 'p') {
+      add(P('pgripMount', [0, u.y - 0.006, u.z], [0.032, 0.014, 0.05], DARK, { m: 'metal' }),
+        P('pgrip', [0, u.y - 0.04, u.z + 0.008], [0.03, 0.085, 0.036], BLACK, { m: 'rubber', rx: -0.3 }));
+      def.foreGrip = [0, u.y - 0.05, u.z + 0.012];
+    } else if (g === 'f') {
+      add(P('fgHinge', [0, u.y - 0.009, u.z], [0.03, 0.018, 0.03], DARK, { m: 'metal' }),
+        P('fgFold', [0, u.y - 0.026, u.z + 0.05], [0.028, 0.026, 0.09], BLACK, { m: 'rubber' }));
+      def.foreGrip = [0, u.y - 0.03, u.z + 0.02];
     } else if (g === 'b') {
       add(P('bipodBase', [0, u.y - 0.009, u.z], [0.036, 0.02, 0.03], BLACK, { m: 'metal' }));
       for (const sx of [-1, 1]) add(P('bipodLeg', [sx * 0.012, u.y - 0.02, u.z + 0.09], [0.01, 0.01, 0.2], DARK, { m: 'metal', ry: sx * 0.05 }));
@@ -455,7 +539,7 @@ export function buildDef(base, loadout = {}) {
   // ---- magazine ----
   const mag = part('mag');
   const mg = sid('magazine');
-  if (mg === 'extmag' || mg === 'drum' || mg === 'lightmag') hideGrp('mag');
+  if (mg === 'extmag' || mg === 'drum' || mg === 'lightmag' || mg === 'quadmag') hideGrp('mag');
   if (mg === 'extmag') {
     if (style === 'shotgun' && !base.reload) {
       def.mag = base.mag + 2;
@@ -475,14 +559,20 @@ export function buildDef(base, loadout = {}) {
     def.magPos[1] += ny - mag.c[1]; mag.c[1] = ny;
     mag.rx = 0;
     mag.col = DARK;
+  } else if (mg === 'quadmag' && mag) {
+    def.mag = Math.round(base.mag * 1.8);
+    const dy = mag.s[1] * 0.5;
+    mag.s[1] += dy; mag.c[1] -= dy / 2; def.magPos[1] -= dy / 2;
+    mag.s[2] *= 1.3; mag.col = [0.24, 0.25, 0.22];
+    if (!mag.ry) for (const sx of [-1, 1]) add(P('quadRib', [mag.c[0] + sx * (mag.s[0] / 2 + 0.001), mag.c[1], mag.c[2]], [0.003, mag.s[1] * 0.8, 0.01], BLACK, { mag: true, rx: mag.rx || 0 }));
   } else if (mg === 'lightmag') {
     def.mag = Math.max(1, Math.round(base.mag * 0.8));
     if (mag) { mag.col = [0.72, 0.68, 0.6]; mag.m = 'poly'; }
   } else if (mg === 'coupler' && mag) {
     add({ ...mag, name: 'mag2', c: [mag.c[0] + mag.s[0] + 0.004, mag.c[1] + 0.01, mag.c[2]], s: [...mag.s], col: mag.col, mag: true });
     add(P('tape', [mag.c[0] + mag.s[0] / 2 + 0.002, mag.c[1] - 0.01, mag.c[2]], [mag.s[0] * 2 + 0.01, 0.018, mag.s[2] + 0.004], [0.75, 0.62, 0.15], { mag: true, rx: mag.rx || 0 }));
-  } else if (mg === 'fastmag' && mag && !(style === 'shotgun' && !base.reload)) {
-    add(P('magTab', [mag.c[0], mag.c[1] - mag.s[1] / 2 - 0.006, mag.c[2]], [mag.s[0] * 0.8, 0.012, mag.s[2] * 0.6], RED,
+  } else if ((mg === 'fastmag' || mg === 'speedmag') && mag && !(style === 'shotgun' && !base.reload)) {
+    add(P('magTab', [mag.c[0], mag.c[1] - mag.s[1] / 2 - 0.006, mag.c[2]], [mag.s[0] * 0.8, 0.012, mag.s[2] * 0.6], mg === 'speedmag' ? [0.2, 0.6, 1] : RED,
       { mag: true, rx: mag.rx || 0, em: 0.3 }));
   }
 
@@ -514,6 +604,13 @@ export function buildDef(base, loadout = {}) {
       add(P('stockPad', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.009], [s0.s[0] + 0.004, s0.s[1] + 0.004, 0.02], TAN, { m: 'rubber' }));
     } else if (st === 'paddedstock') {
       add(P('recoilPad', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.019], [s0.s[0] + 0.01, s0.s[1] + 0.012, 0.04], [0.15, 0.15, 0.16], { m: 'rubber' }));
+    } else if (st === 'cheekstock') {
+      add(P('cheekRiser', [0, top0 + 0.011, s0.c[2] + 0.01], [s0.s[0] * 0.85, 0.022, Math.min(0.14, s0.s[2] * 0.7)], [0.16, 0.16, 0.17], { m: 'rubber' }),
+        P('cheekButt', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.008], [s0.s[0] + 0.002, s0.s[1] + 0.002, 0.016], BLACK, { m: 'rubber' }));
+    } else if (st === 'tacstock') {
+      add(P('tacPad', [0, s0.c[1], s0.c[2] + s0.s[2] / 2 + 0.008], [s0.s[0] + 0.004, s0.s[1] + 0.004, 0.016], [0.2, 0.2, 0.21], { m: 'rubber' }),
+        P('tacLever', [0, s0.c[1] - s0.s[1] / 2 - 0.005, s0.c[2] - 0.02], [0.014, 0.012, 0.04], DARK, { m: 'metal' }),
+        P('tacSling', [s0.s[0] / 2 + 0.003, s0.c[1], s0.c[2] + s0.s[2] * 0.3], [0.006, 0.02, 0.02], DARK, { m: 'steel' }));
     } else if (st === 'foldstock') {
       hide(m.stock);
       const y = s0.c[1];
@@ -521,7 +618,7 @@ export function buildDef(base, loadout = {}) {
       add(P('foldPlate', [0, y, front + s0.s[2]], [0.03, 0.08, 0.012], BLACK, { m: 'rubber' }));
     }
     // bridge from the back of the receiver to the new stock (the old buffer tube may have gone with the factory stock)
-    const skip = (p) => m.stock.includes(p.name) || p.grp === 'stock' || /^(stock|fold|recoilPad|stockPad|stockPlate)/.test(p.name);
+    const skip = (p) => m.stock.includes(p.name) || p.grp === 'stock' || /^(stock|fold|recoilPad|stockPad|stockPlate|cheekRiser|cheekButt|tac)/.test(p.name);
     const yy = s0.c[1] + 0.005;
     const rear = surfaces(def).rear(yy - 0.016, yy + 0.016, skip);
     if (st === 'nostock') {
@@ -544,7 +641,7 @@ export function buildDef(base, loadout = {}) {
   def.dmg = Math.max(1, Math.round(def.dmg * k.dmg));
   def.rpm = Math.round(base.rpm * k.rpm);
   def.headMult = (def.headMult ?? base.headMult) * k.headMult;
-  def.mag = Math.max(1, Math.round(def.mag * (mg === 'extmag' || mg === 'drum' || mg === 'lightmag' ? 1 : k.mag)));
+  def.mag = Math.max(1, Math.round(def.mag * (mg === 'extmag' || mg === 'drum' || mg === 'lightmag' || mg === 'quadmag' ? 1 : k.mag)));
   def.sound.gain *= k.gain;
   if (k.gain < 0.5) { def.sound.freq *= 0.55; def.sound.thump *= 0.8; }
   def.flashScale = k.flash;
