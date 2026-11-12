@@ -169,6 +169,9 @@ class Agent {
       if (wantCover && this.cls === 'heavy' && this.barCd <= 0 && this.hpFrac < 0.75 && tDist > 5 && g.barricade) {
         this.barCd = g.barricade(this, tgt) ? 20 : 2;
       }
+      // gear: every bot carries its class's heavy weapon and a fighting ability, and uses them on whoever it's fighting
+      this.gearCd = (this.gearCd ?? 4 + Math.random() * 8) - dt;
+      if (this.gearCd <= 0 && g.botGear) this.gearCd = g.botGear(this, tgt, tDist, wantCover) || 1.5;
       if (wantCover && !this.cover) this.cover = co.findCover(this, tgt) || { none: true };
       if (!wantCover) this.cover = null;
       if (this.cover && !this.cover.none) {

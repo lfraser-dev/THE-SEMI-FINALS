@@ -65,9 +65,15 @@ const sounds = new Sounds();
 const gadgets = new Gadgets(world, effects, sounds);     // barricades, pads, drone pods, turret bases
 // heavy weapons: drones, grenades, fire pools, turret brains. Hooks tie them to whoever you can hurt.
 const heavy = new Heavy(world, effects, sounds, gadgets, {
-  targets: () => enemyTargets(),
-  hit: (ref, dmg, point, dir, name) => hitTarget(ref, dmg, false, point, dir, name),
-  ignite: (ref, burn, name) => ignite(ref, burn, name),
+  targets: (side) => (side && side !== true ? agentTargets(side) : enemyTargets()),
+  hit: (ref, dmg, point, dir, name, side) => {
+    if (side && side !== true) botGearHit(side, ref, dmg, point, dir);
+    else hitTarget(ref, dmg, false, point, dir, name);
+  },
+  ignite: (ref, burn, name, side) => {
+    if (side && side !== true) { if (ref.isPlayer) playerBurn = { t: burn.dur, dps: burn.dps, by: side, acc: 0 }; else botGearHit(side, ref, Math.round(burn.dps * burn.dur * 0.5), [ref.pos[0], ref.pos[1] + 1.2, ref.pos[2]], [0, 0, 0]); }
+    else ignite(ref, burn, name);
+  },
   gadgetHit: (g, dmg) => gadgetHit(g, dmg),
   me: () => myGadgetOwner(),
   myTeam: () => (tdm.active ? tdm.myTeam?.idx ?? -1 : -1),
@@ -87,6 +93,22 @@ const heavy = new Heavy(world, effects, sounds, gadgets, {
     if (d < r * 5) { player.shake = Math.max(player.shake || 0, 0.6 * (1 - d / (r * 5))); player.camPitchV += 0.6 * (1 - d / (r * 5)); }
   },
 });
+// a bot's gear (turret, drone, grenade, mine, tether) can hurt the player and the other team's bots
+const playerRef = { isPlayer: true, get pos() { return player.pos; }, get alive() { return !player.dead; } };
+let playerBurn = null;          // set on fire by a bot's gear: { t, dps, by, acc }
+function agentTargets(agent) {
+  const out = [];
+  if (!tdm.active || tdm === online || !inStadium()) return out;
+  const add = (ref, pos) => out.push({ ref, pos, chest: [pos[0], pos[1] + 1.2, pos[2]] });
+  if (!player.dead && tdm.myTeam !== agent.team && !(cloakT > 0)) add(playerRef, player.pos);
+  for (const a of tdm.agents) if (a.team !== agent.team && a.bot && a.bot.alive) add(a.bot, a.bot.pos);
+  return out;
+}
+function botGearHit(agent, ref, dmg, point, dir) {
+  if (ref.isPlayer) { player.lastHitBy = agent; damagePlayer(dmg, agent.pos || point, agent.name); return; }
+  if (ref.agent) ref.agent.lastHitBy = agent;
+  ref.damage(dmg, dir);
+}
 // everyone your heavy weapons can hurt right now: the other team in a match, the dummies in the range
 function enemyTargets() {
   const out = [];
@@ -299,8 +321,8 @@ function fire(w) {
       e.head = e.head || b.head;
       perDummy.set(b.ref, e);
       anyHit = true;
-    } else if (b.tag === 'barricade') {
-      // steel: sparks, and it takes the hit unless it's your own team's
+    } else if (b.tag === 'barricade' || (b.ref && b.ref.k && b.ref.hp != null)) {
+      // gadgets (barricades, turrets, pods, mines, stations): sparks, and a hit unless it's your own team's
       const g = b.ref;
       if (!(tdm.active && g.team === tdm.myTeam?.idx)) {
         const fall = 1 - 0.45 * clamp((hit.t - d.range) / (d.range * 1.2), 0, 1);
@@ -548,6 +570,56 @@ const botHooks = {
     effects.impact(hit.point, hit.normal, hit.box.color); if (hit.box.tag !== 'chunk') effects.decal(hit.point, hit.normal);
   },
   onBotKill: (killer, victim) => { killFeed(killer.name, 'RIFLE', victim.name, false); },
+  // a bot uses its gear: returns how long until it thinks about it again
+  botGear: (agent, tgt, dist, hurting) => {
+    const c = CLASSES[agent.cls] || CLASSES.medium;
+    agent.gear ??= c.heavies[Math.floor(Math.random() * c.heavies.length)];
+    const b = agent.bot, p = agent.pos, chest = [tgt.pos[0], tgt.pos[1] + 1.2, tgt.pos[2]];
+    const yaw = Math.atan2(-(tgt.pos[0] - p[0]), -(tgt.pos[2] - p[2]));
+    const spec = (o) => ({ gid: gadgets.newId(agent.name), owner: agent.name, team: agent.team.idx, teamCol: agent.team.rgb, side: agent, ...o });
+    const lob = (kind, speed) => {
+      // a lobbed shot that lands on them (a little off, like a person)
+      const from = b.muzzle(), dx = chest[0] - from[0], dz = chest[2] - from[2], dy = chest[1] - from[1], h = Math.hypot(dx, dz);
+      const T = h / speed, gk = (HEAVY_STATS[kind].grav ?? 1) * 14, err = 1 + (Math.random() - 0.5) * 0.18;
+      heavy.launch(kind, from, [dx / T * err, (dy + 0.5 * gk * T * T) / T, dz / T * err], agent, HEAVY_STATS[kind].name);
+    };
+    if (agent.cls === 'medium' && hurting && agent.hpFrac < 0.5 && !(agent.healCd > time)) {
+      const sp = gadgets.padSpot([p[0], p[1] + 1.5, p[2]], [0, -1, 0], p, 0.35);
+      if (sp) { gadgets.place(spec({ k: 'heal', ax: 0, ...sp })); agent.healCd = time + 22; return 3; }
+    }
+    if (agent.cls === 'light' && dist > 5 && dist < 22 && !(agent.tetherCd > time) && Math.random() < 0.5) {
+      lob('tether', 36); agent.tetherCd = time + 12; return 3;
+    }
+    const id = agent.gear;
+    if (id.startsWith('gl_')) {
+      if (dist < 6 || dist > 34) return 1;
+      lob(id, 24);
+      return HEAVY_STATS[id].cd + Math.random() * 6;
+    }
+    if (id === 'dronepod' || id === 'swarmpod') {
+      if (dist > 30) return 1;
+      const sp = gadgets.padSpot([p[0], p[1] + 1.5, p[2]], [0, -1, 0], p, 0.35);
+      if (!sp) return 2;
+      gadgets.place(spec({ k: 'pod', v: id === 'swarmpod' ? 'swarm' : undefined, ax: 0, ...sp }));
+      return HEAVY_STATS[id].cd + Math.random() * 8;
+    }
+    if (id === 'mines') {
+      if (dist > 20 || !hurting) return 2;          // drop them when falling back
+      let n = 0;
+      for (const k of [-1, 0, 1]) {
+        const a = yaw + k * 0.9, x = p[0] - Math.sin(a) * 1.6, z = p[2] - Math.cos(a) * 1.6;
+        const hit = world.raycast([x, p[1] + 1, z], [0, -1, 0], 2.5, false);
+        if (hit && hit.normal[1] > 0.7) { gadgets.place(spec({ k: 'mine', ax: 0, p: [x, hit.point[1], z] })); n++; }
+      }
+      return n ? HEAVY_STATS.mines.cd + Math.random() * 8 : 2;
+    }
+    // turrets
+    if (dist > 40) return 1;
+    const sp = gadgets.turretSpot(p, yaw);
+    if (!sp) return 2;
+    gadgets.place(spec({ k: 'tur', v: id === 'turret_heavy' ? 'heavy' : id === 'turret_flame' ? 'flame' : undefined, ...sp }));
+    return HEAVY_STATS[id].cd + Math.random() * 8;
+  },
   barricade: (agent, tgt) => {
     const p = agent.pos, yaw = Math.atan2(-(tgt.pos[0] - p[0]), -(tgt.pos[2] - p[2]));
     const spot = gadgets.barricadeSpot(p, yaw);
@@ -733,15 +805,14 @@ function updateHealing(dt) {
   for (const g of gadgets.list) {
     if (g.k !== 'heal' || g.t < 0.3) continue;
     const friendly = g.owner === myGadgetOwner() || (myTeam >= 0 && g.team === myTeam);
-    if (!friendly) continue;
     const near = (p) => Math.hypot(p[0] - g.p[0], p[2] - g.p[2]) < 4.5 && Math.abs(p[1] - g.p[1]) < 2.5;
-    if (!player.dead && player.hp < player.maxHp && near(player.pos)) {
+    if (friendly && !player.dead && player.hp < player.maxHp && near(player.pos)) {
       player.hp = Math.min(player.maxHp, player.hp + 20 * dt);
       if (Math.random() < dt * 8) effects.spawnPiece([player.pos[0] + (Math.random() - 0.5) * 0.8, player.pos[1] + 0.4 + Math.random(), player.pos[2] + (Math.random() - 0.5) * 0.8], [0.05, 0.05, 0.05], [0, 1.4, 0], [0.3, 1, 0.5], 0.6, 1);
     }
     if (tdm.active && tdm !== online) for (const a of tdm.agents) {
       const b = a.bot;
-      if (b && b.alive && b.team === myTeam && b.hp < b.maxHp && near(b.pos)) b.hp = Math.min(b.maxHp, b.hp + 20 * dt);
+      if (b && b.alive && b.team === g.team && b.hp < b.maxHp && near(b.pos)) b.hp = Math.min(b.maxHp, b.hp + 20 * dt);
     }
     if (Math.random() < dt * 6) {
       effects.spawnPiece([g.p[0] + (Math.random() - 0.5) * 0.4, g.p[1] + 0.8, g.p[2] + (Math.random() - 0.5) * 0.4], [0.05, 0.05, 0.05], [(Math.random() - 0.5) * 2, 2, (Math.random() - 0.5) * 2], [0.3, 1, 0.5], 0.8, 1);
@@ -1120,7 +1191,7 @@ function enterRange() {
   if (where !== 'range') {
     if (tdm.active) endMatch(false);
     where = 'range';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
     player.spawn(map.spawn.pos, map.spawn.yaw);
     $('mapname').lastChild.textContent = map.name;
     document.body.classList.remove('stadium');
@@ -1141,7 +1212,7 @@ function enterStadium() {
   if (classDirty || !sessionStarted) { applyClass(); sessionStarted = true; }
   if (arriving) {
     where = 'stadium';
-    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
+    gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
     botMgr.stop();
     course.reset();
     cutscene = null; pressSeq = null;
@@ -1345,7 +1416,7 @@ function startOnline(info) {
   menu.classList.add('hidden');
   enterStadium();
   batches.world = null;
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
   resetGlass();
   const sp = stadium.spawns[info.team];
   player.spawn(sp.pos, sp.yaw);
@@ -1373,7 +1444,7 @@ function setTeamsHud(m) {
 function startMatch(m) {
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
   resetGlass();
   walls.forEach((w) => w.reset());
   tdm.start(m, stadium, player, classLo.cls);
@@ -1385,7 +1456,7 @@ function startMatch(m) {
 }
 function endMatch(toMenu) {
   if (tdm === online) { online.leave(); tdm = ai; } else tdm.stop();
-  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0;
+  gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null;
   match = null;
   $('matchend').classList.add('hidden');
   if (toMenu && playing) setPlaying(false);
@@ -2101,6 +2172,12 @@ function frameBody(now) {
     heavy.update(dt);
     updateBurns(dt);
     updateHealing(dt);
+    if (playerBurn) {
+      playerBurn.t -= dt; playerBurn.acc += playerBurn.dps * dt;
+      if (Math.random() < dt * 20) effects.flame([player.pos[0] + (Math.random() - 0.5) * 0.5, player.pos[1] + 0.3 + Math.random() * 1.2, player.pos[2] + (Math.random() - 0.5) * 0.5], [0, 0.5, 0], 1.3);
+      if (playerBurn.acc >= 4) { const d = Math.floor(playerBurn.acc); playerBurn.acc -= d; player.lastHitBy = playerBurn.by; damagePlayer(d, playerBurn.by.pos || player.pos, playerBurn.by.name); }
+      if (playerBurn.t <= 0 || player.dead) playerBurn = null;
+    }
     if (cloakT > 0 && ((cloakT -= dt) <= 0 || player.dead)) { cloakT = 0; sounds.cloak?.(); }
     document.body.classList.toggle('cloaked', cloakT > 0);
     if (tdm.you) tdm.you.cloaked = cloakT > 0;

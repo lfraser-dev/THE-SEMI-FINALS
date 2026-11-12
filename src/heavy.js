@@ -7,6 +7,8 @@
 //   MG / CANNON TURRET (Heavy): the turret base is a gadget; this file turns its head, picks targets and shoots.
 // Only the owner's game decides who gets hurt (through hooks.hit). Online, everyone else gets the launches, drone
 // positions, turret shots and explosions as messages and just draws them.
+// Every live thing carries a `mine` side: true = mine (the player's), an AI agent = that bot's (it hurts the bot's
+// enemies, the player included), falsy = someone else's online that we only draw.
 import { compose, mat4, anglesFor } from './math.js';
 import { ropeSeg, ropeParts, TETHER_COL } from './gadgets.js';
 
@@ -66,9 +68,10 @@ export class Heavy {
     const hit = this.world.raycast(from, norm([to[0] - from[0], to[1] - from[1], to[2] - from[2]]), d, false);
     return !hit || hit.t > d - 0.4 || hit.box.ref === tg.ref;
   }
-  nearest(from, range, filter) {
+  sideOf(g) { return g.side || (g.owner === this.hooks.me() ? true : null); }
+  nearest(from, range, side, filter) {
     let best = null, bd = range;
-    for (const tg of this.hooks.targets()) {
+    for (const tg of this.hooks.targets(side)) {
       const d = dist(from, tg.chest);
       if (d < bd && (!filter || filter(tg)) && this.sees(from, tg)) { best = tg; bd = d; }
     }
@@ -89,19 +92,19 @@ export class Heavy {
     this.hooks.shake?.(pos, r);
     if (kind === 'fire') this.fires.push({ pos: [...pos], r: HEAVY_STATS.gl_fire.r, t: HEAVY_STATS.gl_fire.fire, tick: 0, mine, name });
     if (!mine) return;
-    this.hooks.send?.({ t: 'boom', p: pos.map((v) => +v.toFixed(2)), r, k: kind });
+    if (mine === true) this.hooks.send?.({ t: 'boom', p: pos.map((v) => +v.toFixed(2)), r, k: kind });
     const from = [pos[0], pos[1] + 0.3, pos[2]];
-    for (const tg of this.hooks.targets()) {
+    for (const tg of this.hooks.targets(mine)) {
       const d = dist(pos, tg.chest);
       if (d > r + 0.5 || !this.sees(from, tg)) continue;
       const k = 1 - 0.6 * Math.min(1, d / r);
-      this.hooks.hit(tg.ref, Math.round(dmg * k), tg.chest, norm([tg.chest[0] - pos[0], 0.5, tg.chest[2] - pos[2]]), name);
+      this.hooks.hit(tg.ref, Math.round(dmg * k), tg.chest, norm([tg.chest[0] - pos[0], 0.5, tg.chest[2] - pos[2]]), name, mine);
     }
     // enemy gadgets in the blast take a beating too
-    const team = this.hooks.myTeam();
+    const team = mine === true ? this.hooks.myTeam() : mine.team?.idx ?? -1, owner = mine === true ? this.hooks.me() : mine.name;
     for (const g of [...this.gadgets.list]) {
-      if (g.hp == null || (team >= 0 && g.team === team) || g.owner === this.hooks.me()) continue;
-      if (dist(pos, [g.p[0], g.p[1] + 0.8, g.p[2]]) < r + 1.2) this.hooks.gadgetHit(g, dmg);
+      if (g.hp == null || (team >= 0 && g.team === team) || g.owner === owner) continue;
+      if (dist(pos, [g.p[0], g.p[1] + 0.8, g.p[2]]) < r + 1.2) { if (mine === true) this.hooks.gadgetHit(g, dmg); else this.gadgets.damage(g, dmg); }
     }
   }
 
@@ -110,19 +113,19 @@ export class Heavy {
     const s = HEAVY_STATS[kind];
     this.grenades.push({ kind, pos: [...pos], vel: [...vel], t: 0, mine, name: name || s.name, stuck: null, fuse: s.fuse, col: s.col, spin: 0 });
     this.sounds.launcher?.();
-    if (mine) this.hooks.send?.({ t: 'gl', k: kind, p: pos.map((v) => +v.toFixed(2)), v: vel.map((v) => +v.toFixed(2)) });
+    if (mine === true) this.hooks.send?.({ t: 'gl', k: kind, p: pos.map((v) => +v.toFixed(2)), v: vel.map((v) => +v.toFixed(2)) });
   }
 
   detonate(gr, at) {
     const s = HEAVY_STATS[gr.kind];
     this.grenades.splice(this.grenades.indexOf(gr), 1);
     if (!gr.mine) return;             // the owner sends the explosion
-    this.boom(at, s.r, s.dmg, gr.name, true, gr.kind === 'gl_fire' ? 'fire' : gr.kind === 'bomblet' || gr.kind === 'gl_cluster' ? 'mini' : 'frag');
+    this.boom(at, s.r, s.dmg, gr.name, gr.mine, gr.kind === 'gl_fire' ? 'fire' : gr.kind === 'bomblet' || gr.kind === 'gl_cluster' ? 'mini' : 'frag');
     if (gr.kind === 'gl_cluster') {
       // five bomblets thrown out in a ring
       for (let k = 0; k < s.bomblets; k++) {
         const a = (k / s.bomblets) * Math.PI * 2 + Math.random() * 0.6, sp = 3.5 + Math.random() * 3;
-        this.launch('bomblet', [at[0], at[1] + 0.35, at[2]], [Math.cos(a) * sp, 4 + Math.random() * 2.5, Math.sin(a) * sp], true, s.name);
+        this.launch('bomblet', [at[0], at[1] + 0.35, at[2]], [Math.cos(a) * sp, 4 + Math.random() * 2.5, Math.sin(a) * sp], gr.mine, s.name);
       }
     }
   }
@@ -147,16 +150,16 @@ export class Heavy {
       // a direct hit on someone
       let tgHit = null;
       // (checked along the whole step, so a fast grenade can't skip through someone between frames)
-      if (gr.mine) for (const tg of this.hooks.targets()) if (segDist(gr.pos, step, tg.chest) < 0.75) { tgHit = tg; break; }
+      if (gr.mine) for (const tg of this.hooks.targets(gr.mine)) if (segDist(gr.pos, step, tg.chest) < 0.75) { tgHit = tg; break; }
       const hit = tgHit ? null : this.world.raycast(gr.pos, dir, l + 0.05, false);
       if (tgHit || hit) {
         const at = tgHit ? [tgHit.chest[0], tgHit.chest[1] - 0.2, tgHit.chest[2]] : hit.point.map((v, i) => v + hit.normal[i] * 0.06);
         if (gr.kind === 'tether') {
           this.grenades.splice(this.grenades.indexOf(gr), 1);
           if (!gr.mine) continue;
-          const person = tgHit || ((hit.box.tag === 'bot' || hit.box.tag === 'dummy') && this.hooks.targets().find((x) => x.ref === hit.box.ref));
-          if (person) this.tetherTarget(person, null, gr.name);
-          else this.setTrap(hit.point.map((v, i) => v + hit.normal[i] * 0.03), hit.normal, true);
+          const person = tgHit || ((hit.box.tag === 'bot' || hit.box.tag === 'dummy') && this.hooks.targets(gr.mine).find((x) => x.ref === hit.box.ref));
+          if (person) this.tetherTarget(person, null, gr.name, gr.mine);
+          else this.setTrap(hit.point.map((v, i) => v + hit.normal[i] * 0.03), hit.normal, gr.mine);
           continue;
         }
         if (gr.kind === 'gl_sticky') {
@@ -186,20 +189,27 @@ export class Heavy {
     }
     return best ? best.point.map((v, i) => v + best.normal[i] * 0.03) : [pos[0], pos[1], pos[2]];
   }
-  tetherTarget(tg, anchor, name) {
+  tetherTarget(tg, anchor, name, side = true) {
     const a = anchor || this.anchorFor(tg.pos);
+    if (tg.ref.isPlayer) {
+      // a bot tied *you* down
+      this.hooks.tetherMe?.(a, TETHER.len, TETHER.dur);
+      this.addTether({ me: true, anchor: a, len: TETHER.len, t: TETHER.dur });
+      this.hooks.hit(tg.ref, TETHER.dmg, tg.chest, [0, 0, 0], name || 'TETHER', side);
+      return;
+    }
     this.tethers = this.tethers.filter((t) => t.ref !== tg.ref);
     this.tethers.push({ ref: tg.ref, anchor: a, len: TETHER.len, t: TETHER.dur, max: TETHER.dur });
     this.sounds.tether?.();
     this.effects.impact(a, [0, 1, 0], [1, 0.55, 0.15]);
-    this.hooks.hit(tg.ref, TETHER.dmg, tg.chest, [0, 0, 0], name || 'TETHER');
-    this.hooks.onTether?.(tg.ref, a, TETHER.len, TETHER.dur);
+    this.hooks.hit(tg.ref, TETHER.dmg, tg.chest, [0, 0, 0], name || 'TETHER', side);
+    if (side === true) this.hooks.onTether?.(tg.ref, a, TETHER.len, TETHER.dur);
   }
   setTrap(pos, normal, mine, id) {
     const tr = { id: id || `${this.hooks.me()}-t${++did}`, pos: [...pos], normal: [...normal], t: TETHER.trapLife, mine };
     this.traps.push(tr);
     this.sounds.click?.(1600, 0.4, 3);
-    if (mine) this.hooks.send?.({ t: 'trap', tid: tr.id, p: pos.map((v) => +v.toFixed(2)), n: normal });
+    if (mine === true) this.hooks.send?.({ t: 'trap', tid: tr.id, p: pos.map((v) => +v.toFixed(2)), n: normal });
   }
   // a tether someone else's game told us about (we're drawing it; if it's us, main.js holds us)
   addTether(t) { this.tethers = this.tethers.filter((x) => (t.me ? !x.me : x.remoteId !== t.remoteId)); this.tethers.push({ ...t, max: t.t }); this.sounds.tether?.(); }
@@ -208,8 +218,8 @@ export class Heavy {
       tr.t -= dt;
       let gone = tr.t <= 0;
       if (!gone && tr.mine) {
-        const tg = this.hooks.targets().find((x) => dist(x.pos, tr.pos) < TETHER.trapR || dist(x.chest, tr.pos) < TETHER.trapR);
-        if (tg) { this.tetherTarget(tg, tr.pos, 'TETHER TRAP'); gone = true; this.hooks.send?.({ t: 'trapgone', tid: tr.id }); }
+        const tg = this.hooks.targets(tr.mine).find((x) => dist(x.pos, tr.pos) < TETHER.trapR || dist(x.chest, tr.pos) < TETHER.trapR);
+        if (tg) { this.tetherTarget(tg, tr.pos, 'TETHER TRAP', tr.mine); gone = true; if (tr.mine === true) this.hooks.send?.({ t: 'trapgone', tid: tr.id }); }
       }
       if (gone) this.traps.splice(this.traps.indexOf(tr), 1);
     }
@@ -240,21 +250,22 @@ export class Heavy {
       f.tick -= dt;
       if (f.tick > 0) continue;
       f.tick = 0.3;
-      for (const tg of this.hooks.targets()) {
+      for (const tg of this.hooks.targets(f.mine)) {
         const dx = tg.pos[0] - f.pos[0], dz = tg.pos[2] - f.pos[2];
-        if (dx * dx + dz * dz < f.r * f.r && Math.abs(tg.pos[1] - f.pos[1]) < 1.6) this.hooks.ignite(tg.ref, HEAVY_STATS.gl_fire.burn, f.name);
+        if (dx * dx + dz * dz < f.r * f.r && Math.abs(tg.pos[1] - f.pos[1]) < 1.6) this.hooks.ignite(tg.ref, HEAVY_STATS.gl_fire.burn, f.name, f.mine);
       }
     }
   }
 
   // ---------------------------------------------------------------- drones
   podOpened(pod) {
-    if (pod.owner !== this.hooks.me()) return;          // the owner flies them; others get positions
+    const side = this.sideOf(pod);
+    if (!side) return;          // the owner flies them; others get positions
     const s = HEAVY_STATS[pod.v === 'swarm' ? 'swarmpod' : 'dronepod'];
     for (let k = 0; k < s.drones; k++) {
       const a = (k / s.drones) * Math.PI * 2 + Math.random();
       this.drones.push({
-        id: `${this.hooks.me()}-${++did}`, mine: true, kind: s.drones > 1 ? 'mini' : 'frag', s,
+        id: `${this.hooks.me()}-${++did}`, mine: side, kind: s.drones > 1 ? 'mini' : 'frag', s,
         pos: [pod.p[0], pod.p[1] + 0.45, pod.p[2]], vel: [0, 6, 0], phase: 'rise', t: 0, target: null, look: 0,
         drift: s.drones > 1 ? [Math.cos(a) * 3.2, 0, Math.sin(a) * 3.2] : [0, 0, 0], yaw: a, name: s.name,
       });
@@ -264,7 +275,7 @@ export class Heavy {
 
   droneBoom(dr) {
     this.drones.splice(this.drones.indexOf(dr), 1);
-    if (dr.mine) this.boom(dr.pos, dr.s.r, dr.s.dmg, dr.name, true, dr.kind);
+    if (dr.mine) this.boom(dr.pos, dr.s.r, dr.s.dmg, dr.name, dr.mine, dr.kind);
   }
 
   updateDrones(dt) {
@@ -281,13 +292,13 @@ export class Heavy {
         dr.look -= dt;
         if (dr.look <= 0) {
           dr.look = 0.15;
-          const tg = this.nearest(dr.pos, SEE);
+          const tg = this.nearest(dr.pos, SEE, dr.mine);
           if (tg) { dr.target = tg.ref; dr.phase = 'dive'; dr.t = 0; this.sounds.lock?.(); }
         }
         if (dr.phase === 'seek' && dr.t > SEEK) { this.droneBoom(dr); continue; }
       } else {
         // dive: home in on them
-        const tg = this.hooks.targets().find((x) => x.ref === dr.target);
+        const tg = this.hooks.targets(dr.mine).find((x) => x.ref === dr.target);
         if (!tg || dr.t > 4) { this.droneBoom(dr); continue; }
         const want = norm([tg.chest[0] - dr.pos[0], tg.chest[1] - dr.pos[1], tg.chest[2] - dr.pos[2]]).map((v) => v * dr.s.speed);
         const k = Math.min(1, dt * 5);
@@ -301,7 +312,7 @@ export class Heavy {
     }
     // tell everyone else where my drones are
     this.sendT -= dt;
-    const mine = this.drones.filter((d) => d.mine);
+    const mine = this.drones.filter((d) => d.mine === true);
     if (mine.length && this.sendT <= 0 && this.hooks.send) {
       this.sendT = 0.1;
       this.hooks.send({ t: 'drn', ds: mine.map((d) => [d.id, ...d.pos.map((v) => +v.toFixed(2)), +d.yaw.toFixed(2), d.kind === 'mini' ? 1 : 0]) });
@@ -318,14 +329,15 @@ export class Heavy {
       g.muzzleT = Math.max(0, (g.muzzleT || 0) - dt);
       g.recoil = (g.recoil || 0) * Math.exp(-12 * dt);
       let aimAt = g.aimTo;
-      if (g.owner === this.hooks.me()) {
+      const side = this.sideOf(g);
+      if (side) {
         g.look = (g.look || 0) - dt;
         if (g.look <= 0) {
           g.look = 0.25;
-          const tg = this.nearest(head, s.range);
+          const tg = this.nearest(head, s.range, side);
           g.tgRef = tg ? tg.ref : null;
         }
-        const tg = g.tgRef && this.hooks.targets().find((x) => x.ref === g.tgRef);
+        const tg = g.tgRef && this.hooks.targets(side).find((x) => x.ref === g.tgRef);
         aimAt = tg ? tg.chest : null;
         if (!tg) g.tgRef = null;
       } else if (g.aimT > 0) {
@@ -345,32 +357,36 @@ export class Heavy {
       const turn = s.turn * dt;
       g.yaw += Math.max(-turn, Math.min(turn, dy));
       g.pitch += Math.max(-turn, Math.min(turn, wantPitch - g.pitch));
-      if (!aimAt || g.owner !== this.hooks.me() || Math.abs(dy) > 0.08 || g.cool > 0) continue;
+      if (!aimAt || !side || Math.abs(dy) > 0.08 || g.cool > 0) continue;
       // fire
       g.cool = s.rate;
       const f = this.headDir(g);
       const muzzle = this.muzzle(g, f);
       if (g.v === 'flame') {
         // a hose of fire: everyone in the cone it can reach gets scorched and set alight
-        for (const tg of this.hooks.targets()) {
+        for (const tg of this.hooks.targets(side)) {
           const d = [tg.chest[0] - muzzle[0], tg.chest[1] - muzzle[1], tg.chest[2] - muzzle[2]], l = Math.hypot(...d);
           if (l > s.range || (d[0] * f[0] + d[1] * f[1] + d[2] * f[2]) / l < Math.cos(s.cone) || !this.sees(muzzle, tg)) continue;
-          this.hooks.hit(tg.ref, s.dmg, tg.chest, f, s.name);
-          this.hooks.ignite(tg.ref, s.burn, s.name);
+          this.hooks.hit(tg.ref, s.dmg, tg.chest, f, s.name, side);
+          this.hooks.ignite(tg.ref, s.burn, s.name, side);
         }
         const end = muzzle.map((v, i) => v + f[i] * s.range);
         this.shotFx(g, muzzle, end, s);
-        if ((g.sendT = (g.sendT || 0) - 1) <= 0) { g.sendT = 3; this.hooks.send?.({ t: 'tsh', gid: g.gid, to: end.map((v) => +v.toFixed(2)) }); }
+        if (side === true && (g.sendT = (g.sendT || 0) - 1) <= 0) { g.sendT = 3; this.hooks.send?.({ t: 'tsh', gid: g.gid, to: end.map((v) => +v.toFixed(2)) }); }
         continue;
       }
       const dir = norm(f.map((v) => v + (Math.random() - 0.5) * 2 * s.spread));
       const hit = this.world.raycast(muzzle, dir, s.range * 1.3, false);
       const end = hit ? hit.point : muzzle.map((v, i) => v + dir[i] * s.range * 1.3);
-      if (hit && (hit.box.tag === 'bot' || hit.box.tag === 'dummy') && this.hooks.targets().some((x) => x.ref === hit.box.ref)) {
-        this.hooks.hit(hit.box.ref, s.dmg, hit.point, dir, s.name);
+      const tgt = this.hooks.targets(side).find((x) => x.ref === g.tgRef);
+      if (hit && (hit.box.tag === 'bot' || hit.box.tag === 'dummy') && this.hooks.targets(side).some((x) => x.ref === hit.box.ref)) {
+        this.hooks.hit(hit.box.ref, s.dmg, hit.point, dir, s.name, side);
+      } else if (tgt && tgt.ref.isPlayer && (!hit || hit.t > dist(muzzle, tgt.chest) - 0.3) && segDist(muzzle, dir.map((v) => v * dist(muzzle, tgt.chest)), tgt.chest) < 0.5) {
+        // the player isn't a world box: a shot that passes through them hits them
+        this.hooks.hit(tgt.ref, s.dmg, tgt.chest, dir, s.name, side);
       } else if (hit && hit.box.tag !== 'bot') this.effects.impact(hit.point, hit.normal, hit.box.color || [0.8, 0.8, 0.8]);
       this.shotFx(g, muzzle, end, s);
-      this.hooks.send?.({ t: 'tsh', gid: g.gid, to: end.map((v) => +v.toFixed(2)) });
+      if (side === true) this.hooks.send?.({ t: 'tsh', gid: g.gid, to: end.map((v) => +v.toFixed(2)) });
     }
   }
   headDir(g) { const cp = Math.cos(g.pitch); return [-Math.sin(g.yaw) * cp, Math.sin(g.pitch), -Math.cos(g.yaw) * cp]; }
@@ -421,13 +437,14 @@ export class Heavy {
   // proximity mines: the owner's game sets them off when an enemy steps close
   updateMines() {
     for (const g of [...this.gadgets.list]) {
-      if (g.k !== 'mine' || g.owner !== this.hooks.me() || g.t < 1) continue;
+      const side = g.k === 'mine' && this.sideOf(g);
+      if (!side || g.t < 1) continue;
       const s = HEAVY_STATS.mines, at = [g.p[0], g.p[1] + 0.2, g.p[2]];
-      if (!this.hooks.targets().some((x) => dist(x.pos, at) < s.trig || dist(x.chest, at) < s.trig)) continue;
+      if (!this.hooks.targets(side).some((x) => dist(x.pos, at) < s.trig || dist(x.chest, at) < s.trig)) continue;
       this.gadgets.remove(g, false);
-      this.hooks.send?.({ t: 'gdel', gid: g.gid });
+      if (side === true) this.hooks.send?.({ t: 'gdel', gid: g.gid });
       this.sounds.lock?.();
-      this.boom(at, s.r, s.dmg, s.name, true, 'frag');
+      this.boom(at, s.r, s.dmg, s.name, side, 'frag');
     }
   }
 
