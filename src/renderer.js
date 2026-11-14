@@ -356,6 +356,164 @@ void main() {
       float px = pane(c, vec2(0.18, 0.18));
       float wave = 0.65 + 0.35 * sin(p.y * 0.8 + p.x * 0.15 + uCamPos.x * 0.0);
       base = base * mix(0.35, 1.0, px) * wave;
+    } else if (k >= 40) {
+      // ---- animated weapon skins. The part's colour carries live values instead of a colour:
+      // r = energy (heat from firing), g = the part's original brightness (dark parts get the dark variant),
+      // b = streak (kills this life, 0..1). Patterns live in the part's own space so they don't swim as the gun moves.
+      float E = uColor.r, T = uColor.g, S = uColor.b;
+      float dk = 1.0 - smoothstep(0.1, 0.2, T);
+      vec3 lp = vLocal * uScale + vec3(hash(uScale * 37.0), hash(uScale * 53.0), hash(uScale * 71.0)) * 0.3;
+      vec3 ln = abs(vLocalN);
+      vec2 q = ln.x > 0.5 ? lp.zy : (ln.y > 0.5 ? lp.xz : lp.xy);
+      float t = uTime;
+      vec3 V0 = normalize(uCamPos - vWorld);
+      float fres = pow(1.0 - max(dot(n, V0), 0.0), 2.0);
+      if (k == 40) {
+        // DIGITAL: 8 mm pixels in three blues
+        vec2 c = floor(q * 125.0);
+        float h = hash(vec3(floor(c / 3.0), 1.0)) * 0.6 + hash(vec3(c, 2.0)) * 0.4;
+        base = h < 0.35 ? vec3(0.08, 0.1, 0.14) : h < 0.65 ? vec3(0.22, 0.32, 0.46) : vec3(0.55, 0.62, 0.7);
+        base *= mix(1.0, 0.45, dk);
+        tRough = 0.6; tMetal = 0.1;
+      } else if (k == 41) {
+        // TIGER: bold wavy stripes, orange on black
+        float w = q.x * 34.0 + q.y * 9.0 + noise(lp * 26.0) * 5.0;
+        float st = smoothstep(0.55, 0.62, sin(w) * 0.5 + 0.5 + noise(lp * 60.0) * 0.12);
+        base = mix(vec3(1.0, 0.45, 0.06), vec3(0.03, 0.025, 0.02), st);
+        base *= mix(1.0, 0.4, dk);
+        tRough = 0.45; tMetal = 0.15;
+      } else if (k == 42) {
+        // CARBON FIBRE: a tight 2x2 twill weave with a sheen that moves as you turn it
+        vec2 c = q * 260.0;
+        float cell = mod(floor(c.x) + floor(c.y), 2.0);
+        float f = cell > 0.5 ? fract(c.x) : fract(c.y);
+        float thread = sin(f * 3.14159);
+        base = vec3(0.05, 0.05, 0.06) + vec3(0.1, 0.105, 0.12) * thread * (0.4 + 0.9 * fres);
+        tRough = 0.22; tMetal = 0.35;
+      } else if (k == 43) {
+        // DAMASCUS: folded steel, wavy layers of bright and dark
+        float w = q.x * 70.0 + noise(lp * 18.0) * 9.0 + noise(lp * 55.0) * 2.0 + q.y * 20.0;
+        float l = sin(w) * 0.5 + 0.5;
+        base = mix(vec3(0.2, 0.21, 0.23), vec3(0.78, 0.8, 0.83), smoothstep(0.35, 0.65, l));
+        base *= mix(1.0, 0.55, dk);
+        tRough = 0.28; tMetal = 1.0;
+      } else if (k == 44 || k == 48) {
+        // cells shared by MOLTEN and FROSTBITE: crack lines between cells
+        vec2 p = q * (k == 44 ? 22.0 : 30.0) + vec2(0.0, k == 44 ? t * 0.06 : 0.0);
+        vec2 i = floor(p), f = fract(p);
+        float d1 = 8.0, d2 = 8.0, id = 0.0;
+        for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+          vec2 g = vec2(float(x), float(y));
+          vec2 o = vec2(hash(vec3(i + g, 1.0)), hash(vec3(i + g, 2.0)));
+          if (k == 44) o = 0.5 + 0.4 * sin(t * 0.7 + 6.2831 * o);
+          vec2 r = g + o - f;
+          float d = dot(r, r);
+          if (d < d1) { d2 = d1; d1 = d; id = hash(vec3(i + g, 3.0)); } else if (d < d2) d2 = d;
+        }
+        float edge = sqrt(d2) - sqrt(d1);
+        float crack = 1.0 - smoothstep(0.02, 0.12 + 0.1 * E, edge);
+        if (k == 44) {
+          // MOLTEN: black basalt, glowing cracks; firing heats it until the whole gun goes red-hot
+          float pulse = 0.75 + 0.25 * sin(t * 3.0 + id * 6.0);
+          vec3 rock = vec3(0.06, 0.045, 0.04) * (0.7 + 0.6 * id);
+          vec3 hot = mix(vec3(1.0, 0.25, 0.02), vec3(1.0, 0.85, 0.3), E);
+          base = mix(rock, hot, crack);
+          base = mix(base, vec3(0.6, 0.08, 0.02), E * 0.45 * (1.0 - crack));
+          tGlow = crack * pulse * (0.45 + 1.3 * E) + E * 0.25;
+          tRough = 0.85; tMetal = 0.0;
+        } else {
+          // FROSTBITE: pale ice crystals; keep firing and a blue glow cracks through from the inside
+          vec3 ice = mix(vec3(0.62, 0.8, 0.95), vec3(0.92, 0.97, 1.0), id);
+          base = mix(ice, vec3(0.3, 0.55, 0.85), crack * 0.7);
+          base *= mix(1.0, 0.55, dk);
+          float spark = step(0.985, hash(vec3(floor(q * 300.0), floor(t * 4.0))));
+          tGlow = spark * 1.5 + crack * E * 1.2;
+          if (E > 0.01) base = mix(base, vec3(0.3, 0.8, 1.0), crack * E);
+          tRough = 0.12; tMetal = 0.3;
+        }
+      } else if (k == 45) {
+        // DARK MATTER: swirling purple space with twinkling stars; it churns faster while you shoot
+        vec3 w = lp * 9.0;
+        float sp = 0.15 + E * 0.6;
+        float a = noise(w + vec3(t * sp, 0.0, t * sp * 0.6));
+        float b = noise(w * 2.1 + vec3(a * 3.0, t * sp * 1.3, 0.0));
+        vec3 deep = vec3(0.04, 0.0, 0.09);
+        vec3 neb = mix(vec3(0.5, 0.05, 0.9), vec3(0.1, 0.45, 1.0), b);
+        float m = smoothstep(0.45, 0.85, b * a * 1.8);
+        base = mix(deep, neb, m);
+        vec2 sc = floor(q * 220.0);
+        float star = step(0.992, hash(vec3(sc, 5.0))) * (0.5 + 0.5 * sin(t * 4.0 + hash(vec3(sc, 6.0)) * 40.0));
+        base = mix(base, vec3(1.0), star);
+        tGlow = m * (0.35 + E * 1.0) + star * 1.5 + fres * 0.3;
+        tRough = 0.2; tMetal = 0.4;
+      } else if (k == 46) {
+        // HOLOGRAPHIC: an oil-slick rainbow that slides as you look around (and races when firing)
+        float h = fract(fres * 1.6 + lp.z * 3.0 + lp.y * 2.0 + t * (0.05 + E * 0.6));
+        vec3 rb = 0.5 + 0.5 * cos(6.2831 * (h + vec3(0.0, 0.33, 0.67)));
+        base = mix(vec3(0.62), rb, 0.62);
+        base *= mix(0.9, 0.45, dk);
+        tGlow = 0.12 + E * 0.4;
+        tRough = 0.12; tMetal = 1.0;
+      } else if (k == 47) {
+        // CIRCUIT: a black board with traces; light pulses run along them, faster as you fire, gold when you're on a streak
+        vec2 c = q * 70.0;
+        vec2 cf = fract(c), ci = floor(c);
+        float hz = step(0.5, hash(vec3(ci, 8.0)));
+        float trace = hz > 0.5 ? 1.0 - smoothstep(0.06, 0.12, abs(cf.y - 0.5)) : 1.0 - smoothstep(0.06, 0.12, abs(cf.x - 0.5));
+        float pad = 1.0 - smoothstep(0.1, 0.18, length(cf - 0.5));
+        float along = hz > 0.5 ? c.x : c.y;
+        float pulse = smoothstep(0.85, 1.0, fract(along * 0.12 - t * (0.4 + 2.5 * E) + hash(vec3(ci, 9.0))));
+        vec3 lit = mix(vec3(0.1, 0.95, 0.85), vec3(1.0, 0.75, 0.15), S);
+        base = mix(vec3(0.03, 0.06, 0.05), vec3(0.12, 0.2, 0.17), max(trace, pad));
+        base = mix(base, lit, pulse * max(trace, pad));
+        tGlow = pulse * max(trace, pad) * 1.6 + max(trace, pad) * 0.08;
+        tRough = 0.4; tMetal = 0.3;
+      } else if (k == 49) {
+        // STORM: dark slate with lightning crawling over it; it flashes when you fire
+        vec3 w = lp * 14.0;
+        float rid = 1.0 - abs(noise(w + vec3(0.0, 0.0, floor(t * 6.0) * 1.7)) * 2.0 - 1.0);
+        float bolt = smoothstep(0.93 - E * 0.08, 0.99, rid);
+        float flick = step(0.35 - E * 0.3, hash(vec3(floor(t * 9.0), 1.0, 2.0)));
+        base = mix(vec3(0.08, 0.09, 0.13), vec3(0.75, 0.85, 1.0), bolt * flick);
+        base *= mix(1.0, 0.6, dk);
+        tGlow = bolt * flick * (1.2 + E * 1.5);
+        tRough = 0.5; tMetal = 0.2;
+      } else if (k == 50) {
+        // BLOODLINE: matte black; red veins creep further over the gun with every kill this life, beating like a heart
+        float v = noise(lp * 20.0) * 0.6 + noise(lp * 55.0) * 0.4;
+        float reach = 0.12 + S * 0.7;
+        float vein = 1.0 - smoothstep(0.0, 0.012, abs(v - 0.5) - (0.006 + 0.012 * S));
+        float grow = step(hash(floor(lp * 12.0) + 4.0), reach);
+        float beat = pow(0.5 + 0.5 * sin(t * (4.0 + S * 4.0)), 6.0);
+        base = mix(vec3(0.04, 0.035, 0.035), vec3(0.85, 0.04, 0.03), vein * grow);
+        if (S > 0.99) base = mix(base, vec3(1.0, 0.62, 0.15), vein * 0.25);
+        tGlow = vein * grow * (0.3 + beat * 1.2 + E * 0.6);
+        tRough = 0.75; tMetal = 0.1;
+      } else if (k == 51) {
+        // DIAMOND: faceted crystal that throws sparkles as it moves
+        vec2 p = q * 45.0;
+        vec2 i = floor(p), f = fract(p);
+        float d1 = 8.0, id = 0.0;
+        for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+          vec2 g = vec2(float(x), float(y));
+          vec2 r = g + vec2(hash(vec3(i + g, 1.0)), hash(vec3(i + g, 2.0))) - f;
+          float d = dot(r, r);
+          if (d < d1) { d1 = d; id = hash(vec3(i + g, 3.0)); }
+        }
+        float face = fract(id * 7.0 + dot(n, V0) * 3.0 + t * 0.1);
+        base = mix(vec3(0.75, 0.85, 0.95), vec3(1.0), smoothstep(0.6, 1.0, face));
+        base = mix(base, vec3(0.6, 0.8, 1.0), 0.2 * sin(id * 20.0 + t));
+        float spark = step(0.97, face) * 2.0;
+        tGlow = spark + 0.08;
+        tRough = 0.05; tMetal = 0.85;
+      } else {
+        // AURUM: polished gold with a light sweeping down the gun; firing makes it glow
+        float sweep = smoothstep(0.92, 1.0, sin(lp.z * 8.0 + lp.y * 4.0 - t * 2.5) * 0.5 + 0.5);
+        base = mix(vec3(1.0, 0.76, 0.25), vec3(1.0, 0.95, 0.75), sweep);
+        base *= mix(1.0, 0.55, dk);
+        tGlow = sweep * 0.6 + E * 0.5;
+        tRough = 0.18; tMetal = 1.0;
+      }
     }
   } else if (uGrid > 0.5) {
     vec3 an = abs(n);

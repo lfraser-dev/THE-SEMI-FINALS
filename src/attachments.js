@@ -65,18 +65,35 @@ const MOUNT = {
   hc50: { railY: 0.068, railZ: -0.01, sight: ['front', 'frontDot', 'rearL', 'rearR'], muzzle: [], stock: [], barrelFront: -0.157, laser: [0, -0.035, -0.085] },
   rk74: { railY: 0.063, railZ: 0.04, rail: true, sight: ['rearSight', 'frontPost'], muzzle: ['muzzle'], stock: ['stock'], shiftAlso: ['frontBase', 'frontPost', 'bipodBase', 'bipodLegL', 'bipodLegR'],
     under: { y: -0.025, z: -0.25, hide: ['bipodBase'] }, laser: [0.036, 0.0, -0.27] },
+  // build 0.52
+  kr45: { railY: 0.062, railZ: -0.02, sight: ['sightL', 'sightR', 'sightTop', 'dot'], muzzle: ['muzzle'], stock: ['stock', 'stockpad'],
+    under: { y: -0.075, z: -0.17 }, laser: [0.032, 0.0, -0.15] },
+  pdx: { railY: 0.092, railZ: -0.02, sight: ['sightL', 'sightR', 'sightTop', 'dot'], muzzle: ['muzzle'], stock: [],
+    under: { y: -0.11, z: -0.19, hide: ['frontLip', 'frontHole'] }, laser: [0.034, -0.02, -0.18] },
+  rg1: { railY: 0.045, railZ: -0.02, sight: ['scope', 'scopeF', 'ring1', 'ring2', 'lens'], muzzle: ['brake'], stock: ['stock', 'battery'],
+    under: { y: -0.08, z: -0.3, hide: ['fgrip'] }, laser: [0.05, 0.0, -0.26] },
+  bruiser: { railY: 0.092, railZ: 0.09, sight: ['sightL', 'sightR', 'sightTop', 'dot'], muzzle: ['muzzle'], stock: ['stock'],
+    under: { y: -0.03, z: -0.32, hide: ['fgrip', 'fgripClamp'] }, laser: [0.055, 0.0, -0.36] },
+  cr56: { railY: 0.066, railZ: 0.01, sight: ['sightL', 'sightR', 'sightTop', 'dot'], muzzle: ['muzzle'], stock: ['stock'],
+    under: { y: -0.025, z: -0.24 }, laser: [0.04, -0.004, -0.27] },
+  slug: { railY: 0.076, railZ: 0.0, sight: ['sightL', 'sightR', 'sightTop', 'dot'], muzzle: ['muzzle'], stock: ['stock'],
+    under: { y: -0.032, z: -0.3 }, laser: [0.042, 0.0, -0.3] },
+  bx9: { railY: 0.05, railZ: 0.02, sight: ['front', 'rearL', 'rearR'], muzzle: [], stock: [], barrelFront: -0.145,
+    laser: [0, -0.034, -0.075] },
 };
 // slots a gun simply doesn't have
-const NO_SLOT = { gl: ['optic', 'muzzle', 'barrel', 'underbarrel', 'side', 'magazine', 'stock', 'ammo'], tg: ['optic', 'muzzle', 'barrel', 'underbarrel', 'side', 'magazine', 'stock', 'ammo'], bullpup: ['stock'], double: ['magazine', 'barrel', 'muzzle'], lever: ['magazine'], minigun: ['barrel', 'muzzle', 'underbarrel', 'stock'] };
+const NO_SLOT = { pdx: ['stock'], bx9: ['stock'], gl: ['optic', 'muzzle', 'barrel', 'underbarrel', 'side', 'magazine', 'stock', 'ammo'], tg: ['optic', 'muzzle', 'barrel', 'underbarrel', 'side', 'magazine', 'stock', 'ammo'], bullpup: ['stock'], double: ['magazine', 'barrel', 'muzzle'], lever: ['magazine'], minigun: ['barrel', 'muzzle', 'underbarrel', 'stock'] };
 
 // Base effective range (m) before damage falls off
 export const RANGE = { ar: 35, smg: 16, shotgun: 9, sniper: 120, lmg: 40, pistol: 20, burst: 45, dmr: 65, mp: 13, revolver: 30, autoshotgun: 8,
-  kv: 14, bullpup: 30, lever: 70, minigun: 26, double: 10, hx17: 50, zu9: 13, amr: 140, rt7: 9, hc50: 28, rk74: 38 };
+  kv: 14, bullpup: 30, lever: 70, minigun: 26, double: 10, hx17: 50, zu9: 13, amr: 140, rt7: 9, hc50: 28, rk74: 38,
+  kr45: 14, pdx: 18, rg1: 150, bruiser: 45, cr56: 32, slug: 30, bx9: 14 };
 
 // variants take the attachments (and mounting points) of the gun they're built on
 export const STYLE = { burst: 'ar', dmr: 'ar', mp: 'pistol', revolver: 'pistol', autoshotgun: 'shotgun',
   kv: 'smg', bullpup: 'ar', lever: 'sniper', minigun: 'lmg', double: 'shotgun',
-  gl: 'ar', tg: 'ar', hx17: 'ar', zu9: 'smg', amr: 'sniper', rt7: 'shotgun', hc50: 'pistol', rk74: 'lmg' };
+  gl: 'ar', tg: 'ar', hx17: 'ar', zu9: 'smg', amr: 'sniper', rt7: 'shotgun', hc50: 'pistol', rk74: 'lmg',
+  kr45: 'smg', pdx: 'smg', rg1: 'sniper', bruiser: 'lmg', cr56: 'ar', slug: 'shotgun', bx9: 'pistol' };
 const styleOf = (id) => STYLE[id] || id;
 
 const P = (name, c, s, col, extra = {}) => ({ name, c, s, col, ...extra });

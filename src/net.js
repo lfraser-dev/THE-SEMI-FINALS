@@ -339,6 +339,16 @@ class LocalTransport {
 }
 
 // ---------------------------------------------------------------- someone else, as seen on my screen
+// a body killed mid-air (or on a step) drops onto whatever's underneath instead of hanging there or clipping the floor
+export function settleBody(world, b, dt) {
+  if (b.settled) return;
+  b.fallV = (b.fallV || 0) + 22 * dt;
+  const hit = world.raycast([b.pos[0], b.pos[1] + 0.6, b.pos[2]], [0, -1, 0], 40, false, (box) => box === b.body || box === b.headBox || box.tag === 'bot');
+  const floor = hit ? b.pos[1] + 0.6 - hit.t : b.pos[1] - 40;
+  if (b.pos[1] < floor) { b.pos[1] = floor; b.settled = true; return; }      // sunk below the floor: back up on top
+  b.pos[1] = Math.max(floor, b.pos[1] - b.fallV * dt);
+  if (b.pos[1] <= floor + 1e-3) b.settled = true;
+}
 class Remote {
   constructor(world, info, team) {
     Object.assign(this, { world, id: info.id, name: info.name, cls: info.cls, team, isPlayer: false, isRemote: true });
@@ -373,6 +383,7 @@ class Remote {
     if (!b.alive) {
       if (b.dying >= 0) {
         b.dying += dt; b.flash -= dt;
+        settleBody(this.world, b, dt);
         if (b.dying > 9.6) b.downed = false;          // about to respawn: the body goes
         if (b.dying > 0.75 && !b.downed && !b.shattered) { b.shattered = true; b.remove(); b.removed = true; g.onShatter?.(b); }
       }

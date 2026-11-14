@@ -28,7 +28,7 @@ export const HEAVIES = {
   turret_flame: { name: 'FLAME TURRET', short: 'FLAME TURRET', desc: 'Short range (12 m) but it hoses the area in fire and sets everyone it touches alight. 350 HP, lasts 25 s.', cd: '26 S' },
   turret_heavy: { name: 'CANNON TURRET', short: 'CANNON', desc: 'Slow, heavy rounds out to 45 m (45 a shot). Tougher: 400 HP, lasts 25 s.', cd: '28 S' },
 };
-export const SIDEARMS = ['pistol', 'mp', 'revolver', 'hc50'];
+export const SIDEARMS = ['pistol', 'mp', 'bx9', 'revolver', 'hc50'];
 // Throwables (Z): everyone picks one; two charges that recharge
 export const THROWABLES = {
   frag: { name: 'FRAG GRENADE', short: 'FRAG', desc: 'Cook-free frag: bounces, then goes off 1.7 s after the throw. 90 damage in a 4.5 m blast.', cd: '2 × 14 S' },
@@ -55,7 +55,7 @@ export const CLASSES = {
     name: 'LIGHT', tag: 'FAST · FRAGILE · SLIPPERY',
     desc: 'The quickest contestant on the floor. Hit hard, get out, never be where they expect.',
     hp: 150, speed: 1.12, build: 0.88,
-    weapons: ['smg', 'kv', 'zu9', 'sniper', 'lever'], sidearms: ['pistol', 'mp', 'revolver', 'hc50'],
+    weapons: ['smg', 'kv', 'zu9', 'kr45', 'pdx', 'sniper', 'rg1', 'lever'], sidearms: ['pistol', 'mp', 'bx9', 'revolver', 'hc50'],
     abilities: ['grapple', 'tether', 'dash', 'cloak'], heavies: ['dronepod', 'swarmpod', 'mines'],
     color: [0.15, 0.55, 1],
     skin: { skin: [0.78, 0.57, 0.42], top: [0.13, 0.14, 0.17], zip: true, logo: [0.25, 0.65, 1], bottom: [0.07, 0.07, 0.085], shoes: [0.92, 0.92, 0.94],
@@ -65,7 +65,7 @@ export const CLASSES = {
     name: 'MEDIUM', tag: 'BALANCED · VERSATILE',
     desc: 'Good at everything, best at staying in the fight. The backbone of any team.',
     hp: 250, speed: 1, build: 1,
-    weapons: ['ar', 'burst', 'hx17', 'bullpup', 'dmr', 'shotgun', 'rt7', 'double'], sidearms: ['pistol', 'revolver', 'hc50'],
+    weapons: ['ar', 'burst', 'hx17', 'cr56', 'bullpup', 'dmr', 'pdx', 'shotgun', 'rt7', 'double', 'slug'], sidearms: ['pistol', 'bx9', 'revolver', 'hc50'],
     abilities: ['pad', 'launchpad', 'heal'], heavies: ['gl_frag', 'gl_sticky', 'gl_fire', 'gl_cluster'],
     color: [0.92, 0.1, 0.08],
     skin: { skin: [0.86, 0.66, 0.54], top: [0.12, 0.14, 0.21], zip: true, logo: [1, 0.72, 0.12], bottom: [0.06, 0.06, 0.075], shoes: [0.07, 0.07, 0.08],
@@ -75,7 +75,7 @@ export const CLASSES = {
     name: 'HEAVY', tag: 'TOUGH · SLOW · LOUD',
     desc: 'A walking wall. Soaks up damage and turns cover into rubble.',
     hp: 350, speed: 0.86, build: 1.28,
-    weapons: ['lmg', 'rk74', 'minigun', 'amr', 'autoshotgun', 'shotgun'], sidearms: ['revolver', 'hc50', 'pistol'],
+    weapons: ['lmg', 'rk74', 'bruiser', 'minigun', 'amr', 'autoshotgun', 'shotgun', 'slug'], sidearms: ['revolver', 'hc50', 'pistol', 'bx9'],
     abilities: ['barricade', 'lowwall', 'slam'], heavies: ['turret_mg', 'turret_heavy', 'turret_flame'],
     color: [1, 0.68, 0.08],
     skin: { skin: [0.93, 0.76, 0.64], top: [0.1, 0.1, 0.11], vest: [0.95, 0.66, 0.1], bottom: [0.11, 0.11, 0.12], shoes: [0.08, 0.08, 0.09],

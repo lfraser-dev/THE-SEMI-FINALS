@@ -111,7 +111,8 @@
   .ab::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--p) * 100%); background: rgba(0,0,0,.55); }
   .ab b { font-size: 13px; font-weight: 800; font-style: italic; letter-spacing: .1em; opacity: .45; z-index: 1; }
   .ab kbd { font: 800 13px var(--font); background: rgba(255,255,255,.18); padding: 0 6px; margin-bottom: 3px; z-index: 1; }
-  .ab .cd { position: absolute; inset: 0; display: grid; place-items: center; font-size: 22px; font-weight: 800; font-style: italic; z-index: 2; }
+  .ab .cd { position: absolute; left: 0; right: 0; bottom: 4px; height: 26px; display: grid; place-items: center; font-size: 19px; font-weight: 800; font-style: italic; z-index: 2; }
+  .ab.cooling b { visibility: hidden; }   /* the countdown takes the name's place instead of sitting on top of it */
   .ab.ready b { opacity: 1; }
   .ab.ready { box-shadow: inset 0 -3px 0 var(--red); }
   .ab.active { background: var(--red); }
@@ -615,6 +616,11 @@
   #gate .g-msg { height: 18px; margin-top: 12px; font-size: 12px; font-weight: 700; letter-spacing: .15em; color: #ff5a3a; }
   #gate.shake .g-card { animation: gshake .35s; }
   @keyframes gshake { 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+.livetag { position: absolute; top: 6px; left: 6px; font-size: 9px; font-weight: 800; letter-spacing: .12em; padding: 2px 5px; background: rgba(0,0,0,.6); color: #8fe8ff; border: 1px solid rgba(143,232,255,.5); pointer-events: none; }
+.livetag.react { color: #ffb21a; border-color: rgba(255,178,26,.6); animation: livepulse 1.6s ease-in-out infinite; }
+@keyframes livepulse { 50% { box-shadow: 0 0 10px rgba(255,178,26,.6); } }
+p.fx { color: #cfd3da; font-size: 12px; line-height: 1.4; margin: 6px 0 10px; }
+.me-cred { margin: 10px 0 4px; color: #ffb21a; font-weight: 800; letter-spacing: .14em; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -729,7 +735,7 @@
 
   <section class="mm-page mm-home" data-page="home">
     <div class="mm-col mm-home-left">
-      <div class="mm-kicker">SEASON 1 · BUILD 0.51</div>
+      <div class="mm-kicker">SEASON 1 · BUILD 0.52</div>
       <button class="mm-big" id="mm-play" type="button">
         <span class="mm-big-t">PLAY</span>
         <span class="mm-big-s" id="mm-play-sub">SEMI-FINALS · FIND A MATCH</span>
@@ -840,40 +846,40 @@
 <script type="importmap">
 {
  "imports": {
-  "./src/attachments.js": "./src/attachments.js?v=0.51-1794501107",
-  "./src/audio.js": "./src/audio.js?v=0.51-1794501107",
-  "./src/batch.js": "./src/batch.js?v=0.51-1794501107",
-  "./src/bench.js": "./src/bench.js?v=0.51-1794501107",
-  "./src/bots.js": "./src/bots.js?v=0.51-1794501107",
-  "./src/classes.js": "./src/classes.js?v=0.51-1794501107",
-  "./src/contestant.js": "./src/contestant.js?v=0.51-1794501107",
-  "./src/cosmetics.js": "./src/cosmetics.js?v=0.51-1794501107",
-  "./src/course.js": "./src/course.js?v=0.51-1794501107",
-  "./src/effects.js": "./src/effects.js?v=0.51-1794501107",
-  "./src/elevator.js": "./src/elevator.js?v=0.51-1794501107",
-  "./src/gadgets.js": "./src/gadgets.js?v=0.51-1794501107",
-  "./src/heavy.js": "./src/heavy.js?v=0.51-1794501107",
-  "./src/input.js": "./src/input.js?v=0.51-1794501107",
-  "./src/main.js": "./src/main.js?v=0.51-1794501107",
-  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.51-1794501107",
-  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.51-1794501107",
-  "./src/matchmaking.js": "./src/matchmaking.js?v=0.51-1794501107",
-  "./src/math.js": "./src/math.js?v=0.51-1794501107",
-  "./src/nav.js": "./src/nav.js?v=0.51-1794501107",
-  "./src/net.js": "./src/net.js?v=0.51-1794501107",
-  "./src/player.js": "./src/player.js?v=0.51-1794501107",
-  "./src/props.js": "./src/props.js?v=0.51-1794501107",
-  "./src/renderer.js": "./src/renderer.js?v=0.51-1794501107",
-  "./src/rig.js": "./src/rig.js?v=0.51-1794501107",
-  "./src/takedown.js": "./src/takedown.js?v=0.51-1794501107",
-  "./src/tdm.js": "./src/tdm.js?v=0.51-1794501107",
-  "./src/thumbs.js": "./src/thumbs.js?v=0.51-1794501107",
-  "./src/weapon.js": "./src/weapon.js?v=0.51-1794501107",
-  "./src/weapons.js": "./src/weapons.js?v=0.51-1794501107",
-  "./src/world.js": "./src/world.js?v=0.51-1794501107"
+  "./src/attachments.js": "./src/attachments.js?v=0.52-1794660601",
+  "./src/audio.js": "./src/audio.js?v=0.52-1794660601",
+  "./src/batch.js": "./src/batch.js?v=0.52-1794660601",
+  "./src/bench.js": "./src/bench.js?v=0.52-1794660601",
+  "./src/bots.js": "./src/bots.js?v=0.52-1794660601",
+  "./src/classes.js": "./src/classes.js?v=0.52-1794660601",
+  "./src/contestant.js": "./src/contestant.js?v=0.52-1794660601",
+  "./src/cosmetics.js": "./src/cosmetics.js?v=0.52-1794660601",
+  "./src/course.js": "./src/course.js?v=0.52-1794660601",
+  "./src/effects.js": "./src/effects.js?v=0.52-1794660601",
+  "./src/elevator.js": "./src/elevator.js?v=0.52-1794660601",
+  "./src/gadgets.js": "./src/gadgets.js?v=0.52-1794660601",
+  "./src/heavy.js": "./src/heavy.js?v=0.52-1794660601",
+  "./src/input.js": "./src/input.js?v=0.52-1794660601",
+  "./src/main.js": "./src/main.js?v=0.52-1794660601",
+  "./src/maps/arenas.js": "./src/maps/arenas.js?v=0.52-1794660601",
+  "./src/maps/testRange.js": "./src/maps/testRange.js?v=0.52-1794660601",
+  "./src/matchmaking.js": "./src/matchmaking.js?v=0.52-1794660601",
+  "./src/math.js": "./src/math.js?v=0.52-1794660601",
+  "./src/nav.js": "./src/nav.js?v=0.52-1794660601",
+  "./src/net.js": "./src/net.js?v=0.52-1794660601",
+  "./src/player.js": "./src/player.js?v=0.52-1794660601",
+  "./src/props.js": "./src/props.js?v=0.52-1794660601",
+  "./src/renderer.js": "./src/renderer.js?v=0.52-1794660601",
+  "./src/rig.js": "./src/rig.js?v=0.52-1794660601",
+  "./src/takedown.js": "./src/takedown.js?v=0.52-1794660601",
+  "./src/tdm.js": "./src/tdm.js?v=0.52-1794660601",
+  "./src/thumbs.js": "./src/thumbs.js?v=0.52-1794660601",
+  "./src/weapon.js": "./src/weapon.js?v=0.52-1794660601",
+  "./src/weapons.js": "./src/weapons.js?v=0.52-1794660601",
+  "./src/world.js": "./src/world.js?v=0.52-1794660601"
  }
 }
 </script>
-<script type="module" src="src/main.js?v=0.51-1794501107"></script>
+<script type="module" src="src/main.js?v=0.52-1794660601"></script>
 </body>
 </html>

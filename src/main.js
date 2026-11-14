@@ -24,7 +24,7 @@ import { BotManager, Bot, teamPalette } from './bots.js';
 import { takedownPose, takedownProps, REACH } from './takedown.js';
 import { Matchmaking } from './matchmaking.js';
 import { Deathmatch } from './tdm.js';
-import { Lobby } from './net.js';
+import { Lobby, settleBody } from './net.js';
 import { StaticBatches } from './batch.js';
 import { Gadgets, ropeParts, hookParts, BARRICADE, BLOCKADE, TETHER_COL } from './gadgets.js';
 import { Heavy, HEAVY_STATS, TETHER } from './heavy.js';
@@ -109,7 +109,10 @@ function agentTargets(agent) {
   return out;
 }
 function botGearHit(agent, ref, dmg, point, dir) {
-  if (ref.isPlayer) { player.lastHitBy = agent; damagePlayer(dmg, agent.pos || point, agent.name); return; }
+  if (ref.isPlayer) { player.lastHitBy = online.active && tdm === online ? agent.id : agent; damagePlayer(dmg, agent.pos || point, agent.name); return; }
+  // online: one of my (host) bots' gear hit another player: their game takes the damage
+  const rm = ref.remote || (ref.isRemote ? ref : null);
+  if (rm && online.active && tdm === online) { online.co?.netHit?.(rm, dmg, agent, agent.pos || point); return; }
   if (ref.agent) ref.agent.lastHitBy = agent;
   ref.damage(dmg, dir);
 }
@@ -140,7 +143,22 @@ function chunkHit(box, dir, dmg, send = true) {
   const w = box.ref, [r, k] = box.cell;
   const n = w.hp ? w.hitCell(r, k, dmg, dir) : w.hit(box, dir);
   if (send && w.hp && online.active) chunkOut.push([w.idx, r, k, Math.round(dmg)]);
+  if (n) navDirty.add(w);
   return n;
+}
+// walls that lost chunks: the bots' map gets the new gaps (a few times a second at most)
+const navDirty = new Set();
+let navT = 0;
+function updateNavHoles(dt) {
+  if ((navT -= dt) > 0 || !navDirty.size) return;
+  navT = 0.4;
+  const nav = stadium?.navObj;
+  for (const w of navDirty) {
+    if (!nav?.ready) break;
+    const o = w.origin, ex = w.axis === 0 ? [w.cols * w.chunk, w.thick] : [w.thick, w.cols * w.chunk];
+    nav.reopen([o[0], o[1], o[2]], [o[0] + ex[0], o[1] + w.rows * w.ch, o[2] + ex[1]]);
+  }
+  navDirty.clear();
 }
 function blastWalls(pos, r, dmg) {
   let n = 0;
@@ -148,7 +166,9 @@ function blastWalls(pos, r, dmg) {
     if (!w.hp) continue;
     const o = w.origin, ex = w.axis === 0 ? [w.cols * w.chunk, w.thick] : [w.thick, w.cols * w.chunk];
     if (pos[0] < o[0] - r || pos[0] > o[0] + ex[0] + r || pos[2] < o[2] - r || pos[2] > o[2] + ex[1] + r) continue;
-    n += w.blast(pos, r, dmg);
+    const k = w.blast(pos, r, dmg);
+    if (k) navDirty.add(w);
+    n += k;
   }
   if (n) sounds.crumble();
   return n;
@@ -262,6 +282,8 @@ function resetRange() {
   cutscene = null; pressSeq = null;
   dummies.forEach((d) => d.reset());
   walls.forEach((w) => w.reset());
+  for (const a of ARENAS) a.navObj?.reset();
+  navDirty.clear();
   effects.clear();
   Object.assign(stats, { shots: 0, hits: 0, kills: 0, chunks: 0 });
   player.respawn();
@@ -311,6 +333,7 @@ const viewDirToWorld = (v) => [0, 1, 2].map((k) => camRight[k] * v[0] + camUp[k]
 // ---------- shooting ----------
 function fire(w) {
   const d = w.def;
+  skinShot(d);
   updateCamera();
   const spread = w.spread(player);
   const hipT = 1 - w.adsT;
@@ -554,7 +577,22 @@ let deathT = 0, killer = '', slowmo = 0, cutscene = null, pressSeq = null;
 const dmgDirs = [];
 const kills = [];
 
+// live gun skins react to play: heat builds as you fire and cools off; kills this life feed the streak
+let skinHeat = 0, skinStreak = 0;
+// credits for playing matches: 25 a kill, 50 a takedown, 300 for advancing (100 otherwise)
+let matchEarned = 0;
+function earn(n) { cosmetics.credits += n; matchEarned += n; saveCosmetics(cosmetics); }
+function skinShot(d) { skinHeat = Math.min(1, skinHeat + Math.min(0.35, 0.025 + 8 / (d.rpm || 600))); }
+function updateSkinLive(dt) {
+  skinHeat = Math.max(0, skinHeat - dt * (skinHeat > 0.6 ? 0.28 : 0.4));
+  const S = Math.min(1, skinStreak / 5);
+  for (const w of slots) {
+    if (!w?.def?.liveSkin) continue;
+    for (const p of w.def.parts) if (p.tex >= 40) { p.col[0] = skinHeat; p.col[2] = S; }
+  }
+}
 function killFeed(a, weaponName, b, head) {
+  if (a === 'YOU' && b !== 'YOU') { skinStreak++; skinHeat = Math.min(1, skinHeat + 0.45); if (tdm.active) earn(Object.values(TAKEDOWNS).some((t) => t.name === weaponName) ? 50 : 25); }
   kills.unshift({ a, w: weaponName, b, head, t: 0 });
   if (kills.length > 5) kills.pop();
   renderKillFeed();
@@ -577,6 +615,8 @@ function die(name) {
   if (online.active && tdm === online) online.myDeath(typeof player.lastHitBy === 'string' ? player.lastHitBy : null);
   player.hp = 0;
   player.dead = true;
+  player.settled = false; player.fallV = 0;
+  skinStreak = 0;
   deathT = deathDur = tdm.active ? DOWNED_TIME : 3;    // in a match you're downed (and can be finished off) until you respawn
   player.downed = !!tdm.active;
   takenBy = null;
@@ -594,7 +634,7 @@ function respawnPlayer() {
   const onDeck = botMgr.running || (P[0] > A.min[0] && P[0] < A.max[0] && P[1] > A.min[1] && P[1] < A.max[1] && P[2] > A.min[2] && P[2] < A.max[2]);
   const r = onDeck ? map.deck.respawn : { pos: player.spawnPoint, yaw: player.spawnYaw };
   player.teleport(r.pos, r.yaw);
-  Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5, downed: false });
+  Object.assign(player, { hp: player.maxHp, dead: false, invuln: 1.5, downed: false, settled: false, fallV: 0 });
   takenBy = null;
   if (victimCam) { victimCam = null; cine(false); }
   slots.forEach((w) => { w.ammo = w.def.mag; w.reload = null; });
@@ -860,6 +900,7 @@ function takenDown(name, kind) {
 }
 
 const botHooks = {
+  settleBody: (b, dt) => settleBody(world, b, dt),
   player,
   hitPlayer: (dmg, bot, from) => { player.lastHitBy = bot.agent || null; damagePlayer(dmg, from, bot.name); },
   shot: (bot, from, end, dist) => { effects.tracer(from, end); sounds.botShot(dist); },
@@ -1293,6 +1334,7 @@ function updateAbilityHud() {
     el.style.setProperty('--p', frac.toFixed(3));
     el.classList.toggle('ready', ready);
     el.querySelector('.cd').textContent = extra;
+    el.classList.toggle('cooling', !!extra);
   };
   const ab = hud.ab.main, isG = equippedAbility === 'grapple' || equippedAbility === 'tether';
   const tetherOut = !!launcherW && launcherKind === 'tether';
@@ -1655,6 +1697,7 @@ function itemCard(id, { onClick, on = false, priceTag = true }) {
     b.append(s0);
   } else b.append(img);
   b.append(el('b', null, it.name), el('small', null, r.name));
+  if (it.gun?.tex) b.append(el('span', `livetag${it.live ? ' react' : ''}`, it.live ? 'REACTIVE' : 'PATTERN'));
   if (priceTag) {
     if (owns(cosmetics, id)) b.append(el('span', 'price own', it.price ? 'OWNED' : 'FREE'));
     else b.append(el('span', 'price', `◆ ${fmt(it.price)}`));
@@ -1736,7 +1779,7 @@ function renderShop() {
     renderMenu();
   };
   const note = worn ? `Wearing it on ${CLASSES[custCls || classLo.cls].name}.` : own ? `Owned. Equip it on ${CLASSES[custCls || classLo.cls].name}.` : cosmetics.credits < it.price ? 'Not enough credits.' : `Buys and equips on ${CLASSES[custCls || classLo.cls].name}.`;
-  box.replaceChildren(el('small', null, `${r.name} · ${slotName}`), el('b', null, it.name), btn, el('p', null, note));
+  box.replaceChildren(el('small', null, `${r.name} · ${slotName}${it.live ? ' · REACTIVE' : ''}`), el('b', null, it.name), ...(it.fx ? [el('p', 'fx', it.fx)] : []), btn, el('p', null, note));
 }
 // rebuild guns after a weapon-skin change (in your hands, the cases and the showroom)
 function refreshGuns() {
@@ -1808,11 +1851,29 @@ const netHooks = {
       online.send({ t: 'tdb', id: agent.id, v: victim.isPlayer ? online.myId : victim.id, k: kind });
     },
     botTakedownLand: (agent, victim, kind) => { if (victim.downed) online.myTakedown(victim.isPlayer ? online.myId : victim.id, kind, agent.id); },
-    botGear: () => 30,
-    barricade: () => false,
+    // host bots use their gear online too: whatever they place or fire is copied to everyone
+    botGear: (agent, tgt, dist, hurting) => netCopy(agent, () => botHooks.botGear(agent, tgt, dist, hurting)),
+    barricade: (agent, tgt) => netCopy(agent, () => botHooks.barricade(agent, tgt)),
   },
 };
+// run some bot gear code with placing and launching copied to everyone online
+function netCopy(agent, fn) {
+      const place = gadgets.place, launch = heavy.launch;
+      gadgets.place = function (spec) {
+        const g = place.call(gadgets, spec);
+        const { side, ...copy } = spec;
+        online.send({ t: 'gad', id: agent.id, g: copy });
+        return g;
+      };
+      heavy.launch = function (kind, pos, vel, mine, name) {
+        const r = launch.call(heavy, kind, pos, vel, mine, name);
+        online.send({ t: 'gl', id: agent.id, k: kind, p: pos.map((v) => +v.toFixed(2)), v: vel.map((v) => +v.toFixed(2)) });
+        return r;
+      };
+      try { return fn(); } finally { gadgets.place = place; heavy.launch = launch; }
+}
 function startOnline(info) {
+  matchEarned = 0;
   if (ai.active) ai.stop();
   tdm = online;
   online.g = netHooks;
@@ -1827,6 +1888,8 @@ function startOnline(info) {
   gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
   walls.forEach((w) => w.reset());
+  for (const a of ARENAS) a.navObj?.reset();
+  navDirty.clear();
   chunkOut = [];
   const sp = stadium.spawns[info.team];
   player.spawn(sp.pos, sp.yaw);
@@ -1860,12 +1923,15 @@ function setTeamsHud(m) {
 // ---------- tdm match: start / end, events, HUD ----------
 let lastMatch = null;
 function startMatch(m) {
+  matchEarned = 0;
   lastMatch = m;
   if (tdm === online || online.inRoom) { online.leave(); tdm = ai; }
   batches.world = null;     // re-batch once the match props are set up
   gadgets.clear(); burning.clear(); heavy.clear(); heavyCd = 0; putAwayLauncher(false); playerTether = null; cloakT = 0; playerBurn = null; throwCharges = 2; throwT = 0; flashT = 0;
   resetGlass();
   walls.forEach((w) => w.reset());
+  for (const a of ARENAS) a.navObj?.reset();
+  navDirty.clear();
   tdm.start(m, stadium, player, classLo.cls);
   setTeamsHud(m);
   const sp = stadium.spawns[tdm.myTeam.idx];
@@ -1902,6 +1968,9 @@ function showMatchEnd() {
   const t = document.createElement('b'); t.textContent = place < 1 ? 'YOU ADVANCE TO THE FINAL' : 'ELIMINATED';
   t.className = place < 1 ? 'win' : 'lose';
   card.append(h, t);
+  if (!tdm.over.paid) { tdm.over.paid = true; earn(place < 1 ? 300 : 100); }
+  const cr = document.createElement('p'); cr.className = 'me-cred'; cr.textContent = `+${fmt(matchEarned)} ${CURRENCY} EARNED · ${fmt(cosmetics.credits)} TOTAL`;
+  card.append(cr);
   st.forEach((tm, i) => {
     const r = document.createElement('div');
     r.className = `me-row${tm === tdm.myTeam ? ' mine' : ''}${i < 1 ? ' adv' : ''}`;
@@ -2574,6 +2643,7 @@ function frameBody(now) {
       weapon().update(dt, idleInput, player, weaponCtx);
     } else {
       deathT -= dt;
+      settleBody(world, player, dt);      // killed in the air: fall to the floor (so your body and camera end up on it)
       if (victimCam) updateVictimCam(dt);
       if (deathT <= 0) respawnPlayer();
     }
@@ -2652,6 +2722,8 @@ function frameBody(now) {
     gadgets.update(dt, [padRider]);
     heavy.update(dt);
     updateBurns(dt);
+    updateNavHoles(dt);
+    updateSkinLive(dt);
     updateHealing(dt);
     if (playerBurn) {
       playerBurn.t -= dt; playerBurn.acc += playerBurn.dps * dt;
@@ -2815,4 +2887,4 @@ function frameBody(now) {
 requestAnimationFrame(frame);
 
 // handy for debugging from the console / automated tests
- window.game = { startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };
+ window.game = { skinLive: (h, s) => { skinHeat = h; skinStreak = s; }, startTakedown, updateTakedown, findDowned, takedownParts, get td() { return td; }, get deathT() { return deathT; }, useThrowable, get throwCharges() { return throwCharges; }, get flashT() { return flashT; }, heavy, useHeavy, applyClass, useGadget, useTether, useCloak, get cloakT() { return cloakT; }, get launcherW() { return launcherW; }, gadgets, get burning() { return burning; }, lobby, online, get tdm() { return tdm; }, batches, renderer, map, ARENAS, get stadium() { return stadium; }, setArena: (i) => { stadium = ARENAS[i]; }, lifts, hooks: botHooks, updateFall, hookTarget, fallTop: () => fallTop, breakGlass, updateCombat, startMatch: (m) => startMatch(m), enterStadium, where: () => where, sr: () => showroomChar, cosmetics, refreshGuns, classLo, renderMenu, showTab, enterRange, cs: () => cutscene, botMgr, elevator, damagePlayer, pressConsole, setTimeScale: (v) => { timeScale = v; }, bench, openBench, closeBench, loadouts, applyLoadout, course, player, slots, weapon, world, stats, effects, dummies, walls, cases, input, start, setPlaying, resetRange, switchTo, pickUp, WEAPONS };

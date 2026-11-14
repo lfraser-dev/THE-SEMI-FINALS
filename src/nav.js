@@ -15,6 +15,7 @@ export class Nav {
     const clear = (x, y, z) => !w.firstOverlap([x - 0.32, y + 0.42, z - 0.32], [x + 0.32, y + 1.8, z + 0.32]);
     const floor = (x, y, z) => !!w.firstOverlap([x - 0.08, y - 0.12, z - 0.08], [x + 0.08, y - 0.03, z + 0.08]);   // a small patch, so seams between slabs count
     const ok = (x, y, z) => !excluded(x, z) && floor(x, y, z) && clear(x, y, z);
+    this.ok = ok; this.levelDefs = levels;
     const addNode = (x, y, z) => { X.push(x); Y.push(y); Z.push(z); adj.push([]); return X.length - 1; };
     const link = (a, b) => { if (a !== b && !adj[a].includes(b)) { adj[a].push(b); adj[b].push(a); } };
     this.levels = levels.map((l) => l.y);
@@ -79,7 +80,57 @@ export class Nav {
     this.X = Float32Array.from(X); this.Y = Float32Array.from(Y); this.Z = Float32Array.from(Z);
     this.adj = adj;
     this.count = X.length;
+    this.baseCount = this.count;
+    this.extra = [];
     this.ready = true;
+  }
+
+  // something in [min, max] was knocked down (a wall chunk): look for new floor points and new ways through there
+  reopen(min, max) {
+    if (!this.ready) return 0;
+    const X = [...this.X], Y = [...this.Y], Z = [...this.Z], adj = this.adj, ok = this.ok;
+    let added = 0;
+    const link = (a, b) => { if (a !== b && !adj[a].includes(b)) { adj[a].push(b); adj[b].push(a); this.extra.push([a, b]); added++; } };
+    this.levelDefs.forEach((lv, li) => {
+      if (lv.y < min[1] - 2.2 || lv.y > max[1] + 0.5) return;
+      const ix0 = Math.floor((min[0] - STEP * 1.5) / STEP), ix1 = Math.ceil((max[0] + STEP * 1.5) / STEP);
+      const iz0 = Math.floor((min[2] - STEP * 1.5) / STEP), iz1 = Math.ceil((max[2] + STEP * 1.5) / STEP);
+      const node = (ix, iz) => {
+        const k = `${ix},${iz},${li}`;
+        let n = this.hash.get(k);
+        const inside = lv.rects.some(([x0, z0, x1, z1]) => ix * STEP >= x0 && ix * STEP <= x1 && iz * STEP >= z0 && iz * STEP <= z1);
+        if (n == null && inside && ok(ix * STEP, lv.y, iz * STEP)) {
+          n = X.length; X.push(ix * STEP); Y.push(lv.y); Z.push(iz * STEP); adj.push([]);
+          this.hash.set(k, n);
+        }
+        return n;
+      };
+      for (let ix = ix0; ix <= ix1; ix++) for (let iz = iz0; iz <= iz1; iz++) {
+        const n = node(ix, iz);
+        if (n == null) continue;
+        for (const [dx, dz] of [[1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+          const m = this.hash.get(`${ix + dx},${iz + dz},${li}`);
+          if (m == null || adj[n].includes(m)) continue;
+          if (dx && dz && (this.hash.get(`${ix + dx},${iz},${li}`) == null || this.hash.get(`${ix},${iz + dz},${li}`) == null)) continue;
+          if (ok((X[n] + X[m]) / 2, lv.y, (Z[n] + Z[m]) / 2)) link(n, m);
+        }
+      }
+    });
+    this.X = Float32Array.from(X); this.Y = Float32Array.from(Y); this.Z = Float32Array.from(Z);
+    this.count = X.length;
+    return added;
+  }
+
+  // walls are back up (a new match): forget the ways that were opened
+  reset() {
+    if (!this.extra?.length && this.count === this.baseCount) return;
+    for (const [a, b] of this.extra) { this.adj[a] = this.adj[a].filter((m) => m !== b); this.adj[b] = this.adj[b].filter((m) => m !== a); }
+    this.extra = [];
+    for (const [k, n] of this.hash) if (n >= this.baseCount) this.hash.delete(k);
+    this.adj.length = this.baseCount;
+    for (const a of this.adj) for (let i = a.length - 1; i >= 0; i--) if (a[i] >= this.baseCount) a.splice(i, 1);
+    this.X = this.X.slice(0, this.baseCount); this.Y = this.Y.slice(0, this.baseCount); this.Z = this.Z.slice(0, this.baseCount);
+    this.count = this.baseCount;
   }
 
   levelOf(y) {

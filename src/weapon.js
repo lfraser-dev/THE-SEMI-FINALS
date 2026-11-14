@@ -794,14 +794,14 @@ export class Weapon {
       if (shine >= 0) {
         const zS = this.zBack + (this.zFront - this.zBack) * shine;
         const k = Math.exp(-(((p.c[2] - zS) / 0.06) ** 2)) * Math.sin(Math.PI * shine);
-        if (k > 0.02) {
+        if (k > 0.02 && !p.tex) {
           const col = p.shineCol || (p.shineCol = [0, 0, 0]);
           for (let n = 0; n < 3; n++) col[n] = p.col[n] + (1 - p.col[n]) * k * 0.7;
           out.push({ model: p.model, scale: p.s, color: col, emissive: Math.max(p.em || 0, k * 0.55), shape: p.shape, mat: p.m, tex: p.em ? 0 : GUN_TEX, edges: 0 });
           continue;
         }
       }
-      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape, mat: p.m, tex: p.em ? 0 : GUN_TEX, edges: 0 });
+      out.push({ model: p.model, scale: p.s, color: p.col, emissive: p.em || 0, shape: p.shape, mat: p.m, tex: p.em ? 0 : p.tex || GUN_TEX, edges: 0 });
     }
     if (shellVisible) {
       const s = [0.024, 0.024, 0.06];
@@ -1046,7 +1046,7 @@ export class Weapon {
       compose(local, p.c, [p.rx || 0, p.ry || 0, p.rz || 0], p.s);
       const m = mat4();
       mul(m, matrix, local);
-      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: partShape(p), mat: p.m, tex: p.em ? 0 : GUN_TEX, edges: 0 };
+      return { model: m, scale: p.s, color: p.col, emissive: p.em || 0, shape: partShape(p), mat: p.m, tex: p.em ? 0 : p.tex || GUN_TEX, edges: 0 };
     });
   }
 }

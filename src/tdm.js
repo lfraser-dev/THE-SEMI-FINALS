@@ -81,6 +81,7 @@ export class Agent {
       if (this.respawnT < 0.5) b.downed = false;
       if (b.dying >= 0) {
         b.dying += dt; b.flash -= dt;
+        if (!b.removed) g.settleBody?.(b, dt);
         if (b.dying > 0.75 && !b.downed && !b.shattered) { b.shattered = true; b.remove(); b.removed = true; g.onShatter?.(b); }
       }
       this.respawnT -= dt;
